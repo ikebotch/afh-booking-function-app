@@ -15,7 +15,6 @@ public sealed class NotificationsFunction
         ILogger<NotificationsFunction> logger)
     {
         _handler = handler;
-        //+,6oóp
         _logger = logger;
     }
 
@@ -37,11 +36,11 @@ public sealed class NotificationsFunction
                 return res;
             }
 
-            // Normal notifications (Graph POSTs JSON)
+            // Normal notifications (calendar-service POSTs JSON)
             if (!req.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
                 return req.CreateResponse(HttpStatusCode.MethodNotAllowed);
 
-            // If body is empty, don’t throw (Graph can occasionally send minimal payloads)
+            // If body is empty, don’t throw (provider can occasionally send minimal payloads)
             GraphNotificationEnvelope? envelope = null;
             try
             {
@@ -54,7 +53,7 @@ public sealed class NotificationsFunction
 
             var result = await _handler.HandleAsync(envelope, ct);
 
-            // Always ACK Graph deliveries
+            // Always ACK notification deliveries
             return req.CreateResponse(HttpStatusCode.Accepted);
         }
         catch (Exception ex)

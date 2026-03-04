@@ -1,11 +1,10 @@
 using AFH.Booking.Application;
-using AFH.Booking.Application.Calendar.Options;
 using AFH.Booking.Infrastructure;
-using AFH.Common.CalendarUtils.Sdk.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System.Collections.Generic;
+
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
     .ConfigureAppConfiguration((ctx, cfg) =>
@@ -25,16 +24,10 @@ var host = new HostBuilder()
     })
     .ConfigureServices((ctx, services) =>
     {
-        // Logging + AppInsights
         services.AddApplicationInsightsTelemetryWorkerService();
-        //services.ConfigureFunctionsApplicationInsights();
 
-       
         services.AddBookingApplication(ctx.Configuration);
         services.AddBookingInfrastructure(ctx.Configuration);
-
-        services.Configure<GraphWebhookOptions>(ctx.Configuration.GetSection("GraphWebhook"));
-
     })
     .Build();
 

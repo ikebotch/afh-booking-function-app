@@ -1,11 +1,5 @@
-﻿using AFH.Booking.Application.Calendar.Mapping;
-using AFH.Booking.Contracts.Requests;
-using AFH.Booking.Contracts.Responses;
+﻿using AFH.Booking.Contracts.Requests;
 using AFH.Booking.Domain.Bookings;
-using AFH.Common.CalendarUtils.Contracts.Enums;
-using AFH.Common.CalendarUtils.Contracts.Models;
-using AFH.Common.CalendarUtils.Contracts.Requests;
-using AFH.Common.CalendarUtils.Contracts.Responses;
 
 public static class BookingMappings
 {
@@ -18,16 +12,15 @@ public static class BookingMappings
             StartUtc = cmd.StartUtc,
             EndUtc = cmd.EndUtc,
             Timezone = cmd.Timezone,
-            Mode = cmd.Mode.ToCalendar(),
+            Mode = cmd.Mode.ToDomain(),
             HoldDuration = cmd.HoldDuration,
             CreatedUtc = DateTime.UtcNow,
             Subject = cmd.Subject,
             Notes = cmd.Notes,
             TransactionId = transactionId,
-
             IsRemote = cmd.IsRemote,
             Categories = cmd.Categories,
-            Importance = (CalendarImportance)cmd.Importance,
+            Importance = cmd.Importance.ToDomain(),
             Location = new Location
             {
                 DisplayName = cmd.Location.DisplayName,
@@ -38,42 +31,20 @@ public static class BookingMappings
         };
     }
 
-    public static UpsertCalendarEventRequest ToUpsertCalendarEventRequest(this BookingsModel booking)
-    {
-        return new UpsertCalendarEventRequest
+    private static MeetingMode ToDomain(this AFH.Booking.Contracts.MeetingMode mode)
+        => mode switch
         {
-            ExternalId = booking.Id.Value,
-            UserId = booking.AdviserId,
-            Subject = booking.Subject,
-            StartUtc = booking.StartUtc,
-            EndUtc = booking.EndUtc,
-            Timezone = booking.Timezone,
-            Mode = booking.Mode,
-            Kind = CalendarEventKind.Hold,
-            Body = booking.Notes,
-            TransactionId = booking.TransactionId,
-
-          
-            IsRemote = booking.IsRemote, 
-            Categories = booking.Categories?.ToList() ?? new List<string>(),
-            Importance = booking.Importance,
-
-            Location = new LocationDto
-            {
-                DisplayName = booking.Location.DisplayName,
-                AddressLine1 = booking.Location.AddressLine1,
-                City = booking.Location.City,
-                Postcode = booking.Location.Postcode,
-            }
+            AFH.Booking.Contracts.MeetingMode.Remote => MeetingMode.Remote,
+            AFH.Booking.Contracts.MeetingMode.InPerson => MeetingMode.InPerson,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
         };
-    }
 
-    public static CreateHoldResponse ToCreateHoldResponse(this UpsertCalendarEventResponse source, string bookingId)
-    {
-        return new CreateHoldResponse
+    private static CalendarImportance ToDomain(this AFH.Booking.Contracts.Dtos.CalendarImportance importance)
+        => importance switch
         {
-            BookingId = bookingId,
-            ProviderEventId = source.ProviderEventId
+            AFH.Booking.Contracts.Dtos.CalendarImportance.Low => CalendarImportance.Low,
+            AFH.Booking.Contracts.Dtos.CalendarImportance.Normal => CalendarImportance.Normal,
+            AFH.Booking.Contracts.Dtos.CalendarImportance.High => CalendarImportance.High,
+            _ => throw new ArgumentOutOfRangeException(nameof(importance), importance, null)
         };
-    }
 }

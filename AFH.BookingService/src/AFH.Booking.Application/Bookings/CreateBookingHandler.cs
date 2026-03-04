@@ -5,6 +5,7 @@ using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
+using AFH.Booking.Domain.Client;
 using AFH.Booking.Domain.Common;
 using AFH.Booking.Domain.Transactions;
 using AFH.Booking.Domain.ValueObjects;
@@ -200,7 +201,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         {
             var prospect = await _clients.GetAsync(tx.TransactionRef, ct);
             calendarLocation = CalendarLocation.CreateOrNull(
-                displayName: prospect?.FullAddress,
+                displayName: BuildDisplayAddress(prospect),
                 addressLine1: prospect?.StreetName1,
                 city: prospect?.Town,
                 postcode: prospect?.PostalCode);
@@ -249,6 +250,25 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         return string.IsNullOrWhiteSpace(tx.MeetingType)
             ? "AFH Booking"
             : $"AFH Booking - {tx.MeetingType}";
+    }
+
+    private static string? BuildDisplayAddress(ClientDirectoryItem? client)
+    {
+        if (client is null) return null;
+
+        var parts = new[]
+        {
+            client.StreetName1,
+            client.StreetName2,
+            client.Town,
+            client.County,
+            client.PostalCode
+        }
+        .Where(p => !string.IsNullOrWhiteSpace(p))
+        .Select(p => p!.Trim());
+
+        var value = string.Join(", ", parts);
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     // -------------------------

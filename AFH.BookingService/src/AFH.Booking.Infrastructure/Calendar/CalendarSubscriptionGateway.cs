@@ -106,7 +106,7 @@ public sealed class CalendarSubscriptionGateway : ICalendarSubscriptionGateway
         using var res = await _http.SendAsync(req, ct);
 
         if (res.StatusCode == HttpStatusCode.NotFound)
-            return Result.NotFound("Subscription not found.");
+            return Result.Fail(HttpStatusCode.NotFound, "Subscription not found.", Errors.NotFound);
 
         if (!res.IsSuccessStatusCode)
         {

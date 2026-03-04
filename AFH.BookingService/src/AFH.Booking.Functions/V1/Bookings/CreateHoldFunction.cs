@@ -1,0 +1,46 @@
+using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Functions.Http;
+using AFH.Booking.Functions.Mapping;
+
+namespace AFH.Booking.Functions.V1.Bookings;
+
+public sealed class CreateHoldFunction
+{
+    private readonly ICreateBookingHandler _handler;
+    private readonly ILogger<CreateHoldFunction> _logger;
+
+    public CreateHoldFunction(
+        ICreateBookingHandler handler,
+        ILogger<CreateHoldFunction> logger)
+    {
+        _handler = handler;
+        _logger = logger;
+    }
+
+    [Function("Bookings_CreateHold")]
+    public async Task<HttpResponseData> Run(
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/hold")] HttpRequestData req,
+        CancellationToken ct)
+    {
+        try
+        {
+            var body = await req.ReadJsonAsync<CreateHoldRequest>(ct);
+            if (body is null)
+                return await req.ProblemAsync(HttpStatusCode.BadRequest, "Invalid JSON body.", ct);
+
+            var cmd = body.ToCommand();
+            var result = await _handler.HandleAsync(cmd, ct);
+
+            if (!result.IsSuccess)
+                return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);
+
+            return await req.CreatedJsonAsync(result.Value!, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unhandled exception in Bookings_CreateHold.");
+            return await req.ProblemAsync(HttpStatusCode.InternalServerError, "Something went wrong.", ct, "ServerError");
+        }
+    }
+}

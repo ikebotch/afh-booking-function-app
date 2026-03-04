@@ -1,0 +1,662 @@
+openapi: 3.0.1
+info:
+  title: AFH Booking Service API
+  version: 1.0.0
+  description: >
+    Booking API for adviser availability, holds, confirmations and cancellations.
+    External callers send minimal inputs (clientId OR transactionId, proposed start, duration, meeting mode/type).
+    Addresses are never accepted from clients.
+
+servers:
+  - url: http://localhost:7149/api
+    description: Local dev
+
+tags:
+  - name: Availability
+  - name: Bookings
+  - name: Calendar
+
+paths:
+  /v1/availability:
+    post:
+      tags: [Availability]
+      summary: Get scored adviser availability slots
+      operationId: v1AvailabilityGet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GetAvailabilityRequest"
+            examples:
+              remoteExample:
+                summary: Remote meeting availability
+                value:
+                  transactionId: "LT-977788878"
+                  proposedStartUtc: "2025-12-18T09:00:00Z"
+                  durationMinutes: 45
+                  timezone: "Europe/London"
+                  meetingMode: "Remote"
+                  meetingType: "InitialConsultation"
+                  paging:
+                    limit: 10
+              inPersonExample:
+                summary: In-person meeting availability
+                value:
+                  clientId: "00QP300000S9sE"
+                  proposedStartUtc: "2025-12-18T13:00:00Z"
+                  durationMinutes: 60
+                  timezone: "Europe/London"
+                  meetingMode: "InPerson"
+                  meetingType: "Review"
+                  paging:
+                    limit: 10
+      responses:
+        "200":
+          description: Availability result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetAvailabilityResponse"
+              examples:
+                example:
+                  value:
+                    paging:
+                      limit: 10
+                      nextCursor: "eyJvZmZzZXQiOjEwfQ=="
+                    advisers:
+                      - adviserId: "ADV-001"
+                        adviserName: "Isaac Botchway"
+                        slots:
+                          - slotId: "slot_ADV-001_20251218T090000Z_20251218T094500Z"
+                            startUtc: "2025-12-18T09:00:00Z"
+                            endUtc: "2025-12-18T09:45:00Z"
+                            score: 5
+                            scoreMeaning: "Best fit"
+                          - slotId: "slot_ADV-001_20251218T100000Z_20251218T104500Z"
+                            startUtc: "2025-12-18T10:00:00Z"
+                            endUtc: "2025-12-18T10:45:00Z"
+                            score: 4
+                            scoreMeaning: "Strong fit"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetailsDto"
+
+  /v1/bookings/hold:
+    post:
+      tags: [Bookings]
+      summary: Create a temporary hold for a selected slot (always required before confirm)
+      operationId: v1BookingsCreateHold
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateHoldRequest"
+            examples:
+              example:
+                value:
+                  transactionId: "LT-977788878"
+                  adviserId: "ADV-001"
+                  slotId: "slot_ADV-001_20251218T090000Z_20251218T094500Z"
+                  subject: "Initial Consultation"
+                  timezone: "Europe/London"
+                  meetingMode: "Remote"
+                  meetingType: "InitialConsultation"
+                  holdDuration: "00:10:00"
+                  attendees:
+                    - email: "client@example.com"
+                      name: "John Client"
+                      type: "Required"
+      responses:
+        "200":
+          description: Hold created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateHoldResponse"
+              examples:
+                example:
+                  value:
+                    bookingId: "BKG-0000000001"
+                    status: "Hold"
+                    holdExpiresUtc: "2025-12-18T08:55:00Z"
+                    adviser:
+                      adviserId: "ADV-001"
+                      adviserName: "Isaac Botchway"
+                    schedule:
+                      startUtc: "2025-12-18T09:00:00Z"
+                      endUtc: "2025-12-18T09:45:00Z"
+                      timezone: "Europe/London"
+                    meetingMode: "Remote"
+                    onlineMeeting:
+                      isOnlineMeeting: true
+                      joinUrl: "https://teams.microsoft.com/l/meetup-join/..."
+        "409":
+          description: Slot unavailable / conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetailsDto"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetailsDto"
+
+  /v1/bookings/{bookingId}/confirm:
+    post:
+      tags: [Bookings]
+      summary: Confirm a held booking
+      operationId: v1BookingsConfirm
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConfirmBookingRequest"
+            examples:
+              byTransaction:
+                value:
+                  transactionId: "LT-977788878"
+              byClient:
+                value:
+                  clientId: "00QP300000S9sE"
+      responses:
+        "200":
+          description: Booking confirmed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfirmBookingResponse"
+              examples:
+                example:
+                  value:
+                    bookingId: "BKG-0000000001"
+                    status: "Confirmed"
+                    adviser:
+                      adviserId: "ADV-001"
+                      adviserName: "Isaac Botchway"
+                    schedule:
+                      startUtc: "2025-12-18T09:00:00Z"
+                      endUtc: "2025-12-18T09:45:00Z"
+                      timezone: "Europe/London"
+                    meetingMode: "Remote"
+                    onlineMeeting:
+                      isOnlineMeeting: true
+                      joinUrl: "https://teams.microsoft.com/l/meetup-join/..."
+        "409":
+          description: Hold expired / already confirmed / conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetailsDto"
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetailsDto"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetailsDto"
+
+  /v1/bookings/{bookingId}/cancel:
+    post:
+      tags: [Bookings]
+      summary: Cancel a booking (hold or confirmed)
+      operationId: v1BookingsCancel
+      parameters:
+        - name: bookingId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelBookingRequest"
+            examples:
+              example:
+                value:
+                  transactionId: "LT-977788878"
+                  reason: "Client requested reschedule"
+      responses:
+        "200":
+          description: Booking cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelBookingResponse"
+              examples:
+                example:
+                  value:
+                    bookingId: "BKG-0000000001"
+                    status: "Cancelled"
+        "404":
+          description: Booking not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetailsDto"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetailsDto"
+
+  /v1/calendar/view:
+    get:
+      tags: [Calendar]
+      summary: Read calendar view for one or more advisers (internal/debug)
+      operationId: v1CalendarView
+      parameters:
+        - name: adviserIds
+          in: query
+          required: true
+          description: Comma-separated adviser ids
+          schema:
+            type: string
+          example: "ADV-001,ADV-002"
+        - name: startUtc
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2025-12-18T09:00:00Z"
+        - name: endUtc
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+          example: "2025-12-18T17:00:00Z"
+        - name: timezone
+          in: query
+          required: true
+          schema:
+            type: string
+          example: "Europe/London"
+      responses:
+        "200":
+          description: Calendar view
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalendarViewDto"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetailsDto"
+
+components:
+  schemas:
+    # ---------- Common ----------
+    ProblemDetailsDto:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+      required: [error]
+
+    PageRequest:
+      type: object
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+        cursor:
+          type: string
+          nullable: true
+
+    PageResult:
+      type: object
+      properties:
+        limit:
+          type: integer
+        nextCursor:
+          type: string
+          nullable: true
+      required: [limit]
+
+    # ---------- Enums ----------
+    MeetingMode:
+      type: string
+      enum: [Remote, InPerson, Hybrid]
+
+    BookingStatus:
+      type: string
+      enum: [Hold, Confirmed, Cancelled]
+
+    AttendeeType:
+      type: string
+      enum: [Required, Optional, Resource]
+
+    ScoreMeaning:
+      type: string
+      enum: [Poor fit, Weak fit, Acceptable, Strong fit, Best fit]
+
+    # ---------- Availability ----------
+    GetAvailabilityRequest:
+      type: object
+      description: >
+        Provide either transactionId OR clientId. Returns advisers with slots and scores.
+        No addresses are accepted or returned.
+      properties:
+        transactionId:
+          type: string
+          nullable: true
+        clientId:
+          type: string
+          nullable: true
+        proposedStartUtc:
+          type: string
+          format: date-time
+        durationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 480
+        timezone:
+          type: string
+        meetingMode:
+          $ref: "#/components/schemas/MeetingMode"
+        meetingType:
+          type: string
+          description: Business label (e.g. InitialConsultation, Review)
+        paging:
+          $ref: "#/components/schemas/PageRequest"
+      oneOf:
+        - required: [transactionId]
+        - required: [clientId]
+      required:
+        - proposedStartUtc
+        - durationMinutes
+        - timezone
+        - meetingMode
+
+    GetAvailabilityResponse:
+      type: object
+      properties:
+        paging:
+          $ref: "#/components/schemas/PageResult"
+        advisers:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdviserSlotsDto"
+      required: [paging, advisers]
+
+    AdviserSlotsDto:
+      type: object
+      required: [adviserId, adviserName, slots]
+      properties:
+        adviserId:
+          type: string
+        adviserName:
+          type: string
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/SlotDto"
+
+    SlotDto:
+      type: object
+      description: >
+        score is a 1–5 fit score:
+        5 Best fit, 4 Strong fit, 3 Acceptable, 2 Weak fit, 1 Poor fit.
+      required: [slotId, startUtc, endUtc, score, scoreMeaning]
+      properties:
+        slotId:
+          type: string
+          description: Opaque slot identifier used for booking hold
+        startUtc:
+          type: string
+          format: date-time
+        endUtc:
+          type: string
+          format: date-time
+        score:
+          type: integer
+          minimum: 1
+          maximum: 5
+        scoreMeaning:
+          $ref: "#/components/schemas/ScoreMeaning"
+
+    # ---------- Bookings ----------
+    CreateHoldRequest:
+      type: object
+      description: >
+        Creates a hold for a selected slotId. A hold is required before confirm.
+        Provide either transactionId OR clientId.
+      properties:
+        transactionId:
+          type: string
+          nullable: true
+        clientId:
+          type: string
+          nullable: true
+        adviserId:
+          type: string
+        slotId:
+          type: string
+        subject:
+          type: string
+        timezone:
+          type: string
+        meetingMode:
+          $ref: "#/components/schemas/MeetingMode"
+        meetingType:
+          type: string
+        holdDuration:
+          type: string
+          description: TimeSpan format (HH:MM:SS)
+          example: "00:10:00"
+        attendees:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttendeeDto"
+        notes:
+          type: string
+          nullable: true
+      oneOf:
+        - required: [transactionId]
+        - required: [clientId]
+      required:
+        - adviserId
+        - slotId
+        - timezone
+        - meetingMode
+        - holdDuration
+
+    CreateHoldResponse:
+      type: object
+      required: [bookingId, status, holdExpiresUtc, adviser, schedule, meetingMode]
+      properties:
+        bookingId:
+          type: string
+        status:
+          $ref: "#/components/schemas/BookingStatus"
+        holdExpiresUtc:
+          type: string
+          format: date-time
+        adviser:
+          $ref: "#/components/schemas/AdviserSummary"
+        schedule:
+          $ref: "#/components/schemas/ScheduleSummary"
+        meetingMode:
+          $ref: "#/components/schemas/MeetingMode"
+        onlineMeeting:
+          $ref: "#/components/schemas/OnlineMeetingSummary"
+
+    ConfirmBookingRequest:
+      type: object
+      description: Confirm a held booking. Provide either transactionId OR clientId.
+      properties:
+        transactionId:
+          type: string
+          nullable: true
+        clientId:
+          type: string
+          nullable: true
+      oneOf:
+        - required: [transactionId]
+        - required: [clientId]
+
+    ConfirmBookingResponse:
+      type: object
+      required: [bookingId, status, adviser, schedule, meetingMode]
+      properties:
+        bookingId:
+          type: string
+        status:
+          $ref: "#/components/schemas/BookingStatus"
+        adviser:
+          $ref: "#/components/schemas/AdviserSummary"
+        schedule:
+          $ref: "#/components/schemas/ScheduleSummary"
+        meetingMode:
+          $ref: "#/components/schemas/MeetingMode"
+        onlineMeeting:
+          $ref: "#/components/schemas/OnlineMeetingSummary"
+
+    CancelBookingRequest:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          nullable: true
+        clientId:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+
+    CancelBookingResponse:
+      type: object
+      required: [bookingId, status]
+      properties:
+        bookingId:
+          type: string
+        status:
+          $ref: "#/components/schemas/BookingStatus"
+
+    AdviserSummary:
+      type: object
+      required: [adviserId, adviserName]
+      properties:
+        adviserId:
+          type: string
+        adviserName:
+          type: string
+
+    ScheduleSummary:
+      type: object
+      required: [startUtc, endUtc, timezone]
+      properties:
+        startUtc:
+          type: string
+          format: date-time
+        endUtc:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+
+    OnlineMeetingSummary:
+      type: object
+      description: Present for remote/hybrid meetings when an online meeting is created.
+      properties:
+        isOnlineMeeting:
+          type: boolean
+          default: false
+        joinUrl:
+          type: string
+          nullable: true
+
+    AttendeeDto:
+      type: object
+      required: [email, name, type]
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/AttendeeType"
+
+    # ---------- Calendar (internal/debug) ----------
+    CalendarViewDto:
+      type: object
+      required: [startUtc, endUtc, timezone, events]
+      properties:
+        startUtc:
+          type: string
+          format: date-time
+        endUtc:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/CalendarEventDto"
+
+    CalendarEventDto:
+      type: object
+      properties:
+        adviserId:
+          type: string
+          nullable: true
+        eventId:
+          type: string
+          nullable: true
+        subject:
+          type: string
+          nullable: true
+        startUtc:
+          type: string
+          format: date-time
+        endUtc:
+          type: string
+          format: date-time
+        isAllDay:
+          type: boolean
+        isCancelled:
+          type: boolean
+        isBusy:
+          type: boolean
+        organizer:
+          type: string
+          nullable: true
+        attendees:
+          type: array
+          items:
+            type: string

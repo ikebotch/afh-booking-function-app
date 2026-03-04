@@ -1,0 +1,1 @@
+src> dotnet ef migrations add SubscriptionTransactionSlotHold --project AFH.Booking.Infrastructure --startup-project AFH.Booking.Functions --context BookingDbContext

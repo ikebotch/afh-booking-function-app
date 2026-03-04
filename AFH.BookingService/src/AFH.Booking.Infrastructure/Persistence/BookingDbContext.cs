@@ -1,0 +1,24 @@
+﻿using AFH.Booking.Domain.Transactions;
+using AFH.Booking.Infrastructure.Persistence.Models;
+using Microsoft.EntityFrameworkCore;
+
+namespace AFH.Booking.Infrastructure.Persistence;
+
+public sealed class BookingDbContext : DbContext
+{
+    public BookingDbContext(DbContextOptions<BookingDbContext> options) : base(options) { }
+
+    public DbSet<BookingTransactionModel> BookingTransactions => Set<BookingTransactionModel>();
+    public DbSet<BookingSlotModel> BookingSlots => Set<BookingSlotModel>();
+    public DbSet<BookingHoldModel> Holds => Set<BookingHoldModel>();
+
+
+    public DbSet<CalendarSubscriptionModel> CalendarSubscriptions => Set<CalendarSubscriptionModel>();
+    public DbSet<CalendarNotificationReceiptModel> CalendarNotificationReceipts => Set<CalendarNotificationReceiptModel>();
+    public DbSet<CalendarEventSnapshotModel> CalendarEventSnapshots => Set<CalendarEventSnapshotModel>();
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);
+        base.OnModelCreating(modelBuilder);
+    }
+}

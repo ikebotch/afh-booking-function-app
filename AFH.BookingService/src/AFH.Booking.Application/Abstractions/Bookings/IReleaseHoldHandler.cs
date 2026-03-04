@@ -1,0 +1,8 @@
+﻿using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Domain.Bookings.Commands;
+
+namespace AFH.Booking.Application.Abstractions.Bookings.Handlers;
+public interface IReleaseHoldHandler
+{
+    Task<Result<ReleaseHoldResponse>> HandleAsync(string holdId, CancellationToken ct);
+}

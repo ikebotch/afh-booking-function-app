@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AFH.Booking.Domain\AFH.Booking.Domain.csproj" />
+    <ProjectReference Include="..\AFH.Booking.Contracts\AFH.Booking.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AFH.Common.CalendarUtils" Version="1.3.4" />
+	  <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.*" />
+	  <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.*" OutputItemType="Analyzer" />
+	  <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="1.*" />
+  </ItemGroup>
+
+</Project>

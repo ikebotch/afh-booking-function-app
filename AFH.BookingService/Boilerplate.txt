@@ -1,0 +1,33 @@
+mkdir AFH.BookingService && cd AFH.BookingService
+dotnet new sln -n AFH.BookingService
+
+dotnet new func -n AFH.Booking.Functions -o AFH.Booking.Functions --force 
+dotnet new classlib -n AFH.Booking.Application -f net8.0
+dotnet new classlib -n AFH.Booking.Domain -f net8.0
+dotnet new classlib -n AFH.Booking.Infrastructure -f net8.0
+dotnet new classlib -n AFH.Booking.Contracts -f net8.0
+
+
+dotnet sln add AFH.Booking.Functions/AFH.Booking.Functions.csproj 
+dotnet sln add AFH.Booking.Application/AFH.Booking.Application.csproj 
+dotnet sln add AFH.Booking.Domain/AFH.Booking.Domain.csproj
+dotnet sln add AFH.Booking.Infrastructure/AFH.Booking.Infrastructure.csproj
+dotnet sln add AFH.Booking.Contracts/AFH.Booking.Contracts.csproj
+
+//Wire Up References
+dotnet add AFH.Booking.Functions reference AFH.Booking.Application AFH.Booking.Infrastructure  AFH.Booking.Contracts
+dotnet add AFH.Booking.Application reference AFH.Booking.Domain   AFH.Booking.Contracts
+dotnet add AFH.Booking.Infrastructure reference   AFH.Booking.Application   AFH.Booking.Domain   AFH.Booking.Contracts
+
+//Install Dependencies
+dotnet add AFH.Booking.Functions package Microsoft.Azure.Functions.Worker.Extensions.Http
+dotnet add AFH.Booking.Functions package Microsoft.Azure.Functions.Worker.Extensions.Timer
+dotnet add AFH.Booking.Functions package Microsoft.Extensions.Http
+dotnet add AFH.Booking.Functions package Microsoft.Extensions.Options.ConfigurationExtensions
+dotnet add AFH.Booking.Functions package Microsoft.EntityFrameworkCore.Design
+dotnet add AFH.Booking.Functions\AFH.Booking.Functions.csproj package Microsoft.EntityFrameworkCore.SqlServer
+dotnet add AFH.Booking.Functions\AFH.Booking.Functions.csproj package Microsoft.EntityFrameworkCore
+
+// Add EF Dependency
+dotnet add AFH.Booking.Infrastructure package Microsoft.EntityFrameworkCore
+dotnet add AFH.Booking.Infrastructure package Microsoft.EntityFrameworkCore.SqlServer

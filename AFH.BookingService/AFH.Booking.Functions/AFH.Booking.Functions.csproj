@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AzureFunctionsVersion>v4</AzureFunctionsVersion>
+    <OutputType>Exe</OutputType>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.*" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.*" OutputItemType="Analyzer" />
+    <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore" Version="1.*" />
+    <PackageReference Include="Microsoft.ApplicationInsights.WorkerService" Version="2.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Your internal projects -->
+    <ProjectReference Include="..\AFH.Booking.Contracts\AFH.Booking.Contracts.csproj" />
+    <ProjectReference Include="..\AFH.Booking.Application\AFH.Booking.Application.csproj" />
+    <ProjectReference Include="..\AFH.Booking.Infrastructure\AFH.Booking.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "AFH.Booking.Functions": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7149",
+      "launchBrowser": false
+    }
+  }
+}

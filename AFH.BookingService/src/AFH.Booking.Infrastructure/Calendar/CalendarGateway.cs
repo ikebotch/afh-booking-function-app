@@ -236,7 +236,7 @@ public sealed class CalendarGateway : ICalendarGateway
     private sealed class CreateAppointmentResponse
     {
         public string? AppointmentId { get; set; }
-public string? EventId { get; set; }
+        public string? EventId { get; set; }
     }
 
     private sealed class CalendarEventResponse

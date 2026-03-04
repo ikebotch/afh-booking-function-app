@@ -24,10 +24,8 @@
 
     <!-- Options + DI + Http -->
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="9.0.0" />
-
-    <!-- Graph (SharePoint) -->
-    <PackageReference Include="Microsoft.Graph" Version="5.*" />
 
     <!-- ACS (placeholder - add if you create actual ACS links here) -->
     <!-- <PackageReference Include="Azure.Communication.Identity" Version="1.*" /> -->

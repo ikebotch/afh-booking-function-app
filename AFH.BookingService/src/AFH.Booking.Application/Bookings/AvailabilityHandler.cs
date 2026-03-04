@@ -187,7 +187,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                 return (new List<AdviserDirectoryItem>(),
                     Result<GetAvailabilityResponse>.Fail(
                         HttpStatusCode.BadRequest,
-                        "preferredAdviserIds is required for remote meetings when SharePoint adviser directory is disabled.",
+                        "preferredAdviserIds is required for remote meetings.",
                         Errors.Validation));
             }
 

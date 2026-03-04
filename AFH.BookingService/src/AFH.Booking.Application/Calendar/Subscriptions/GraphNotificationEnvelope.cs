@@ -3,7 +3,7 @@
 namespace AFH.Booking.Application.Calendar.Subscriptions;
 
 /// <summary>
-/// Matches Microsoft Graph change notifications payload:
+/// Matches calendar-service notification payload:
 /// { "value": [ { ... } ] }
 /// </summary>
 public sealed class GraphNotificationEnvelope

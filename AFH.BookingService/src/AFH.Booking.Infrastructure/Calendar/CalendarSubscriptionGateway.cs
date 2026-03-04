@@ -1,25 +1,28 @@
 using AFH.Booking.Application.Abstractions.Calendar.Subscription;
 using AFH.Booking.Application.Common;
-using AFH.Booking.Infrastructure.Options;
+using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.Graph;
-using Microsoft.Graph.Models;
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace AFH.Booking.Infrastructure.Calendar;
 
 public sealed class CalendarSubscriptionGateway : ICalendarSubscriptionGateway
 {
-    private readonly GraphServiceClient _graph;
-    private readonly GraphWebhookOptions _opts;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private readonly HttpClient _http;
+    private readonly CalendarSubscriptionOptions _opts;
     private readonly ILogger<CalendarSubscriptionGateway> _logger;
 
     public CalendarSubscriptionGateway(
-        GraphServiceClient graph,
-        IOptions<GraphWebhookOptions> opts,
+        HttpClient http,
+        IOptions<CalendarSubscriptionOptions> opts,
         ILogger<CalendarSubscriptionGateway> logger)
     {
-        _graph = graph;
+        _http = http;
         _opts = opts.Value;
         _logger = logger;
     }
@@ -28,97 +31,122 @@ public sealed class CalendarSubscriptionGateway : ICalendarSubscriptionGateway
         CreateCalendarSubscriptionRequest request,
         CancellationToken ct)
     {
-        var result = await CreateInternalAsync(request, ct);
+        var result = await CreateAsync(request, ct);
         if (!result.IsSuccess || result.Value is null)
             throw new InvalidOperationException(result.ErrorMessage ?? "Failed to create calendar subscription.");
 
         return result.Value;
     }
 
-    public Task<Result<CreateCalendarSubscriptionResult>> CreateAsync(
-        CreateCalendarSubscriptionRequest request,
-        CancellationToken ct)
-        => CreateInternalAsync(request, ct);
-
-    public async Task<Result> DeleteAsync(string subscriptionId, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(subscriptionId))
-            return Result.Fail(System.Net.HttpStatusCode.BadRequest, "subscriptionId is required.", "Validation");
-
-        try
-        {
-            await _graph.Subscriptions[subscriptionId].DeleteAsync(cancellationToken: ct);
-            _logger.LogInformation("Deleted Graph subscription. SubscriptionId={SubscriptionId}", subscriptionId);
-            return Result.Ok();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to delete Graph subscription {SubscriptionId}", subscriptionId);
-            return Result.Fail(System.Net.HttpStatusCode.BadGateway, "Failed to delete Graph subscription.", "GraphError");
-        }
-    }
-
-    private async Task<Result<CreateCalendarSubscriptionResult>> CreateInternalAsync(
+    public async Task<Result<CreateCalendarSubscriptionResult>> CreateAsync(
         CreateCalendarSubscriptionRequest request,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.UserId))
-            return Result<CreateCalendarSubscriptionResult>.Fail(System.Net.HttpStatusCode.BadRequest, "AdviserUserId is required.", "Validation");
+            return Result<CreateCalendarSubscriptionResult>.Fail(HttpStatusCode.BadRequest, "AdviserUserId is required.", "Validation");
 
-        var notificationUrl = string.IsNullOrWhiteSpace(request.NotificationUrl)
-            ? _opts.NotificationUrl
-            : request.NotificationUrl;
-
-        var clientState = string.IsNullOrWhiteSpace(request.ClientState)
-            ? _opts.ClientState
-            : request.ClientState;
-
-        if (string.IsNullOrWhiteSpace(notificationUrl))
-            return Result<CreateCalendarSubscriptionResult>.Fail(System.Net.HttpStatusCode.BadRequest, "NotificationUrl is required.", "Validation");
-
-        if (string.IsNullOrWhiteSpace(clientState))
-            return Result<CreateCalendarSubscriptionResult>.Fail(System.Net.HttpStatusCode.BadRequest, "ClientState is required.", "Validation");
-
-        var resource = request.Resource?.Replace("{userId}", request.UserId, StringComparison.OrdinalIgnoreCase)
-                       ?? $"/users/{request.UserId}/events";
-
-        var expiry = request.ExpirationUtc == default
-            ? DateTimeOffset.UtcNow.AddMinutes(Math.Max(15, _opts.ExpirationMinutes))
-            : request.ExpirationUtc;
-
-        var sub = new Subscription
+        var payload = new
         {
-            ChangeType = "created,updated,deleted",
-            NotificationUrl = notificationUrl,
-            Resource = resource,
-            ExpirationDateTime = expiry,
-            ClientState = clientState
+            userId = request.UserId,
+            notificationUrl = request.NotificationUrl,
+            clientState = request.ClientState,
+            resource = request.Resource,
+            expirationUtc = request.ExpirationUtc
         };
 
-        try
+        var url = BuildUrl("/api/v1/calendar/subscriptions", includeFunctionKeyInQuery: true);
+        using var req = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            var created = await _graph.Subscriptions.PostAsync(sub, cancellationToken: ct);
+            Content = JsonContent.Create(payload, options: JsonOptions)
+        };
+        AddAuth(req);
 
-            if (created?.Id is null)
-                return Result<CreateCalendarSubscriptionResult>.Fail(System.Net.HttpStatusCode.BadGateway, "Graph did not return a subscription id.", "GraphError");
+        using var res = await _http.SendAsync(req, ct);
 
-            _logger.LogInformation(
-                "Created Graph subscription. AdviserUserId={AdviserUserId} SubscriptionId={SubscriptionId} Expiry={Expiry}",
-                request.UserId,
-                created.Id,
-                created.ExpirationDateTime);
-
-            return Result<CreateCalendarSubscriptionResult>.Ok(new CreateCalendarSubscriptionResult
-            {
-                SubscriptionId = created.Id,
-                ExpirationUtc = created.ExpirationDateTime ?? expiry,
-                Resource = created.Resource
-            });
-        }
-        catch (Exception ex)
+        if (!res.IsSuccessStatusCode)
         {
-            _logger.LogError(ex, "Failed to create Graph subscription for AdviserUserId={AdviserUserId}", request.UserId);
-            return Result<CreateCalendarSubscriptionResult>.Fail(System.Net.HttpStatusCode.BadGateway, "Failed to create Graph subscription.", "GraphError");
+            var body = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning(
+                "Calendar subscription create failed. Status={StatusCode} Body={Body}",
+                (int)res.StatusCode,
+                body);
+
+            return Result<CreateCalendarSubscriptionResult>.Fail(
+                HttpStatusCode.BadGateway,
+                "Failed to create calendar subscription via calendar service.",
+                "CalendarServiceError");
         }
+
+        var created = await res.Content.ReadFromJsonAsync<CreateCalendarSubscriptionResponse>(JsonOptions, ct);
+        if (created is null || string.IsNullOrWhiteSpace(created.SubscriptionId))
+        {
+            return Result<CreateCalendarSubscriptionResult>.Fail(
+                HttpStatusCode.BadGateway,
+                "Calendar service returned an invalid subscription response.",
+                "CalendarServiceError");
+        }
+
+        return Result<CreateCalendarSubscriptionResult>.Ok(new CreateCalendarSubscriptionResult
+        {
+            SubscriptionId = created.SubscriptionId,
+            ExpirationUtc = created.ExpirationUtc,
+            Resource = created.Resource
+        });
+    }
+
+    public async Task<Result> DeleteAsync(string subscriptionId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(subscriptionId))
+            return Result.Fail(HttpStatusCode.BadRequest, "subscriptionId is required.", "Validation");
+
+        var url = BuildUrl($"/api/v1/calendar/subscriptions/{Uri.EscapeDataString(subscriptionId)}", includeFunctionKeyInQuery: true);
+        using var req = new HttpRequestMessage(HttpMethod.Delete, url);
+        AddAuth(req);
+
+        using var res = await _http.SendAsync(req, ct);
+
+        if (res.StatusCode == HttpStatusCode.NotFound)
+            return Result.NotFound("Subscription not found.");
+
+        if (!res.IsSuccessStatusCode)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            _logger.LogWarning(
+                "Calendar subscription delete failed. Status={StatusCode} Body={Body}",
+                (int)res.StatusCode,
+                body);
+
+            return Result.Fail(
+                HttpStatusCode.BadGateway,
+                "Failed to delete calendar subscription via calendar service.",
+                "CalendarServiceError");
+        }
+
+        return Result.Ok();
+    }
+
+    private string BuildUrl(string path, bool includeFunctionKeyInQuery)
+    {
+        var baseUrl = _opts.BaseUrl.TrimEnd('/');
+        var normalizedPath = path.StartsWith('/') ? path : $"/{path}";
+
+        if (!includeFunctionKeyInQuery || string.IsNullOrWhiteSpace(_opts.FunctionKey))
+            return baseUrl + normalizedPath;
+
+        var separator = normalizedPath.Contains('?') ? "&" : "?";
+        return $"{baseUrl}{normalizedPath}{separator}code={Uri.EscapeDataString(_opts.FunctionKey)}";
+    }
+
+    private void AddAuth(HttpRequestMessage req)
+    {
+        if (!string.IsNullOrWhiteSpace(_opts.FunctionKey))
+            req.Headers.TryAddWithoutValidation("x-functions-key", _opts.FunctionKey);
+    }
+
+    private sealed class CreateCalendarSubscriptionResponse
+    {
+        public string SubscriptionId { get; set; } = string.Empty;
+        public DateTimeOffset ExpirationUtc { get; set; }
+        public string? Resource { get; set; }
     }
 }

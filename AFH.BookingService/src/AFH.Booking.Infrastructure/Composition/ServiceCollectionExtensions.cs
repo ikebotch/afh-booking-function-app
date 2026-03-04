@@ -11,12 +11,10 @@ using AFH.Booking.Infrastructure.Meetings;
 using AFH.Booking.Infrastructure.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
-using Azure.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using Microsoft.Graph;
 
 namespace AFH.Booking.Infrastructure.Composition;
 
@@ -35,7 +33,6 @@ public static class ServiceCollectionExtensions
         services.Configure<AzureAdOptions>(config.GetSection(AzureAdOptions.SectionName));
         services.Configure<LocationServiceOptions>(config.GetSection(LocationServiceOptions.SectionName));
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));
-        services.Configure<GraphWebhookOptions>(config.GetSection(GraphWebhookOptions.SectionName));
 
         var db = config.GetSection(BookingDbOptions.SectionName).Get<BookingDbOptions>()
                  ?? throw new InvalidOperationException($"{BookingDbOptions.SectionName} config is missing.");
@@ -69,18 +66,15 @@ public static class ServiceCollectionExtensions
             http.Timeout = TimeSpan.FromSeconds(30);
         });
 
-        services.AddSingleton(sp =>
+        services.AddHttpClient<ICalendarSubscriptionGateway, CalendarSubscriptionGateway>((sp, http) =>
         {
-            var cfg = sp.GetRequiredService<IConfiguration>();
-            var tenantId = cfg["CalendarGraph:TenantId"];
-            var clientId = cfg["CalendarGraph:ClientId"];
-            var secret = cfg["CalendarGraph:ClientSecret"];
+            var opt = sp.GetRequiredService<IOptions<CalendarSubscriptionOptions>>().Value;
+            if (string.IsNullOrWhiteSpace(opt.BaseUrl))
+                throw new InvalidOperationException($"{CalendarSubscriptionOptions.SectionName}:BaseUrl is required.");
 
-            var cred = new ClientSecretCredential(tenantId, clientId, secret);
-            return new GraphServiceClient(cred, new[] { "https://graph.microsoft.com/.default" });
+            http.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+            http.Timeout = TimeSpan.FromSeconds(30);
         });
-
-        services.AddScoped<ICalendarSubscriptionGateway, CalendarSubscriptionGateway>();
 
         // Leads integration
         services.AddHttpClient<LeadsAccessToken>();

@@ -51,7 +51,7 @@ public sealed class CreateSubscriptionHandler : ICreateSubscriptionHandler
         var utcNow = _clock.UtcNow;
 
 
-        var code = Uri.EscapeDataString(_opts.FunctionKey.Trim());
+        var code = Uri.EscapeDataString((_opts.FunctionKey ?? string.Empty).Trim());
 
 
         var placeholders = new Dictionary<string, string>
@@ -120,7 +120,7 @@ public sealed class CreateSubscriptionHandler : ICreateSubscriptionHandler
             ExpirationUtc = expirationUtc
         };
 
-        // Call Graph/SDK
+        // Call calendar-service gateway
         var res = await _gateway.CreateOrRenewAsync(gatewayRequest, ct);
 
         // Persist
@@ -146,7 +146,7 @@ public sealed class CreateSubscriptionHandler : ICreateSubscriptionHandler
         {
             // Only renew (since your domain doesn’t support endpoint/resource changes yet)
             existing.Renew(res.ExpirationUtc.UtcDateTime, utcNow);
-            existing.UpdateWebhook(cmd.NotificationUrl!, cmd.ClientState, utcNow);
+            existing.UpdateWebhook(notificationUrl, clientState, utcNow);
             await _repo.UpsertAsync(existing, ct);
         }
 

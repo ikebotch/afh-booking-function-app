@@ -9,10 +9,21 @@ var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
     .ConfigureAppConfiguration((ctx, cfg) =>
     {
-        // Load configuration from local.settings.json and environment variables
-        cfg.SetBasePath(Directory.GetCurrentDirectory())
-           .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
-           .AddEnvironmentVariables();
+        // Load configuration from local.settings.json and environment variables.
+        // Support running from either function project folder or solution root.
+        var cwd = Directory.GetCurrentDirectory();
+        var localSettingsInCwd = Path.Combine(cwd, "local.settings.json");
+        var localSettingsFromSolutionRoot = Path.Combine(cwd, "src", "AFH.Booking.Functions", "local.settings.json");
+
+        cfg.SetBasePath(cwd);
+
+        if (File.Exists(localSettingsInCwd))
+            cfg.AddJsonFile(localSettingsInCwd, optional: true, reloadOnChange: true);
+
+        if (File.Exists(localSettingsFromSolutionRoot))
+            cfg.AddJsonFile(localSettingsFromSolutionRoot, optional: true, reloadOnChange: true);
+
+        cfg.AddEnvironmentVariables();
 
         // Flatten "Values" section into top-level keys
         var values = cfg.Build()

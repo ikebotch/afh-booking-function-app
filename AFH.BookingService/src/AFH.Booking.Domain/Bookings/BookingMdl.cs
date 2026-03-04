@@ -24,7 +24,7 @@ public sealed class BookingMdl
     public string? Notes { get; private set; }
     public string? TransactionId { get; private set; }
 
-    // Calendar linkage (Graph event id)
+    // Calendar linkage (provider event id)
     public string? CalendarProviderEventId { get; private set; }
 
     // Hold-specific

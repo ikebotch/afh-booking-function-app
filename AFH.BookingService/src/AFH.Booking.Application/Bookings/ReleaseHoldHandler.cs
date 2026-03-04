@@ -50,7 +50,7 @@ public sealed class ReleaseHoldHandler : IReleaseHoldHandler
                 "Confirmed holds cannot be released.",
                 "conflict");
 
-        // Cancel Graph event if exists
+        // Cancel calendar event if it exists
         if (!string.IsNullOrWhiteSpace(hold.CalendarProviderEventId))
         {
             try

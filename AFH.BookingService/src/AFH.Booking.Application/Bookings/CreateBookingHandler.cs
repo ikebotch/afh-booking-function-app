@@ -187,7 +187,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         var windows = BuildHoldWindows(slot, tx);
 
         _logger.LogInformation(
-            "Creating Graph hold event for HoldId={HoldId} SlotId={SlotId} AdviserId={AdviserId} SlotStartUtc={SlotStartUtc} SlotEndUtc={SlotEndUtc} HoldStartUtc={HoldStartUtc} HoldEndUtc={HoldEndUtc} TravelBufferMins={TravelBufferMins}",
+            "Creating calendar hold event for HoldId={HoldId} SlotId={SlotId} AdviserId={AdviserId} SlotStartUtc={SlotStartUtc} SlotEndUtc={SlotEndUtc} HoldStartUtc={HoldStartUtc} HoldEndUtc={HoldEndUtc} TravelBufferMins={TravelBufferMins}",
             hold.Id, slot.Id, slot.AdviserId, slot.StartUtc, slot.EndUtc,
             windows.HoldStartUtc, windows.HoldEndUtc, windows.TravelBufferMinutesEachSide);
 

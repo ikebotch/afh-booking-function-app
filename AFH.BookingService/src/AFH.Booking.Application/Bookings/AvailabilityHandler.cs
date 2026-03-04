@@ -150,7 +150,21 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                     Errors.Validation));
         }
 
-        var prospect = await _clients.GetAsync(leadKey.Trim(), ct);
+        Domain.Client.ClientDirectoryItem? prospect;
+        try
+        {
+            prospect = await _clients.GetAsync(leadKey.Trim(), ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "Leads directory call failed for lookup key {LeadKey}.", leadKey);
+            return (null,
+                Result<GetAvailabilityResponse>.Fail(
+                    HttpStatusCode.BadGateway,
+                    "Leads service is unavailable. Please try again shortly.",
+                    "LeadsServiceUnavailable"));
+        }
+
         if (prospect is null)
         {
             return (null,

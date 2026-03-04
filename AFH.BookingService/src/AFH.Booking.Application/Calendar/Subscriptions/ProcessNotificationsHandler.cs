@@ -1,6 +1,6 @@
 ﻿using AFH.Booking.Application.Abstractions.Calendar.Subscription;
-using AFH.Booking.Application.Calendar.Subscriptions;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Options;
@@ -45,13 +45,13 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
         _clock = clock;
     }
 
-    public async Task<Result> HandleAsync(GraphNotificationEnvelope? envelope, CancellationToken ct)
+    public async Task<Result> HandleAsync(CalendarNotificationsRequest? envelope, CancellationToken ct)
     {
         var items = envelope?.Value ?? [];
 
         if (items.Count == 0)
         {
-            _logger.LogInformation("Graph notifications received with empty payload.");
+            _logger.LogInformation("Calendar notifications received with empty payload.");
             return Result.Ok();
         }
 
@@ -90,7 +90,7 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to serialise raw Graph notification payload.");
+                _logger.LogWarning(ex, "Failed to serialise raw calendar notification payload.");
             }
 
 
@@ -166,11 +166,11 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
 
             if (accepted)
                 _logger.LogInformation(
-                    "Graph notification accepted. SubscriptionId={SubscriptionId} EventId={EventId} ChangeType={ChangeType}",
+                    "Calendar notification accepted. SubscriptionId={SubscriptionId} EventId={EventId} ChangeType={ChangeType}",
                     subscriptionId, eventId, changeType);
             else
                 _logger.LogWarning(
-                    "Graph notification rejected. SubscriptionId={SubscriptionId} EventId={EventId} Reason={Reason}",
+                    "Calendar notification rejected. SubscriptionId={SubscriptionId} EventId={EventId} Reason={Reason}",
                     subscriptionId, eventId, rejectReason);
         }
 

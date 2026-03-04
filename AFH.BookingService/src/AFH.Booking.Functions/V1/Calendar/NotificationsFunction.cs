@@ -1,5 +1,5 @@
 ﻿using AFH.Booking.Application.Abstractions.Calendar.Subscription;
-using AFH.Booking.Application.Calendar.Subscriptions;
+using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Functions.Http;
 using Microsoft.AspNetCore.WebUtilities;
 
@@ -41,10 +41,10 @@ public sealed class NotificationsFunction
                 return req.CreateResponse(HttpStatusCode.MethodNotAllowed);
 
             // If body is empty, don’t throw (provider can occasionally send minimal payloads)
-            GraphNotificationEnvelope? envelope = null;
+            CalendarNotificationsRequest? envelope = null;
             try
             {
-                envelope = await req.ReadJsonAsync<GraphNotificationEnvelope>(ct);
+                envelope = await req.ReadJsonAsync<CalendarNotificationsRequest>(ct);
             }
             catch
             {

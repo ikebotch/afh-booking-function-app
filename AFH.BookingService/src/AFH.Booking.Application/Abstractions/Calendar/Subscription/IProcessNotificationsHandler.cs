@@ -1,7 +1,7 @@
-﻿using AFH.Booking.Application.Calendar.Subscriptions;
+﻿using AFH.Booking.Contracts.V1.Requests;
 
 namespace AFH.Booking.Application.Abstractions.Calendar.Subscription;
 public interface IProcessNotificationsHandler
 {
-    Task<Result> HandleAsync(GraphNotificationEnvelope? envelope, CancellationToken ct);
+    Task<Result> HandleAsync(CalendarNotificationsRequest? envelope, CancellationToken ct);
 }

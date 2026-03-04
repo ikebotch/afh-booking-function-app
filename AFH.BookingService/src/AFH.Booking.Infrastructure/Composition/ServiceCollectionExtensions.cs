@@ -8,7 +8,6 @@ using AFH.Booking.Infrastructure.Calendar;
 using AFH.Booking.Infrastructure.Clients;
 using AFH.Booking.Infrastructure.Location;
 using AFH.Booking.Infrastructure.Meetings;
-using AFH.Booking.Infrastructure.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;

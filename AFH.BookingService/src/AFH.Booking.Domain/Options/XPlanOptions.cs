@@ -1,4 +1,4 @@
-﻿namespace AFH.Booking.Infrastructure.Options;
+﻿namespace AFH.Booking.Domain.Options;
 
 public sealed class XPlanOptions
 {

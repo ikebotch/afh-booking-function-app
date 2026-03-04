@@ -1,19 +1,14 @@
 ﻿using AFH.Booking.Domain.Client;
-using AFH.Booking.Infrastructure.Options;
-//using Microsoft.AspNetCore.Authentication.BearerToken;
-using Microsoft.Extensions.Logging;
+using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Json;
 
-
 namespace AFH.Booking.Infrastructure.Clients;
-
 
 public sealed class LeadsAccessToken
 {
     private readonly HttpClient _http;
     private readonly LeadsOptions _opts;
-    private readonly ILogger<LeadsClientDirectory> _logger;
 
     private string? _token;
     private DateTime _expiresUtc;
@@ -24,7 +19,6 @@ public sealed class LeadsAccessToken
     {
         _http = http;
         _opts = opts.Value;
-
     }
 
     public async Task<string> GetAccessTokenAsync(CancellationToken ct)
@@ -33,7 +27,6 @@ public sealed class LeadsAccessToken
             return _token;
 
 
-        //string tokenUrl = string.Format(_opts.TokenUrl, _opts.TenantId);
         string tokenUrl = _opts.TokenUrl.Replace("{tenantId}", _opts.TenantId);
 
         var content = new FormUrlEncodedContent(new Dictionary<string, string>

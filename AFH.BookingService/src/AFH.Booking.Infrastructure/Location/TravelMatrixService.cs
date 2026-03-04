@@ -2,7 +2,7 @@
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Location;
 using AFH.Booking.Domain.Location.Travel;
-using AFH.Booking.Infrastructure.Options;
+using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;

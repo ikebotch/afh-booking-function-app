@@ -1,6 +1,6 @@
 ﻿using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Domain.Client;
-using AFH.Booking.Infrastructure.Options;
+using AFH.Booking.Domain.Options;
 using Common.Utilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

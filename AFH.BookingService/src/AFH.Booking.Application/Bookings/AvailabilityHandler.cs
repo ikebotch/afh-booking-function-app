@@ -68,7 +68,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
 
         var (slotStartsUtc, nextCursor) = BuildSlotStartTimesUtcPage(q);
         if (slotStartsUtc.Count == 0)
-            return EmptyResult(q.TransactionId ?? q.ClientId ?? string.Empty, nextCursor);
+            return EmptyResult(nextCursor);
 
         var txResult = CreateTransaction(q, slotStartsUtc[0], utcNow);
         if (txResult.Error is not null)
@@ -83,7 +83,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
 
         var advisers = adviserPoolResult.Value;
         if (advisers.Count == 0)
-            return EmptyResult(tx.Id, nextCursor);
+            return EmptyResult(nextCursor);
 
         var adviserSlots = await ProcessSlots(
             q,
@@ -258,7 +258,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         }
     }
 
-    private async Task<List<(string Key, string AdviserId, string Name, bool GoldStar, BookingSlot Slot)>> ProcessSlots(
+    private async Task<List<(string Key, string AdviserId, string Name, BookingSlot Slot)>> ProcessSlots(
         GetAvailabilityQuery q,
         IReadOnlyList<AdviserDirectoryItem> advisers,
         IReadOnlyList<DateTime> slotStarts,
@@ -267,7 +267,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         DateTime utcNow,
         CancellationToken ct)
     {
-        var result = new List<(string, string, string, bool, BookingSlot)>();
+        var result = new List<(string, string, string, BookingSlot)>();
 
         foreach (var start in slotStarts)
         {
@@ -336,12 +336,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
 
                 await _slotRepo.AddAsync(slot, ct);
 
-                result.Add((
-                    adviserId + slot.AdviserName,
-                    adviserId,
-                    slot.AdviserName,
-                    travelCandidate?.GoldStar ?? false,
-                    slot));
+                result.Add((adviserId + slot.AdviserName, adviserId, slot.AdviserName, slot));
             }
         }
 
@@ -409,31 +404,30 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
     private Result<GetAvailabilityResponse> BuildSuccessResponse(
         GetAvailabilityQuery q,
         string transactionId,
-        List<(string Key, string AdviserId, string Name, bool GoldStar, BookingSlot Slot)> slots,
+        List<(string Key, string AdviserId, string Name, BookingSlot Slot)> slots,
         string? nextCursor)
     {
         var pageSize = q.Limit <= 0 ? 10 : q.Limit;
-        var items = AvailabilityResponseMapping.ToDayGroups(slots, pageSize);
+        var dayGroups = AvailabilityResponseMapping.ToDayGroups(slots, pageSize);
 
         return Result<GetAvailabilityResponse>.Ok(new GetAvailabilityResponse
         {
             TransactionId = transactionId,
-            Items = items,
+            Advisers = dayGroups,
             Paging = new PageResultDto<object>
             {
                 NextCursor = nextCursor,
                 PageSize = pageSize,
-                ReturnedCount = items.Count
+                ReturnedCount = dayGroups?.Count ?? 0
             }
         });
     }
 
-    private static Result<GetAvailabilityResponse> EmptyResult(string transactionId, string? nextCursor)
+    private static Result<GetAvailabilityResponse> EmptyResult(string? nextCursor)
     {
         return Result<GetAvailabilityResponse>.Ok(new GetAvailabilityResponse
         {
-            TransactionId = transactionId,
-            Items = new(),
+            Advisers = new(),
             Paging = new PageResultDto<object>
             {
                 NextCursor = nextCursor,

@@ -1,4 +1,4 @@
-namespace AFH.Booking.Contracts.V1.Responses;
+namespace AFH.Booking.Contracts.V2.Responses;
 
 public sealed class GetClientResponse
 {

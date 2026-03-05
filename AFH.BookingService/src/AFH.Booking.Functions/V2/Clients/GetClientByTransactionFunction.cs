@@ -1,8 +1,9 @@
-﻿using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Common;
+using AFH.Booking.Contracts.V2.Responses;
 using AFH.Booking.Functions.Http;
 
-namespace AFH.Booking.Functions.V1.Clients;
+namespace AFH.Booking.Functions.V2.Clients;
 
 public sealed class GetClientByTransactionFunction
 {
@@ -17,9 +18,9 @@ public sealed class GetClientByTransactionFunction
         _logger = logger;
     }
 
-    [Function("Client_GetByTransaction")]
+    [Function("Client_GetByTransaction_V2")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/clients/{transactionId}")]
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v2/clients/{transactionId}")]
         HttpRequestData req,
         string transactionId,
         CancellationToken ct)
@@ -30,23 +31,17 @@ public sealed class GetClientByTransactionFunction
         _logger.LogInformation("Client lookup (transaction): {TransactionId}", transactionId);
 
         var client = await _clients.GetAsync(transactionId.Trim(), ct);
-
         if (client is null)
             return await req.ProblemAsync(HttpStatusCode.NotFound, "Client not found.", ct, "NotFound");
 
-        var clientInfo = new
+        var response = new GetClientResponse
         {
             FirstName = Masking.MaskName(client.FirstName?.Trim() ?? string.Empty),
             LastName = Masking.MaskName(client.LastName?.Trim() ?? string.Empty),
             Email = Masking.MaskEmail(client.Email?.Trim() ?? string.Empty),
-            PreferredStartUtc = client?.AppointmentDateTime
+            PreferredStartUtc = client.AppointmentDateTime
         };
 
-        return await req.OkJsonAsync(clientInfo, ct);
+        return await req.OkJsonAsync(response, ct);
     }
-
-
-
-
-
 }

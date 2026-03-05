@@ -158,7 +158,7 @@ public sealed class ApiDocsFunction
                     },
                     ["responses"] = new Dictionary<string, object>
                     {
-                        ["200"] = Response("GetClientResponse"),
+                        ["200"] = new Dictionary<string, object> { ["description"] = "Client details response" },
                         ["404"] = ProblemResponse()
                     }
                 }
@@ -177,9 +177,7 @@ public sealed class ApiDocsFunction
                 ["ConfirmBookingRequest"] = OpenApiSchema.FromType(typeof(ConfirmBookingRequest)),
                 ["ConfirmBookingResponse"] = OpenApiSchema.FromType(typeof(ConfirmBookingResponse)),
                 ["CancelBookingRequest"] = OpenApiSchema.FromType(typeof(CancelBookingRequest)),
-                ["CancelBookingResponse"] = OpenApiSchema.FromType(typeof(CancelBookingResponse)),
-                ["GetClientResponse"] = OpenApiSchema.FromType(typeof(GetClientResponse)),
-                ["ApiError"] = OpenApiSchema.FromType(typeof(AFH.Booking.Functions.Http.ApiError))
+                ["CancelBookingResponse"] = OpenApiSchema.FromType(typeof(CancelBookingResponse))
             }
         };
 
@@ -204,17 +202,7 @@ public sealed class ApiDocsFunction
             {
                 ["application/json"] = new Dictionary<string, object>
                 {
-                    ["schema"] = new Dictionary<string, object>
-                    {
-                        ["type"] = "object",
-                        ["properties"] = new Dictionary<string, object>
-                        {
-                            ["success"] = new Dictionary<string, object> { ["type"] = "boolean" },
-                            ["data"] = new Dictionary<string, object> { ["$ref"] = $"#/components/schemas/{schemaName}" },
-                            ["error"] = new Dictionary<string, object> { ["$ref"] = "#/components/schemas/ApiError" }
-                        },
-                        ["required"] = new[] { "success", "data" }
-                    }
+                    ["schema"] = new Dictionary<string, object> { ["$ref"] = $"#/components/schemas/{schemaName}" }
                 }
             }
         };

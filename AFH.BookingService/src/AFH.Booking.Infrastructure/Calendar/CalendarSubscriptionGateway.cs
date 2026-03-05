@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Calendar.Subscription;
 using AFH.Booking.Application.Common;
+using AFH.Booking.Infrastructure.Http;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -77,7 +78,7 @@ public sealed class CalendarSubscriptionGateway : ICalendarSubscriptionGateway
                 "CalendarServiceError");
         }
 
-        var created = await res.Content.ReadFromJsonAsync<CreateCalendarSubscriptionResponse>(JsonOptions, ct);
+        var created = await ReadEnvelopedOrRawAsync<CreateCalendarSubscriptionResponse>(res, ct);
         if (created is null || string.IsNullOrWhiteSpace(created.SubscriptionId))
         {
             return Result<CreateCalendarSubscriptionResult>.Fail(
@@ -141,6 +142,27 @@ public sealed class CalendarSubscriptionGateway : ICalendarSubscriptionGateway
     {
         if (!string.IsNullOrWhiteSpace(_opts.FunctionKey))
             req.Headers.TryAddWithoutValidation("x-functions-key", _opts.FunctionKey);
+    }
+
+    private static async Task<T?> ReadEnvelopedOrRawAsync<T>(HttpResponseMessage response, CancellationToken ct)
+        where T : class
+    {
+        var json = await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(json))
+            return default;
+
+        try
+        {
+            var enveloped = JsonSerializer.Deserialize<ApiEnvelope<T>>(json, JsonOptions);
+            if (enveloped?.Data is not null)
+                return enveloped.Data;
+
+            return JsonSerializer.Deserialize<T>(json, JsonOptions);
+        }
+        catch
+        {
+            return default;
+        }
     }
 
     private sealed class CreateCalendarSubscriptionResponse

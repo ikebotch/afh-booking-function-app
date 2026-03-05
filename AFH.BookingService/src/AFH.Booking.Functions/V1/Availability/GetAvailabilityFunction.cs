@@ -67,7 +67,9 @@ public sealed class GetAvailabilityFunction
         if (!result.IsSuccess)
             return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);
 
-        return await req.OkJsonAsync(result.Value!, ct);
+        var payload = result.Value!;
+        var paging = HttpResponseExtensions.SinglePage(payload.Advisers.Count);
+        return await req.OkJsonAsync(payload, ct, paging);
     }
 
 

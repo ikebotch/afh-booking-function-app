@@ -38,7 +38,11 @@ public sealed class NotificationsFunction
 
             // Normal notifications (calendar-service POSTs JSON)
             if (!req.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
-                return req.CreateResponse(HttpStatusCode.MethodNotAllowed);
+                return await req.ProblemAsync(
+                    HttpStatusCode.MethodNotAllowed,
+                    "Only GET(validation) or POST is supported.",
+                    ct,
+                    "MethodNotAllowed");
 
             // If body is empty, don’t throw (provider can occasionally send minimal payloads)
             CalendarNotificationsRequest? envelope = null;
@@ -54,7 +58,10 @@ public sealed class NotificationsFunction
             var result = await _handler.HandleAsync(envelope, ct);
 
             // Always ACK notification deliveries
-            return req.CreateResponse(HttpStatusCode.Accepted);
+            return await req.AcceptedJsonAsync(new
+            {
+                accepted = true
+            }, ct);
         }
         catch (Exception ex)
         {

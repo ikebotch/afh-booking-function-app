@@ -65,6 +65,7 @@ public sealed class GetAvailabilityFunction
             Paging = v1.Paging
         };
 
-        return await req.OkJsonAsync(response, ct);
+        var paging = HttpResponseExtensions.SinglePage(response.Items.Count);
+        return await req.OkJsonAsync(response, ct, paging);
     }
 }

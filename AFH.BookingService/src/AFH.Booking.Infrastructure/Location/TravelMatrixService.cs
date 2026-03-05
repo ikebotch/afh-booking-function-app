@@ -3,6 +3,7 @@ using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Location;
 using AFH.Booking.Domain.Location.Travel;
 using AFH.Booking.Domain.Options;
+using AFH.Booking.Infrastructure.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;
@@ -43,7 +44,7 @@ public sealed class TravelMatrixService : ITravelMatrixService
 
         if (resp.IsSuccessStatusCode)
         {
-            var data = await resp.Content.ReadFromJsonAsync<LocationAdviserSearchResponse>(JsonOptions, ct)
+            var data = await ReadEnvelopedOrRawAsync<LocationAdviserSearchResponse>(resp, ct)
                        ?? new LocationAdviserSearchResponse();
 
 
@@ -77,5 +78,26 @@ public sealed class TravelMatrixService : ITravelMatrixService
         }).ToList();
 
         return result;
+    }
+
+    private static async Task<T?> ReadEnvelopedOrRawAsync<T>(HttpResponseMessage response, CancellationToken ct)
+        where T : class
+    {
+        var json = await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(json))
+            return default;
+
+        try
+        {
+            var enveloped = JsonSerializer.Deserialize<ApiEnvelope<T>>(json, JsonOptions);
+            if (enveloped?.Data is not null)
+                return enveloped.Data;
+
+            return JsonSerializer.Deserialize<T>(json, JsonOptions);
+        }
+        catch
+        {
+            return default;
+        }
     }
 }

@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Domain.Calendar;
+using AFH.Booking.Infrastructure.Http;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -70,7 +71,7 @@ public sealed class CalendarGateway : ICalendarGateway
         using var res = await _http.SendAsync(req, ct);
         res.EnsureSuccessStatusCode();
 
-        var created = await res.Content.ReadFromJsonAsync<CreateAppointmentResponse>(JsonOptions, ct);
+        var created = await ReadEnvelopedOrRawAsync<CreateAppointmentResponse>(res, ct);
         return created?.AppointmentId ?? created?.EventId;
     }
 
@@ -102,7 +103,7 @@ public sealed class CalendarGateway : ICalendarGateway
 
         res.EnsureSuccessStatusCode();
 
-        var updated = await res.Content.ReadFromJsonAsync<CreateAppointmentResponse>(JsonOptions, ct);
+        var updated = await ReadEnvelopedOrRawAsync<CreateAppointmentResponse>(res, ct);
         return updated?.AppointmentId ?? updated?.EventId ?? ev.EventId;
     }
 
@@ -144,7 +145,7 @@ public sealed class CalendarGateway : ICalendarGateway
             return null;
         }
 
-        var payload = await res.Content.ReadFromJsonAsync<CalendarEventResponse>(JsonOptions, ct);
+        var payload = await ReadEnvelopedOrRawAsync<CalendarEventResponse>(res, ct);
         if (payload is null)
             return null;
 
@@ -187,7 +188,7 @@ public sealed class CalendarGateway : ICalendarGateway
             };
         }
 
-        var schedule = await res.Content.ReadFromJsonAsync<ScheduleResponse>(JsonOptions, ct) ?? new ScheduleResponse();
+        var schedule = await ReadEnvelopedOrRawAsync<ScheduleResponse>(res, ct) ?? new ScheduleResponse();
 
         var conflicts = schedule.Bookings
             .Where(b => b.EndUtc > startUtc && b.StartUtc < endUtc)
@@ -231,6 +232,28 @@ public sealed class CalendarGateway : ICalendarGateway
     {
         if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
             req.Headers.TryAddWithoutValidation("x-functions-key", _options.FunctionKey);
+    }
+
+    private static async Task<T?> ReadEnvelopedOrRawAsync<T>(HttpResponseMessage response, CancellationToken ct)
+        where T : class
+    {
+        var json = await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(json))
+            return default;
+
+        try
+        {
+            var enveloped = JsonSerializer.Deserialize<ApiEnvelope<T>>(json, JsonOptions);
+            if (enveloped?.Data is not null)
+                return enveloped.Data;
+
+            // Backward compatibility for legacy non-enveloped responses.
+            return JsonSerializer.Deserialize<T>(json, JsonOptions);
+        }
+        catch
+        {
+            return default;
+        }
     }
 
     private sealed class CreateAppointmentResponse

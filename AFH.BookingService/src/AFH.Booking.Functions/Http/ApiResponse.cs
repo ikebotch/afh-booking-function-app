@@ -8,17 +8,19 @@ public sealed class ApiResponse<T>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public T? Data { get; init; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public ApiError? Error { get; init; }
+    public ApiPaging? Paging { get; init; }
 
-    public static ApiResponse<T> Ok(T data) =>
-        new() { Success = true, Data = data };
+    public static ApiResponse<T> Ok(T data, ApiPaging? paging = null) =>
+        new() { Success = true, Data = data, Paging = paging };
 
-    public static ApiResponse<T> Fail(string message, string code) =>
-        new() { Success = false, Error = new ApiError { Code = code, Message = message } };
+    public static ApiResponse<T> Fail(T data) =>
+        new() { Success = false, Data = data };
 }
 
-public sealed class ApiError
+public sealed class ApiPaging
 {
-    public string Code { get; init; } = default!;
-    public string Message { get; init; } = default!;
+    public int Page { get; init; }
+    public int PageSize { get; init; }
+    public int TotalItems { get; init; }
+    public int TotalPages { get; init; }
 }

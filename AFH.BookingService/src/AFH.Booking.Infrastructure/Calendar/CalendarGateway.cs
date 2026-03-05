@@ -179,11 +179,17 @@ public sealed class CalendarGateway : ICalendarGateway
         using var res = await _http.SendAsync(req, ct);
         if (!res.IsSuccessStatusCode)
         {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            var mailboxNotFound = res.StatusCode == HttpStatusCode.NotFound || IsMailboxNotFound(body);
+            var effectiveStatus = mailboxNotFound ? HttpStatusCode.NotFound : res.StatusCode;
+
             return new AdviserAvailabilityResult
             {
                 IsFree = false,
                 MailboxUnavailable = true,
-                StatusMessage = $"Calendar schedule lookup failed with status {(int)res.StatusCode}.",
+                StatusMessage = mailboxNotFound
+                    ? "Calendar schedule lookup failed with status 404 (mailbox not found)."
+                    : $"Calendar schedule lookup failed with status {(int)effectiveStatus}.",
                 Conflicts = Array.Empty<CalendarConflictBlock>()
             };
         }
@@ -260,6 +266,17 @@ public sealed class CalendarGateway : ICalendarGateway
     {
         public string? AppointmentId { get; set; }
         public string? EventId { get; set; }
+    }
+
+    private static bool IsMailboxNotFound(string? responseBody)
+    {
+        if (string.IsNullOrWhiteSpace(responseBody))
+            return false;
+
+        return responseBody.Contains("mailbox not found", StringComparison.OrdinalIgnoreCase)
+               || responseBody.Contains("mailboxnotfound", StringComparison.OrdinalIgnoreCase)
+               || responseBody.Contains("erroritemnotfound", StringComparison.OrdinalIgnoreCase)
+               || responseBody.Contains("resourcenotfound", StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class CalendarEventResponse

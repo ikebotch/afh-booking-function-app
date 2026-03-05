@@ -42,6 +42,7 @@ public sealed class BookingSlotModelConfiguration : IEntityTypeConfiguration<Boo
             .HasMaxLength(4000);
 
         b.Property(x => x.TravelMinutes);
+        b.Property(x => x.CompanyBufferMinutes);
         b.Property(x => x.DistanceMiles).HasColumnType("decimal(9,2)");
 
         b.Property(x => x.TravelStatus)

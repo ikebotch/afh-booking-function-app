@@ -32,6 +32,7 @@ int adviserLimit = 10)
                             Rating = x.Slot.Score,
                             ScoreBreakdown = x.Slot.ScoreBreakdown,
                             TravelMinutes = x.Slot.TravelMinutes,
+                            CompanyBufferMinutes = x.Slot.CompanyBufferMinutes,
                             DistanceMiles = x.Slot.DistanceMiles,
                             TravelStatus = x.Slot.TravelStatus,
                             TravelMessage = x.Slot.TravelMessage

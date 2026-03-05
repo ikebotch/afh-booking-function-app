@@ -26,8 +26,12 @@ public static class ConfirmedBookingTemplate
         var travelLine = tx.IsRemote
             ? "Travel: N/A (remote meeting)"
             : windows.TravelApplied
-                ? $"Travel buffer: {windows.TravelBufferMinutesEachSide} mins before + {windows.TravelBufferMinutesEachSide} mins after"
+                ? $"Travel buffer: {windows.TravelBufferMinutesEachSide} mins"
                 : "Travel buffer: none";
+
+        var companyLine = windows.CompanyBufferMinutes > 0
+            ? $"Company buffer: {windows.CompanyBufferMinutes} mins (pre/post meeting policy)"
+            : "Company buffer: none";
 
         var whereLine = tx.IsRemote
             ? $"Join link: {(string.IsNullOrWhiteSpace(joinUrl) ? "TBC" : joinUrl)}"
@@ -51,6 +55,7 @@ Where:
 - {whereLine}
 
 {travelLine}
+{companyLine}
 
 Calendar block:
 - Local: {blockLocal}

@@ -29,6 +29,7 @@ public sealed class BookingSlotModel
     // Travel (optional, in-person only)
     // -------------------------
     public int? TravelMinutes { get; set; }
+    public int? CompanyBufferMinutes { get; set; }
     public decimal? DistanceMiles { get; set; }
 
 

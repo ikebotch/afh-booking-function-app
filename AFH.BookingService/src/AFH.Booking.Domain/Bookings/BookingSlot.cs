@@ -20,6 +20,7 @@ public sealed class BookingSlot
     public IReadOnlyDictionary<string, int>? ScoreBreakdown { get; private set; }
 
     public int? TravelMinutes { get; private set; }
+    public int? CompanyBufferMinutes { get; private set; }
     public decimal? DistanceMiles { get; private set; }
     public string? TravelStatus { get; private set; }
     public string? TravelMessage { get; private set; }
@@ -68,6 +69,7 @@ public sealed class BookingSlot
             ScoreBreakdown = scoreBreakdown,
 
             TravelMinutes = travel?.TravelMinutes,
+            CompanyBufferMinutes = travel?.CompanyBufferMinutes,
             DistanceMiles = travel?.DistanceMiles,
             TravelStatus = travel is null ? "NotRequested" : "travel.IsEligible",
             TravelMessage = travel?.IneligibilityReason,
@@ -87,6 +89,7 @@ public sealed class BookingSlot
         IReadOnlyDictionary<string, int>? scoreBreakdown,
         string? locationRef,
         int? travelMinutes,
+        int? companyBufferMinutes,
         decimal? distanceMiles,
         string? travelStatus,
         string? travelMessage,
@@ -104,6 +107,7 @@ public sealed class BookingSlot
             ScoreBreakdown = scoreBreakdown,
             LocationRef = locationRef,
             TravelMinutes = travelMinutes,
+            CompanyBufferMinutes = companyBufferMinutes,
             DistanceMiles = distanceMiles,
             TravelStatus = travelStatus,
             TravelMessage = travelMessage,

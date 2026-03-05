@@ -11,8 +11,6 @@ namespace AFH.Booking.Application.Bookings;
 
 public sealed class ConfirmBookingHandler : IConfirmBookingHandler
 {
-    private const int MaxTravelBufferMinutesEachSide = 60;
-
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _tx;
@@ -121,21 +119,18 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
 
     private static HoldWindows BuildHoldWindows(BookingSlot slot, BookingTransaction tx)
     {
-        if (tx.IsRemote)
-            return new HoldWindows(slot.StartUtc, slot.EndUtc, 0, false);
+        var travelMinutes = tx.IsRemote ? 0 : Math.Max(0, slot.TravelMinutes ?? 0);
+        var companyBufferMinutes = Math.Max(0, slot.CompanyBufferMinutes ?? 0);
 
-        var oneWayMinutes = slot.TravelMinutes;
-        if (oneWayMinutes is null || oneWayMinutes <= 0)
-            return new HoldWindows(slot.StartUtc, slot.EndUtc, 0, false);
+        var preMeetingMinutes = travelMinutes + companyBufferMinutes;
+        var postMeetingMinutes = companyBufferMinutes;
 
-        var buffer = Math.Min(oneWayMinutes.Value, MaxTravelBufferMinutesEachSide);
-
-        var start = slot.StartUtc.AddMinutes(-buffer);
-        var end = slot.EndUtc.AddMinutes(buffer);
+        var start = slot.StartUtc.AddMinutes(-preMeetingMinutes);
+        var end = slot.EndUtc.AddMinutes(postMeetingMinutes);
 
         if (end <= start)
-            return new HoldWindows(slot.StartUtc, slot.EndUtc, 0, false);
+            return new HoldWindows(slot.StartUtc, slot.EndUtc, 0, 0, false);
 
-        return new HoldWindows(start, end, buffer, true);
+        return new HoldWindows(start, end, travelMinutes, companyBufferMinutes, preMeetingMinutes > 0 || postMeetingMinutes > 0);
     }
 }

@@ -29,8 +29,12 @@ public static class HoldBookingTemplate
         var travelLine = tx.IsRemote
             ? "Travel: N/A (remote meeting)"
             : windows.TravelApplied
-                ? $"Travel buffer: {windows.TravelBufferMinutesEachSide} mins before + {windows.TravelBufferMinutesEachSide} mins after"
+                ? $"Travel buffer: {windows.TravelBufferMinutesEachSide} mins"
                 : "Travel buffer: none";
+
+        var companyLine = windows.CompanyBufferMinutes > 0
+            ? $"Company buffer: {windows.CompanyBufferMinutes} mins (pre/post meeting policy)"
+            : "Company buffer: none";
 
         return
 
@@ -96,4 +100,5 @@ public sealed record HoldWindows(
     DateTime HoldStartUtc,
     DateTime HoldEndUtc,
     int TravelBufferMinutesEachSide,
+    int CompanyBufferMinutes,
     bool TravelApplied);

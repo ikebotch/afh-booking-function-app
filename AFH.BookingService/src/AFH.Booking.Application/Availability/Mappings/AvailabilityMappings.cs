@@ -22,6 +22,7 @@ public static class AvailabilityMappings
         // Decide travel fields up-front (so we can use init-only properties)
         string? travelStatus = null;
         int? travelMinutes = null;
+        int? companyBufferMinutes = null;
         decimal? distanceMiles = null;
 
         if (!isRemote)
@@ -32,6 +33,7 @@ public static class AvailabilityMappings
                 : "Ok";
 
             travelMinutes = travelCandidate?.TravelMinutes;
+            companyBufferMinutes = travelCandidate?.CompanyBufferMinutes;
             distanceMiles = travelCandidate?.DistanceMiles;
         }
 
@@ -44,6 +46,7 @@ public static class AvailabilityMappings
 
             // these are safe even if init-only
             TravelMinutes = travelMinutes,
+            CompanyBufferMinutes = companyBufferMinutes,
             DistanceMiles = distanceMiles,
             TravelStatus = travelStatus
         };

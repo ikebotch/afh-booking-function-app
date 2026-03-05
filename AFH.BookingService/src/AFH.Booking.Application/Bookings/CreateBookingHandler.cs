@@ -17,7 +17,6 @@ namespace AFH.Booking.Application.Bookings;
 public sealed class CreateBookingHandler : ICreateBookingHandler
 {
     private static readonly TimeSpan DefaultHoldWindow = TimeSpan.FromMinutes(3);
-    private const int MaxTravelBufferMinutesEachSide = 60;
 
     private readonly IBookingTransactionRepository _txRepo;
     private readonly IBookingSlotRepository _slotRepo;
@@ -87,7 +86,8 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         {
             BookingId = hold.Id,
             SlotId = hold.SlotId,
-            HoldExpiresUtc = hold.ExpiresUtc
+            HoldExpiresUtc = hold.ExpiresUtc,
+            CompanyBufferMinutes = slot.CompanyBufferMinutes ?? 0
         });
     }
 
@@ -188,9 +188,9 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         var windows = BuildHoldWindows(slot, tx);
 
         _logger.LogInformation(
-            "Creating calendar hold event for HoldId={HoldId} SlotId={SlotId} AdviserId={AdviserId} SlotStartUtc={SlotStartUtc} SlotEndUtc={SlotEndUtc} HoldStartUtc={HoldStartUtc} HoldEndUtc={HoldEndUtc} TravelBufferMins={TravelBufferMins}",
+            "Creating calendar hold event for HoldId={HoldId} SlotId={SlotId} AdviserId={AdviserId} SlotStartUtc={SlotStartUtc} SlotEndUtc={SlotEndUtc} HoldStartUtc={HoldStartUtc} HoldEndUtc={HoldEndUtc} TravelBufferMins={TravelBufferMins} CompanyBufferMins={CompanyBufferMins}",
             hold.Id, slot.Id, slot.AdviserId, slot.StartUtc, slot.EndUtc,
-            windows.HoldStartUtc, windows.HoldEndUtc, windows.TravelBufferMinutesEachSide);
+            windows.HoldStartUtc, windows.HoldEndUtc, windows.TravelBufferMinutesEachSide, windows.CompanyBufferMinutes);
 
         var subject = BuildSubject(tx);
 
@@ -282,25 +282,20 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
 
     private HoldWindows BuildHoldWindows(BookingSlot slot, BookingTransaction tx)
     {
-        // Remote: no travel buffer
-        if (tx.IsRemote)
-            return new HoldWindows(slot.StartUtc, slot.EndUtc, 0, false);
+        var travelMinutes = tx.IsRemote ? 0 : Math.Max(0, slot.TravelMinutes ?? 0);
+        var companyBufferMinutes = Math.Max(0, slot.CompanyBufferMinutes ?? 0);
 
-        var oneWayMinutes = slot?.TravelMinutes;
+        var preMeetingMinutes = travelMinutes + companyBufferMinutes;
+        var postMeetingMinutes = companyBufferMinutes;
 
-        if (oneWayMinutes is null || oneWayMinutes <= 0)
-            return new HoldWindows(slot.StartUtc, slot.EndUtc, 0, false);
-
-        var buffer = Math.Min(oneWayMinutes.Value, MaxTravelBufferMinutesEachSide);
-
-        var start = slot.StartUtc.AddMinutes(-buffer);
-        var end = slot.EndUtc.AddMinutes(buffer);
+        var start = slot.StartUtc.AddMinutes(-preMeetingMinutes);
+        var end = slot.EndUtc.AddMinutes(postMeetingMinutes);
 
         // Guard: don’t invert times
         if (end <= start)
-            return new HoldWindows(slot.StartUtc, slot.EndUtc, 0, false);
+            return new HoldWindows(slot.StartUtc, slot.EndUtc, 0, 0, false);
 
-        return new HoldWindows(start, end, buffer, true);
+        return new HoldWindows(start, end, travelMinutes, companyBufferMinutes, preMeetingMinutes > 0 || postMeetingMinutes > 0);
     }
 
 

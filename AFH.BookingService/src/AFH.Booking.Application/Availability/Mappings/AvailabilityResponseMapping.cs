@@ -9,7 +9,7 @@ namespace AFH.Booking.Application.Bookings.Mappings;
 public static class AvailabilityResponseMapping
 {
     public static List<AdviserSlotsDto> ToDayGroups(
-IEnumerable<(string AdviserKey, string AdviserEmail, string AdviserName, BookingSlot Slot)> rows,
+IEnumerable<(string AdviserKey, string AdviserEmail, string AdviserName, bool GoldStar, BookingSlot Slot)> rows,
 int adviserLimit = 10)
     {
         return rows
@@ -21,6 +21,7 @@ int adviserLimit = 10)
                 {
                     Id = adviserGroup.FirstOrDefault().AdviserEmail,
                     Name = adviserGroup.FirstOrDefault().AdviserName,
+                    GoldStar = adviserGroup.FirstOrDefault().GoldStar,
 
                     Slots = adviserGroup
                         .Select(x => new SlotDto

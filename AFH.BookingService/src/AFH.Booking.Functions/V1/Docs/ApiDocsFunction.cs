@@ -107,7 +107,7 @@ public sealed class ApiDocsFunction
                     }
                 }
             },
-            ["/v1/bookings/{bookingId}/confirm"] = new Dictionary<string, object>
+            ["/v1/bookings/holds/{holdId}/confirm"] = new Dictionary<string, object>
             {
                 ["post"] = new Dictionary<string, object>
                 {
@@ -115,7 +115,7 @@ public sealed class ApiDocsFunction
                     ["summary"] = "Confirm booking",
                     ["parameters"] = new object[]
                     {
-                        Parameter("bookingId", "path", true, "string")
+                        Parameter("holdId", "path", true, "string")
                     },
                     ["requestBody"] = RequestBody("ConfirmBookingRequest", false),
                     ["responses"] = new Dictionary<string, object>

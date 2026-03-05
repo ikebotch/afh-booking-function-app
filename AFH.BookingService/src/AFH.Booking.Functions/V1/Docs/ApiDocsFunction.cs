@@ -9,6 +9,19 @@ namespace AFH.Booking.Functions.V1.Docs;
 
 public sealed class ApiDocsFunction
 {
+    private static readonly Type[] V1SchemaTypes =
+    {
+        typeof(GetAvailabilityRequest),
+        typeof(GetAvailabilityResponse),
+        typeof(CreateHoldRequest),
+        typeof(CreateBookingResponse),
+        typeof(ConfirmBookingRequest),
+        typeof(ConfirmBookingResponse),
+        typeof(CancelBookingRequest),
+        typeof(CancelBookingResponse),
+        typeof(GetClientResponse)
+    };
+
     [Function("Booking_OpenApiV1")]
     public async Task<HttpResponseData> OpenApi(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "openapi/v1.json")] HttpRequestData req)
@@ -83,10 +96,10 @@ public sealed class ApiDocsFunction
                     {
                         Parameter("transactionId", "path", true, "string")
                     },
-                    ["requestBody"] = RequestBody("GetAvailabilityRequest", true),
+                    ["requestBody"] = RequestBody(typeof(GetAvailabilityRequest), true),
                     ["responses"] = new Dictionary<string, object>
                     {
-                        ["200"] = Response("GetAvailabilityResponse"),
+                        ["200"] = Response(typeof(GetAvailabilityResponse)),
                         ["400"] = ProblemResponse(),
                         ["404"] = ProblemResponse()
                     }
@@ -98,10 +111,10 @@ public sealed class ApiDocsFunction
                 {
                     ["tags"] = new[] { "Bookings" },
                     ["summary"] = "Create booking hold",
-                    ["requestBody"] = RequestBody("CreateHoldRequest", true),
+                    ["requestBody"] = RequestBody(typeof(CreateHoldRequest), true),
                     ["responses"] = new Dictionary<string, object>
                     {
-                        ["201"] = Response("CreateBookingResponse"),
+                        ["201"] = Response(typeof(CreateBookingResponse)),
                         ["400"] = ProblemResponse(),
                         ["409"] = ProblemResponse()
                     }
@@ -117,10 +130,10 @@ public sealed class ApiDocsFunction
                     {
                         Parameter("holdId", "path", true, "string")
                     },
-                    ["requestBody"] = RequestBody("ConfirmBookingRequest", false),
+                    ["requestBody"] = RequestBody(typeof(ConfirmBookingRequest), false),
                     ["responses"] = new Dictionary<string, object>
                     {
-                        ["200"] = Response("ConfirmBookingResponse"),
+                        ["200"] = Response(typeof(ConfirmBookingResponse)),
                         ["400"] = ProblemResponse(),
                         ["404"] = ProblemResponse(),
                         ["409"] = ProblemResponse()
@@ -137,10 +150,10 @@ public sealed class ApiDocsFunction
                     {
                         Parameter("bookingId", "path", true, "string")
                     },
-                    ["requestBody"] = RequestBody("CancelBookingRequest", false),
+                    ["requestBody"] = RequestBody(typeof(CancelBookingRequest), false),
                     ["responses"] = new Dictionary<string, object>
                     {
-                        ["200"] = Response("CancelBookingResponse"),
+                        ["200"] = Response(typeof(CancelBookingResponse)),
                         ["400"] = ProblemResponse(),
                         ["404"] = ProblemResponse()
                     }
@@ -158,7 +171,7 @@ public sealed class ApiDocsFunction
                     },
                     ["responses"] = new Dictionary<string, object>
                     {
-                        ["200"] = new Dictionary<string, object> { ["description"] = "Client details response" },
+                        ["200"] = Response(typeof(GetClientResponse)),
                         ["404"] = ProblemResponse()
                     }
                 }
@@ -168,20 +181,13 @@ public sealed class ApiDocsFunction
     private static Dictionary<string, object> BuildComponents()
         => new()
         {
-            ["schemas"] = new Dictionary<string, object>
-            {
-                ["GetAvailabilityRequest"] = OpenApiSchema.FromType(typeof(GetAvailabilityRequest)),
-                ["GetAvailabilityResponse"] = OpenApiSchema.FromType(typeof(GetAvailabilityResponse)),
-                ["CreateHoldRequest"] = OpenApiSchema.FromType(typeof(CreateHoldRequest)),
-                ["CreateBookingResponse"] = OpenApiSchema.FromType(typeof(CreateBookingResponse)),
-                ["ConfirmBookingRequest"] = OpenApiSchema.FromType(typeof(ConfirmBookingRequest)),
-                ["ConfirmBookingResponse"] = OpenApiSchema.FromType(typeof(ConfirmBookingResponse)),
-                ["CancelBookingRequest"] = OpenApiSchema.FromType(typeof(CancelBookingRequest)),
-                ["CancelBookingResponse"] = OpenApiSchema.FromType(typeof(CancelBookingResponse))
-            }
+            ["schemas"] = V1SchemaTypes.ToDictionary(
+                static t => t.Name,
+                static t => (object)OpenApiSchema.FromType(t),
+                StringComparer.OrdinalIgnoreCase)
         };
 
-    private static Dictionary<string, object> RequestBody(string schemaName, bool required)
+    private static Dictionary<string, object> RequestBody(Type dtoType, bool required)
         => new()
         {
             ["required"] = required,
@@ -189,12 +195,12 @@ public sealed class ApiDocsFunction
             {
                 ["application/json"] = new Dictionary<string, object>
                 {
-                    ["schema"] = new Dictionary<string, object> { ["$ref"] = $"#/components/schemas/{schemaName}" }
+                    ["schema"] = SchemaRef(dtoType)
                 }
             }
         };
 
-    private static Dictionary<string, object> Response(string schemaName)
+    private static Dictionary<string, object> Response(Type dtoType)
         => new()
         {
             ["description"] = "Success",
@@ -202,10 +208,13 @@ public sealed class ApiDocsFunction
             {
                 ["application/json"] = new Dictionary<string, object>
                 {
-                    ["schema"] = new Dictionary<string, object> { ["$ref"] = $"#/components/schemas/{schemaName}" }
+                    ["schema"] = SchemaRef(dtoType)
                 }
             }
         };
+
+    private static Dictionary<string, object> SchemaRef(Type dtoType)
+        => new() { ["$ref"] = $"#/components/schemas/{dtoType.Name}" };
 
     private static Dictionary<string, object> ProblemResponse()
         => new()

@@ -1,5 +1,6 @@
-﻿using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Common;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Functions.Http;
 
 namespace AFH.Booking.Functions.V1.Clients;
@@ -34,19 +35,14 @@ public sealed class GetClientByTransactionFunction
         if (client is null)
             return await req.ProblemAsync(HttpStatusCode.NotFound, "Client not found.", ct, "NotFound");
 
-        var clientInfo = new
+        var clientInfo = new GetClientResponse
         {
             FirstName = Masking.MaskName(client.FirstName?.Trim() ?? string.Empty),
             LastName = Masking.MaskName(client.LastName?.Trim() ?? string.Empty),
             Email = Masking.MaskEmail(client.Email?.Trim() ?? string.Empty),
-            PreferredStartUtc = client?.AppointmentDateTime
+            PreferredStartUtc = client.AppointmentDateTime
         };
 
         return await req.OkJsonAsync(clientInfo, ct);
     }
-
-
-
-
-
 }

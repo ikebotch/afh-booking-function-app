@@ -40,7 +40,10 @@ public sealed class CancelBookingFunction
             var cmd = new CancelBookingCommand
             {
                 BookingId = bookingId.Trim(),
-                Reason = body?.Reason
+                Reason = body?.Reason,
+                ReasonCode = body?.ReasonCode,
+                ReasonDetail = body?.ReasonDetail,
+                RequestedBy = body?.RequestedBy
             };
 
             var result = await _handler.HandleAsync(cmd, ct);

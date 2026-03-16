@@ -83,7 +83,7 @@ public sealed class CancelBookingHandler : ICancelBookingHandler
             hold.Id, hold.SlotId, slot.AdviserId, hold.CalendarProviderEventId);
 
         // Domain change
-        hold.Cancel( cmd.Reason,utcNow);
+        hold.Cancel(BuildCancelReason(cmd), utcNow);
 
         // Cancel calendar event (best-effort)
         if (!string.IsNullOrWhiteSpace(hold.CalendarProviderEventId))
@@ -116,5 +116,24 @@ public sealed class CancelBookingHandler : ICancelBookingHandler
             Status = hold.Status.ToString(),
             CancelledUtc = hold.CancelledUtc ?? utcNow
         });
+    }
+
+    private static string BuildCancelReason(CancelBookingCommand cmd)
+    {
+        var explicitReason = string.IsNullOrWhiteSpace(cmd.Reason) ? null : cmd.Reason.Trim();
+        if (!string.IsNullOrWhiteSpace(explicitReason))
+            return explicitReason;
+
+        var code = string.IsNullOrWhiteSpace(cmd.ReasonCode) ? "Unspecified" : cmd.ReasonCode.Trim();
+        var detail = string.IsNullOrWhiteSpace(cmd.ReasonDetail) ? null : cmd.ReasonDetail.Trim();
+        var requestedBy = string.IsNullOrWhiteSpace(cmd.RequestedBy) ? null : cmd.RequestedBy.Trim();
+
+        var parts = new List<string> { $"code={code}" };
+        if (!string.IsNullOrWhiteSpace(requestedBy))
+            parts.Add($"requestedBy={requestedBy}");
+        if (!string.IsNullOrWhiteSpace(detail))
+            parts.Add($"detail={detail}");
+
+        return string.Join("; ", parts);
     }
 }

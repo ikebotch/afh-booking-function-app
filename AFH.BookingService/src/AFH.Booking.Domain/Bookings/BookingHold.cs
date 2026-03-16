@@ -82,7 +82,10 @@ public sealed class BookingHold
 
     public void Cancel(string reason, DateTime utcNow)
     {
-        if (Status is BookingHoldStatus.Confirmed or BookingHoldStatus.Expired)
+        if (Status == BookingHoldStatus.Cancelled)
+            return;
+
+        if (Status is BookingHoldStatus.Released or BookingHoldStatus.Expired)
             throw new DomainException("Cannot cancel.");
 
         Status = BookingHoldStatus.Cancelled;

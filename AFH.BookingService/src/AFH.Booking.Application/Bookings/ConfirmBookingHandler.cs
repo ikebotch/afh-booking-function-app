@@ -1,11 +1,15 @@
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
 using AFH.Booking.Application.Abstractions.Meetings;
+using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
+using AFH.Booking.Domain.Options;
+using Common.Utilities;
 using AFH.Booking.Domain.Transactions;
+using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Application.Bookings;
 
@@ -18,6 +22,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
     private readonly IClock _clock;
     private readonly ICalendarGateway _calendar;
     private readonly IMeetingLinkFactory _meetingLinks;
+    private readonly BookingPortalOptions _portalOptions;
 
     public ConfirmBookingHandler(
         IBookingHoldRepository holds,
@@ -26,7 +31,8 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         IUnitOfWork uow,
         IClock clock,
         ICalendarGateway calendar,
-        IMeetingLinkFactory meetingLinks)
+        IMeetingLinkFactory meetingLinks,
+        IOptions<BookingPortalOptions> portalOptions)
     {
         _holds = holds;
         _slots = slots;
@@ -35,6 +41,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         _clock = clock;
         _calendar = calendar;
         _meetingLinks = meetingLinks;
+        _portalOptions = portalOptions.Value;
     }
 
     public async Task<Result<ConfirmBookingResponse>> HandleAsync(ConfirmBookingCommand cmd, CancellationToken ct)
@@ -91,7 +98,8 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
                 booking: hold,
                 windows: windows,
                 joinUrl: joinUrl,
-                location: null);
+                location: null,
+                cancelOrRearrangeUrl: BuildCancelOrRearrangeUrl(hold.Id, tx.TransactionRef, slot.AdviserId));
 
             var calendarEvent = BookingCalendarEvent.Update(
                 userId: slot.AdviserId,
@@ -132,5 +140,18 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
             return new HoldWindows(slot.StartUtc, slot.EndUtc, 0, 0, false);
 
         return new HoldWindows(start, end, travelMinutes, companyBufferMinutes, preMeetingMinutes > 0 || postMeetingMinutes > 0);
+    }
+
+    private string? BuildCancelOrRearrangeUrl(string bookingId, string transactionId, string adviserId)
+    {
+        if (string.IsNullOrWhiteSpace(_portalOptions.CancelOrRearrangeUrlTemplate))
+            return null;
+
+        return UrlTemplateHelper.Build(_portalOptions.CancelOrRearrangeUrlTemplate, new Dictionary<string, string>
+        {
+            ["bookingId"] = bookingId,
+            ["transactionId"] = transactionId,
+            ["adviserId"] = adviserId
+        });
     }
 }

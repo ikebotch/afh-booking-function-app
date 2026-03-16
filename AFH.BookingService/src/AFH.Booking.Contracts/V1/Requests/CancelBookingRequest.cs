@@ -4,4 +4,7 @@ public sealed class CancelBookingRequest
 {
     public string BookingId { get; init; } = default!;
     public string? Reason { get; init; }
+    public string? ReasonCode { get; init; }
+    public string? ReasonDetail { get; init; }
+    public string? RequestedBy { get; init; }
 }

@@ -12,7 +12,8 @@ public static class ConfirmedBookingTemplate
         BookingHold booking,        
         HoldWindows windows,
         string? joinUrl = null,       
-        CalendarLocation? location = null) 
+        CalendarLocation? location = null,
+        string? cancelOrRearrangeUrl = null)
     {
         var tzId = string.IsNullOrWhiteSpace(tx.Timezone) ? "UTC" : tx.Timezone.Trim();
 
@@ -63,7 +64,8 @@ Calendar block:
 
 Notes:
 - This booking is confirmed.
-- Please allow time for travel and preparation either side of the meeting.";
+- Please allow time for travel and preparation either side of the meeting.
+- Cancel or Re-arrange: {(string.IsNullOrWhiteSpace(cancelOrRearrangeUrl) ? "Use booking portal support flow." : cancelOrRearrangeUrl)}";
     }
 
     private static string FormatUtc(DateTime utc)

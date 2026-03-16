@@ -31,6 +31,8 @@ public static class ServiceCollectionExtensions
         services.Configure<AzureAdOptions>(config.GetSection(AzureAdOptions.SectionName));
         services.Configure<LocationServiceOptions>(config.GetSection(LocationServiceOptions.SectionName));
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));
+        services.Configure<BookingPortalOptions>(config.GetSection(BookingPortalOptions.SectionName));
+        services.Configure<RearrangementWorkflowOptions>(config.GetSection(RearrangementWorkflowOptions.SectionName));
 
         var db = config.GetSection(BookingDbOptions.SectionName).Get<BookingDbOptions>()
                  ?? throw new InvalidOperationException($"{BookingDbOptions.SectionName} config is missing.");

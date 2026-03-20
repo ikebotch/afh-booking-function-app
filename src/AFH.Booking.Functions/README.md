@@ -1,0 +1,2 @@
+src> dotnet ef migrations add AddCompanyBufferMinutesToBookingSlots --project AFH.Booking.Infrastructure --startup-project AFH.Booking.Functions --context BookingDbContext
+src> dotnet ef database update AddCompanyBufferMinutesToBookingSlots --project AFH.Booking.Infrastructure

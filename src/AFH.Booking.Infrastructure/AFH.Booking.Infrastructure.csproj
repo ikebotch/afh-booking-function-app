@@ -1,0 +1,37 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Infrastructure depends on Application + Domain (NOT the other way around) -->
+    <ProjectReference Include="..\AFH.Booking.Application\AFH.Booking.Application.csproj" />
+    <ProjectReference Include="..\AFH.Booking.Domain\AFH.Booking.Domain.csproj" />
+    <ProjectReference Include="..\AFH.Booking.Contracts\AFH.Booking.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- EF Core -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="8.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="8.0.8" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.8">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- Options + DI + Http -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
+	  <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10" />
+	  <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+	  <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10" />
+
+
+	
+  </ItemGroup>
+
+</Project>

@@ -16,6 +16,7 @@ namespace AFH.Booking.Application.Bookings;
 
 public sealed class CreateBookingHandler : ICreateBookingHandler
 {
+    private const int DefaultCompanyBufferMinutes = 30;
     private static readonly TimeSpan DefaultHoldWindow = TimeSpan.FromMinutes(3);
 
     private readonly IBookingTransactionRepository _txRepo;
@@ -87,7 +88,9 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
             BookingId = hold.Id,
             SlotId = hold.SlotId,
             HoldExpiresUtc = hold.ExpiresUtc,
-            CompanyBufferMinutes = slot.CompanyBufferMinutes ?? 0
+            CompanyBufferMinutes = tx.IsRemote
+                ? 0
+                : Math.Max(0, slot.CompanyBufferMinutes ?? DefaultCompanyBufferMinutes)
         });
     }
 
@@ -283,7 +286,9 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
     private HoldWindows BuildHoldWindows(BookingSlot slot, BookingTransaction tx)
     {
         var travelMinutes = tx.IsRemote ? 0 : Math.Max(0, slot.TravelMinutes ?? 0);
-        var companyBufferMinutes = Math.Max(0, slot.CompanyBufferMinutes ?? 0);
+        var companyBufferMinutes = tx.IsRemote
+            ? 0
+            : Math.Max(0, slot.CompanyBufferMinutes ?? DefaultCompanyBufferMinutes);
 
         var preMeetingMinutes = travelMinutes + companyBufferMinutes;
         var postMeetingMinutes = companyBufferMinutes;

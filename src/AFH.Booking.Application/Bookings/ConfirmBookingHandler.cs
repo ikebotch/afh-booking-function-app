@@ -11,6 +11,7 @@ namespace AFH.Booking.Application.Bookings;
 
 public sealed class ConfirmBookingHandler : IConfirmBookingHandler
 {
+    private const int DefaultCompanyBufferMinutes = 30;
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _tx;
@@ -120,7 +121,9 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
     private static HoldWindows BuildHoldWindows(BookingSlot slot, BookingTransaction tx)
     {
         var travelMinutes = tx.IsRemote ? 0 : Math.Max(0, slot.TravelMinutes ?? 0);
-        var companyBufferMinutes = Math.Max(0, slot.CompanyBufferMinutes ?? 0);
+        var companyBufferMinutes = tx.IsRemote
+            ? 0
+            : Math.Max(0, slot.CompanyBufferMinutes ?? DefaultCompanyBufferMinutes);
 
         var preMeetingMinutes = travelMinutes + companyBufferMinutes;
         var postMeetingMinutes = companyBufferMinutes;

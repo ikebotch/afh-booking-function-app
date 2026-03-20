@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using AFH.Booking.Contracts.V1.Responses;
@@ -62,9 +63,23 @@ public sealed class ClientNotificationService : IClientNotificationService
             throw new InvalidOperationException($"Transaction '{slot.TransactionId}' was not found.");
 
         var client = await _clients.GetAsync(tx.TransactionRef, ct);
-        var body = string.IsNullOrWhiteSpace(message)
+        var defaultSmsBody = string.IsNullOrWhiteSpace(message)
             ? $"Your booking has been updated ({eventType}) for {slot.StartUtc:yyyy-MM-dd HH:mm} with {slot.AdviserName}."
             : message.Trim();
+
+        var clientDisplayName = $"{client?.FirstName} {client?.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(clientDisplayName))
+            clientDisplayName = null;
+
+        var emailTemplate = BookingNotificationEmailTemplate.Build(
+            eventType: eventType,
+            clientDisplayName: clientDisplayName,
+            adviserName: slot.AdviserName,
+            startUtc: slot.StartUtc,
+            endUtc: slot.EndUtc,
+            timezoneId: tx.Timezone,
+            isRemote: tx.IsRemote,
+            customMessage: message);
 
         var smsStatus = sendSms ? "Pending" : "Skipped";
         var emailStatus = sendEmail ? "Pending" : "Skipped";
@@ -72,13 +87,20 @@ public sealed class ClientNotificationService : IClientNotificationService
 
         if (sendSms)
         {
-            smsStatus = await SendSmsAsync(client?.Phone, body, ct);
+            smsStatus = await SendSmsAsync(client?.Phone, defaultSmsBody, ct);
         }
 
         if (sendEmail)
         {
-            emailStatus = string.IsNullOrWhiteSpace(client?.Email) ? "Skipped" : "Sent";
+            emailStatus = string.IsNullOrWhiteSpace(client?.Email)
+                ? "Skipped"
+                : (_options.EmailEnabled ? "Composed" : "ConfiguredOff");
         }
+
+        // Persist plain text because current provider path renders stored content as text/plain.
+        var persistedBody = sendEmail ? emailTemplate.TextBody : defaultSmsBody;
+        if (persistedBody.Length > 3900)
+            persistedBody = persistedBody[..3900];
 
         var dispatch = new NotificationDispatchModel
         {
@@ -92,7 +114,7 @@ public sealed class ClientNotificationService : IClientNotificationService
             RecipientPhone = client?.Phone,
             RecipientEmail = client?.Email,
             ProviderMessageId = providerMessageId,
-            MessageBody = body,
+            MessageBody = persistedBody,
             CreatedUtc = DateTime.UtcNow,
             UpdatedUtc = DateTime.UtcNow
         };

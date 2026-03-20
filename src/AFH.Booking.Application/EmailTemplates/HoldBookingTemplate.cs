@@ -37,39 +37,31 @@ public static class HoldBookingTemplate
             : "Company buffer: none";
 
         return
+$@"AFH Booking (HOLD)
 
-            $@"AFH Booking (HOLD)
+TransactionRef: {tx.TransactionRef}
+HoldId: {hold.Id}
+AdviserId: {slot.AdviserId}
 Meeting type: {(string.IsNullOrWhiteSpace(tx.MeetingType) ? "N/A" : tx.MeetingType)}
+Remote: {(tx.IsRemote ? "Yes" : "No")}
+Timezone: {tzId}
+
+Actual meeting time:
+- Local: {slotStartLocal} -> {slotEndLocal}
+- UTC:   {slotStartUtc} -> {slotEndUtc}
+
+{travelLine}
+{companyLine}
+
+Calendar block (hold window):
+- Local: {holdStartLocal} -> {holdEndLocal}
+- UTC:   {holdStartUtc} -> {holdEndUtc}
+
+Hold expires (UTC): {FormatUtc(hold.ExpiresUtc)}
 
 Notes:
-- This is a temporary hold while the booking is being confirmed.
-- If confirmation does not complete before expiry, this hold may be released automatically.";
-
-
-        //        $@"AFH Booking (HOLD)
-
-        //TransactionRef: {tx.TransactionRef}
-        //HoldId: {hold.Id}
-        //AdviserId: {slot.AdviserId}
-        //Meeting type: {(string.IsNullOrWhiteSpace(tx.MeetingType) ? "N/A" : tx.MeetingType)}
-        //Remote: {(tx.IsRemote ? "Yes" : "No")}
-        //Timezone: {tzId}
-
-        //Actual meeting time:
-        //- Local: {slotStartLocal} → {slotEndLocal}
-        //- UTC:   {slotStartUtc} → {slotEndUtc}
-
-        //{travelLine}
-
-        //Calendar block (hold window):
-        //- Local: {holdStartLocal} → {holdEndLocal}
-        //- UTC:   {holdStartUtc} → {holdEndUtc}
-
-        //Hold expires (UTC): {FormatUtc(hold.ExpiresUtc)}
-
-        //Notes:
-        //- This is a temporary hold while the booking is being confirmed.
-        //- If confirmation does not complete before expiry, this hold may be released automatically.";
+- Temporary hold while booking is being confirmed.
+- This hold should block overlapping bookings.";
     }
 
     private static string FormatUtc(DateTime utc)
@@ -94,6 +86,7 @@ Notes:
             return FormatUtc(utc);
         }
     }
+
 }
 
 public sealed record HoldWindows(

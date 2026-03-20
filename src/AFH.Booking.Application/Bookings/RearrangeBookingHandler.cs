@@ -1,4 +1,6 @@
+using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 
@@ -12,6 +14,8 @@ public sealed class RearrangeBookingHandler : IRearrangeBookingHandler
     private readonly ICreateBookingHandler _create;
     private readonly IConfirmBookingHandler _confirm;
     private readonly ICancelBookingHandler _cancel;
+    private readonly IClientNotificationService _notifications;
+    private readonly IDownstreamUpdateService _downstreamUpdates;
 
     public RearrangeBookingHandler(
         IBookingHoldRepository holds,
@@ -19,7 +23,9 @@ public sealed class RearrangeBookingHandler : IRearrangeBookingHandler
         IBookingTransactionRepository transactions,
         ICreateBookingHandler create,
         IConfirmBookingHandler confirm,
-        ICancelBookingHandler cancel)
+        ICancelBookingHandler cancel,
+        IClientNotificationService notifications,
+        IDownstreamUpdateService downstreamUpdates)
     {
         _holds = holds;
         _slots = slots;
@@ -27,6 +33,8 @@ public sealed class RearrangeBookingHandler : IRearrangeBookingHandler
         _create = create;
         _confirm = confirm;
         _cancel = cancel;
+        _notifications = notifications;
+        _downstreamUpdates = downstreamUpdates;
     }
 
     public async Task<Result<RearrangeBookingResponse>> HandleAsync(RearrangeBookingCommand cmd, CancellationToken ct)
@@ -100,6 +108,32 @@ public sealed class RearrangeBookingHandler : IRearrangeBookingHandler
         if (newSlot is null)
             return Result<RearrangeBookingResponse>.Fail(HttpStatusCode.Conflict, "New slot was not found after confirmation.", Errors.Conflict);
 
+        var notificationSummary = BuildNotificationSummary(oldSlot, newSlot);
+
+        await _notifications.SendBookingNotificationAsync(
+            bookingId: newHold.Id,
+            eventType: "BookingRearranged",
+            message: notificationSummary,
+            sendSms: true,
+            sendEmail: true,
+            ct: ct);
+
+        await _downstreamUpdates.PublishBookingChangeAsync(
+            bookingId: newHold.Id,
+            changeType: "Rearrange",
+            transactionRef: tx.TransactionRef,
+            payloadJson: JsonSerializer.Serialize(new
+            {
+                previousBookingId = oldHold.Id,
+                newBookingId = newHold.Id,
+                previousSlotId = oldSlot.Id,
+                newSlotId = newSlot.Id,
+                requestedBy = cmd.RequestedBy,
+                reasonCode = cmd.ReasonCode,
+                reasonDetail = cmd.ReasonDetail
+            }),
+            ct: ct);
+
         return Result<RearrangeBookingResponse>.Ok(new RearrangeBookingResponse
         {
             PreviousBookingId = oldHold.Id,
@@ -113,7 +147,7 @@ public sealed class RearrangeBookingHandler : IRearrangeBookingHandler
             NewAdviserName = newSlot.AdviserName,
             NewStartUtc = newSlot.StartUtc,
             NewEndUtc = newSlot.EndUtc,
-            NotificationSummary = BuildNotificationSummary(oldSlot, newSlot)
+            NotificationSummary = notificationSummary
         });
     }
 

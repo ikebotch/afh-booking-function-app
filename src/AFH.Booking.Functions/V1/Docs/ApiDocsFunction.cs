@@ -21,8 +21,16 @@ public sealed class ApiDocsFunction
         typeof(CreateApprovalRequest),
         typeof(ReviewApprovalRequest),
         typeof(ApprovalRequestResponse),
+        typeof(BookingNotificationRequest),
+        typeof(EmailBounceWebhookRequest),
+        typeof(CreateDuplicateClientCaseRequest),
+        typeof(ResolveDuplicateClientCaseRequest),
         typeof(RearrangeBookingRequest),
         typeof(RearrangeBookingResponse),
+        typeof(NotificationDispatchResponse),
+        typeof(EmailBounceEventResponse),
+        typeof(DuplicateClientCaseResponse),
+        typeof(DownstreamUpdateResponse),
         typeof(GetClientResponse)
     };
 
@@ -239,6 +247,39 @@ public sealed class ApiDocsFunction
                     }
                 }
             },
+            ["/v1/bookings/{bookingId}/notifications/send"] = new Dictionary<string, object>
+            {
+                ["post"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Notifications" },
+                    ["summary"] = "Send booking change notifications via SMS and/or email",
+                    ["parameters"] = new object[]
+                    {
+                        Parameter("bookingId", "path", true, "string")
+                    },
+                    ["requestBody"] = RequestBody(typeof(BookingNotificationRequest), false),
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = Response(typeof(NotificationDispatchResponse)),
+                        ["400"] = ProblemResponse(),
+                        ["404"] = ProblemResponse()
+                    }
+                }
+            },
+            ["/v1/notifications/email/bounces"] = new Dictionary<string, object>
+            {
+                ["post"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Notifications" },
+                    ["summary"] = "Record email bounce webhooks",
+                    ["requestBody"] = RequestBody(typeof(EmailBounceWebhookRequest), true),
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["201"] = Response(typeof(EmailBounceEventResponse)),
+                        ["400"] = ProblemResponse()
+                    }
+                }
+            },
             ["/v1/approval-requests/pending"] = new Dictionary<string, object>
             {
                 ["get"] = new Dictionary<string, object>
@@ -248,6 +289,83 @@ public sealed class ApiDocsFunction
                     ["responses"] = new Dictionary<string, object>
                     {
                         ["200"] = Response(typeof(ApprovalRequestResponse))
+                    }
+                }
+            },
+            ["/v1/clients/duplicates/cases"] = new Dictionary<string, object>
+            {
+                ["post"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Clients" },
+                    ["summary"] = "Create duplicate client handling case",
+                    ["requestBody"] = RequestBody(typeof(CreateDuplicateClientCaseRequest), true),
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["201"] = Response(typeof(DuplicateClientCaseResponse)),
+                        ["400"] = ProblemResponse()
+                    }
+                }
+            },
+            ["/v1/clients/duplicates/cases/pending"] = new Dictionary<string, object>
+            {
+                ["get"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Clients" },
+                    ["summary"] = "List pending duplicate client cases",
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = Response(typeof(DuplicateClientCaseResponse))
+                    }
+                }
+            },
+            ["/v1/clients/duplicates/cases/{caseId}/resolve"] = new Dictionary<string, object>
+            {
+                ["post"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Clients" },
+                    ["summary"] = "Resolve duplicate client case",
+                    ["parameters"] = new object[]
+                    {
+                        Parameter("caseId", "path", true, "string")
+                    },
+                    ["requestBody"] = RequestBody(typeof(ResolveDuplicateClientCaseRequest), true),
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = Response(typeof(DuplicateClientCaseResponse)),
+                        ["400"] = ProblemResponse(),
+                        ["404"] = ProblemResponse()
+                    }
+                }
+            },
+            ["/v1/bookings/{bookingId}/calendar/remediate-showas"] = new Dictionary<string, object>
+            {
+                ["post"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Bookings" },
+                    ["summary"] = "Force calendar booking to show as Busy",
+                    ["parameters"] = new object[]
+                    {
+                        Parameter("bookingId", "path", true, "string")
+                    },
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = new Dictionary<string, object> { ["description"] = "Remediated" },
+                        ["400"] = ProblemResponse(),
+                        ["404"] = ProblemResponse(),
+                        ["409"] = ProblemResponse()
+                    }
+                }
+            },
+            ["/v1/admin/adviser-coverage"] = new Dictionary<string, object>
+            {
+                ["get"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Admin" },
+                    ["summary"] = "Get adviser coverage dataset sourced from SharePoint/location service",
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = new Dictionary<string, object> { ["description"] = "Coverage dataset" },
+                        ["502"] = ProblemResponse()
                     }
                 }
             },

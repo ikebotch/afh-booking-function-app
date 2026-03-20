@@ -11,6 +11,11 @@ public sealed class BookingDbContext : DbContext
     public DbSet<BookingTransactionModel> BookingTransactions => Set<BookingTransactionModel>();
     public DbSet<BookingSlotModel> BookingSlots => Set<BookingSlotModel>();
     public DbSet<BookingHoldModel> Holds => Set<BookingHoldModel>();
+    public DbSet<ApprovalRequestModel> ApprovalRequests => Set<ApprovalRequestModel>();
+    public DbSet<NotificationDispatchModel> NotificationDispatches => Set<NotificationDispatchModel>();
+    public DbSet<EmailBounceEventModel> EmailBounceEvents => Set<EmailBounceEventModel>();
+    public DbSet<DuplicateClientCaseModel> DuplicateClientCases => Set<DuplicateClientCaseModel>();
+    public DbSet<DownstreamUpdateModel> DownstreamUpdates => Set<DownstreamUpdateModel>();
 
 
     public DbSet<CalendarSubscriptionModel> CalendarSubscriptions => Set<CalendarSubscriptionModel>();

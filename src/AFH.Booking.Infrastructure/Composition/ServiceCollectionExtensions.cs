@@ -33,12 +33,16 @@ public static class ServiceCollectionExtensions
         services.Configure<AzureAdOptions>(config.GetSection(AzureAdOptions.SectionName));
         services.Configure<LocationServiceOptions>(config.GetSection(LocationServiceOptions.SectionName));
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));
+        services.Configure<NotificationsOptions>(config.GetSection(NotificationsOptions.SectionName));
 
-        var db = config.GetSection(BookingDbOptions.SectionName).Get<BookingDbOptions>()
-                 ?? throw new InvalidOperationException($"{BookingDbOptions.SectionName} config is missing.");
+        var db = config.GetSection(BookingDbOptions.SectionName).Get<BookingDbOptions>() ?? new BookingDbOptions();
+        db.ConnectionString = string.IsNullOrWhiteSpace(db.ConnectionString)
+            ? config.GetConnectionString("BookingDb")
+            : db.ConnectionString;
 
         if (string.IsNullOrWhiteSpace(db.ConnectionString))
-            throw new InvalidOperationException($"{BookingDbOptions.SectionName}:ConnectionString is required.");
+            throw new InvalidOperationException(
+                $"{BookingDbOptions.SectionName}:ConnectionString is required (or ConnectionStrings:BookingDb).");
 
         services.AddDbContext<BookingDbContext>(opt => { opt.UseSqlServer(db.ConnectionString); });
 
@@ -114,7 +118,34 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICalendarEventSnapshotRepository, CalendarEventSnapshotRepository>();
         services.AddScoped<ICalendarSubscriptionRepository, CalendarSubscriptionRepository>();
         services.AddScoped<ICalendarNotificationRepository, CalendarNotificationRepository>();
-        services.AddSingleton<IApprovalWorkflowService, InMemoryApprovalWorkflowService>();
+        services.AddScoped<IApprovalWorkflowService, DbApprovalWorkflowService>();
+        services.AddScoped<IEmailBounceService, EmailBounceService>();
+        services.AddScoped<IClientNotificationService, ClientNotificationService>();
+        services.AddScoped<IDuplicateClientService, DuplicateClientService>();
+        services.AddScoped<IDownstreamUpdateService, DownstreamUpdateService>();
+
+        services.AddHttpClient("sms-provider", (sp, http) =>
+        {
+            var options = sp.GetRequiredService<IOptions<NotificationsOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(options.SmsBaseUrl))
+                http.BaseAddress = new Uri(options.SmsBaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
+            if (!string.IsNullOrWhiteSpace(options.SmsApiKey))
+                http.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.SmsApiKey);
+
+            http.Timeout = TimeSpan.FromSeconds(20);
+        });
+
+        services.AddHttpClient<IAdminCoverageService, AdminCoverageService>((sp, http) =>
+        {
+            var options = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(options.BaseUrl))
+                http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddHostedService<BookingOperationalStoreInitializer>();
 
         return services;
     }

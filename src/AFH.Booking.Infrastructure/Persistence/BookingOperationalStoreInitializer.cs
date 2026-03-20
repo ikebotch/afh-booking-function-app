@@ -1,0 +1,141 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+
+namespace AFH.Booking.Infrastructure.Persistence;
+
+public sealed class BookingOperationalStoreInitializer : IHostedService
+{
+    private readonly IServiceProvider _services;
+    private readonly ILogger<BookingOperationalStoreInitializer> _logger;
+
+    public BookingOperationalStoreInitializer(
+        IServiceProvider services,
+        ILogger<BookingOperationalStoreInitializer> logger)
+    {
+        _services = services;
+        _logger = logger;
+    }
+
+    public async Task StartAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var scope = _services.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<BookingDbContext>();
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                IF OBJECT_ID('dbo.ApprovalRequests', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.ApprovalRequests (
+                        Id nvarchar(64) NOT NULL PRIMARY KEY,
+                        BookingId nvarchar(64) NOT NULL,
+                        ChangeType nvarchar(32) NOT NULL,
+                        RequestedBy nvarchar(32) NOT NULL,
+                        Status nvarchar(32) NOT NULL,
+                        RequestedUtc datetime2 NOT NULL,
+                        ReasonCode nvarchar(128) NULL,
+                        ReasonDetail nvarchar(1024) NULL,
+                        Reviewer nvarchar(128) NULL,
+                        ReviewedUtc datetime2 NULL,
+                        ReviewNotes nvarchar(1024) NULL
+                    );
+                    CREATE INDEX IX_ApprovalRequests_Status_RequestedUtc ON dbo.ApprovalRequests(Status, RequestedUtc);
+                END
+                """,
+                cancellationToken: cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                IF OBJECT_ID('dbo.NotificationDispatches', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.NotificationDispatches (
+                        Id nvarchar(64) NOT NULL PRIMARY KEY,
+                        BookingId nvarchar(64) NOT NULL,
+                        EventType nvarchar(64) NOT NULL,
+                        SmsRequested bit NOT NULL,
+                        EmailRequested bit NOT NULL,
+                        SmsStatus nvarchar(32) NOT NULL,
+                        EmailStatus nvarchar(32) NOT NULL,
+                        RecipientPhone nvarchar(64) NULL,
+                        RecipientEmail nvarchar(256) NULL,
+                        ProviderMessageId nvarchar(128) NULL,
+                        MessageBody nvarchar(4000) NULL,
+                        CreatedUtc datetime2 NOT NULL,
+                        UpdatedUtc datetime2 NULL
+                    );
+                    CREATE INDEX IX_NotificationDispatches_CreatedUtc ON dbo.NotificationDispatches(CreatedUtc);
+                END
+                """,
+                cancellationToken: cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                IF OBJECT_ID('dbo.EmailBounceEvents', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.EmailBounceEvents (
+                        Id nvarchar(64) NOT NULL PRIMARY KEY,
+                        ProviderMessageId nvarchar(128) NULL,
+                        RecipientEmail nvarchar(256) NULL,
+                        ReasonCode nvarchar(128) NULL,
+                        ReasonDetail nvarchar(2048) NULL,
+                        OccurredUtc datetime2 NOT NULL,
+                        ReceivedUtc datetime2 NOT NULL
+                    );
+                    CREATE INDEX IX_EmailBounceEvents_ReceivedUtc ON dbo.EmailBounceEvents(ReceivedUtc);
+                END
+                """,
+                cancellationToken: cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                IF OBJECT_ID('dbo.DuplicateClientCases', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.DuplicateClientCases (
+                        Id nvarchar(64) NOT NULL PRIMARY KEY,
+                        PrimaryTransactionRef nvarchar(256) NOT NULL,
+                        DuplicateTransactionRef nvarchar(256) NOT NULL,
+                        Status nvarchar(32) NOT NULL,
+                        Notes nvarchar(2048) NULL,
+                        RaisedBy nvarchar(128) NULL,
+                        RaisedUtc datetime2 NOT NULL,
+                        Resolution nvarchar(512) NULL,
+                        ResolvedBy nvarchar(128) NULL,
+                        ResolvedUtc datetime2 NULL
+                    );
+                    CREATE INDEX IX_DuplicateClientCases_Status_RaisedUtc ON dbo.DuplicateClientCases(Status, RaisedUtc);
+                END
+                """,
+                cancellationToken: cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                IF OBJECT_ID('dbo.DownstreamUpdates', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.DownstreamUpdates (
+                        Id nvarchar(64) NOT NULL PRIMARY KEY,
+                        BookingId nvarchar(64) NOT NULL,
+                        ChangeType nvarchar(64) NOT NULL,
+                        TransactionRef nvarchar(256) NOT NULL,
+                        PayloadJson nvarchar(max) NOT NULL,
+                        Status nvarchar(32) NOT NULL,
+                        AttemptCount int NOT NULL,
+                        ErrorMessage nvarchar(2048) NULL,
+                        CreatedUtc datetime2 NOT NULL,
+                        ProcessedUtc datetime2 NULL
+                    );
+                    CREATE INDEX IX_DownstreamUpdates_Status_CreatedUtc ON dbo.DownstreamUpdates(Status, CreatedUtc);
+                END
+                """,
+                cancellationToken: cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Operational store initialization failed. New workflow features may not persist correctly.");
+        }
+    }
+
+    public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+}

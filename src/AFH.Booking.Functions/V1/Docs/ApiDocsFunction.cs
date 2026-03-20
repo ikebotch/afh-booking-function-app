@@ -15,6 +15,14 @@ public sealed class ApiDocsFunction
         typeof(ConfirmBookingResponse),
         typeof(CancelBookingRequest),
         typeof(CancelBookingResponse),
+        typeof(BookingDetailsResponse),
+        typeof(RearrangementOptionsRequest),
+        typeof(RearrangementOptionsResponse),
+        typeof(CreateApprovalRequest),
+        typeof(ReviewApprovalRequest),
+        typeof(ApprovalRequestResponse),
+        typeof(RearrangeBookingRequest),
+        typeof(RearrangeBookingResponse),
         typeof(GetClientResponse)
     };
 
@@ -151,6 +159,112 @@ public sealed class ApiDocsFunction
                     {
                         ["200"] = Response(typeof(CancelBookingResponse)),
                         ["400"] = ProblemResponse(),
+                        ["404"] = ProblemResponse()
+                    }
+                }
+            },
+            ["/v1/bookings/{bookingId}"] = new Dictionary<string, object>
+            {
+                ["get"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Bookings" },
+                    ["summary"] = "Get booking details",
+                    ["parameters"] = new object[]
+                    {
+                        Parameter("bookingId", "path", true, "string")
+                    },
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = Response(typeof(BookingDetailsResponse)),
+                        ["400"] = ProblemResponse(),
+                        ["404"] = ProblemResponse()
+                    }
+                }
+            },
+            ["/v1/bookings/{bookingId}/rearrangement/options"] = new Dictionary<string, object>
+            {
+                ["post"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Bookings" },
+                    ["summary"] = "Get rearrangement options for assigned and alternative advisers",
+                    ["parameters"] = new object[]
+                    {
+                        Parameter("bookingId", "path", true, "string")
+                    },
+                    ["requestBody"] = RequestBody(typeof(RearrangementOptionsRequest), false),
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = Response(typeof(RearrangementOptionsResponse)),
+                        ["400"] = ProblemResponse(),
+                        ["404"] = ProblemResponse()
+                    }
+                }
+            },
+            ["/v1/bookings/{bookingId}/rearrange"] = new Dictionary<string, object>
+            {
+                ["post"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Bookings" },
+                    ["summary"] = "Rearrange booking and return client notification summary",
+                    ["parameters"] = new object[]
+                    {
+                        Parameter("bookingId", "path", true, "string")
+                    },
+                    ["requestBody"] = RequestBody(typeof(RearrangeBookingRequest), true),
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = Response(typeof(RearrangeBookingResponse)),
+                        ["400"] = ProblemResponse(),
+                        ["403"] = ProblemResponse(),
+                        ["404"] = ProblemResponse(),
+                        ["409"] = ProblemResponse()
+                    }
+                }
+            },
+            ["/v1/bookings/{bookingId}/approval-requests"] = new Dictionary<string, object>
+            {
+                ["post"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Approvals" },
+                    ["summary"] = "Create adviser cancellation/rearrangement approval request",
+                    ["parameters"] = new object[]
+                    {
+                        Parameter("bookingId", "path", true, "string")
+                    },
+                    ["requestBody"] = RequestBody(typeof(CreateApprovalRequest), true),
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["201"] = Response(typeof(ApprovalRequestResponse)),
+                        ["400"] = ProblemResponse()
+                    }
+                }
+            },
+            ["/v1/approval-requests/pending"] = new Dictionary<string, object>
+            {
+                ["get"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Approvals" },
+                    ["summary"] = "List pending approval requests",
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = Response(typeof(ApprovalRequestResponse))
+                    }
+                }
+            },
+            ["/v1/approval-requests/{requestId}/review"] = new Dictionary<string, object>
+            {
+                ["post"] = new Dictionary<string, object>
+                {
+                    ["tags"] = new[] { "Approvals" },
+                    ["summary"] = "Approve or reject an approval request",
+                    ["parameters"] = new object[]
+                    {
+                        Parameter("requestId", "path", true, "string")
+                    },
+                    ["requestBody"] = RequestBody(typeof(ReviewApprovalRequest), true),
+                    ["responses"] = new Dictionary<string, object>
+                    {
+                        ["200"] = Response(typeof(ApprovalRequestResponse)),
                         ["404"] = ProblemResponse()
                     }
                 }

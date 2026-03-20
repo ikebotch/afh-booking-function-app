@@ -1,3 +1,4 @@
+using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Calendar.Subscription;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Location;
@@ -8,6 +9,7 @@ using AFH.Booking.Infrastructure.Calendar;
 using AFH.Booking.Infrastructure.Clients;
 using AFH.Booking.Infrastructure.Location;
 using AFH.Booking.Infrastructure.Meetings;
+using AFH.Booking.Infrastructure.Approvals;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -112,6 +114,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICalendarEventSnapshotRepository, CalendarEventSnapshotRepository>();
         services.AddScoped<ICalendarSubscriptionRepository, CalendarSubscriptionRepository>();
         services.AddScoped<ICalendarNotificationRepository, CalendarNotificationRepository>();
+        services.AddSingleton<IApprovalWorkflowService, InMemoryApprovalWorkflowService>();
 
         return services;
     }

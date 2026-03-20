@@ -21,6 +21,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICreateBookingHandler, CreateBookingHandler>();
         services.AddScoped<IConfirmBookingHandler, ConfirmBookingHandler>();
         services.AddScoped<ICancelBookingHandler, CancelBookingHandler>();
+        services.AddScoped<IBookingDetailsHandler, BookingDetailsHandler>();
+        services.AddScoped<IRearrangementOptionsHandler, RearrangementOptionsHandler>();
+        services.AddScoped<IRearrangeBookingHandler, RearrangeBookingHandler>();
         services.AddScoped<ProcessNotificationsHandler>();
 
         // Availability

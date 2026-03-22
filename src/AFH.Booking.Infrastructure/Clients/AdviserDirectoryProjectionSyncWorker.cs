@@ -44,8 +44,12 @@ public sealed class AdviserDirectoryProjectionSyncWorker : BackgroundService
                 await uow.SaveChangesAsync(stoppingToken);
 
                 _logger.LogInformation(
-                    "Adviser directory projection sync completed. SyncedCount={SyncedCount} SyncedAtUtc={SyncedAtUtc}",
+                    "Adviser directory projection sync completed. SyncedCount={SyncedCount} Mailboxes={Mailboxes} CreatedOrRenewed={CreatedOrRenewed} Skipped={Skipped} Failures={Failures} SyncedAtUtc={SyncedAtUtc}",
                     result.SyncedCount,
+                    result.MailboxesDetected,
+                    result.SubscriptionsCreatedOrRenewed,
+                    result.SubscriptionsSkipped,
+                    result.SubscriptionFailures,
                     result.SyncedAtUtc);
             }
             catch (Exception ex)

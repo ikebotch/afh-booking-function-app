@@ -9,4 +9,6 @@ public sealed class AdviserDirectoryOptions
     public string CoverageEndpointPath { get; set; } = "/api/v1/admin/adviser-coverage";
     public string? FunctionKey { get; set; }
     public int SyncIntervalMinutes { get; set; } = 30;
+    public int SubscriptionRenewalLeadMinutes { get; set; } = 180;
+    public bool AllowNonEmailMailboxIds { get; set; }
 }

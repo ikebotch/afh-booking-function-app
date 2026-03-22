@@ -25,6 +25,23 @@ public sealed class CalendarSubscriptionRepository : ICalendarSubscriptionReposi
         return model is null ? null : MapToDomain(model);
     }
 
+    public async Task<CalendarSubscription?> GetLatestByUserIdAsync(string userId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId))
+            return null;
+
+        var normalized = userId.Trim();
+
+        var model = await _db.Set<CalendarSubscriptionModel>()
+            .AsNoTracking()
+            .Where(x => x.UserId == normalized && x.IsActive)
+            .OrderByDescending(x => x.ExpirationUtc)
+            .ThenByDescending(x => x.UpdatedUtc)
+            .FirstOrDefaultAsync(ct);
+
+        return model is null ? null : MapToDomain(model);
+    }
+
     public async Task UpsertAsync(
         CalendarSubscription subscription,
         CancellationToken ct)

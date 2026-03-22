@@ -40,6 +40,14 @@ public sealed class AdviserAvailabilityProjectionRepository : IAdviserAvailabili
             return;
         }
 
+        if (existing.LastSyncedUtc > block.LastSyncedUtc)
+            return;
+
+        if (!string.IsNullOrWhiteSpace(existing.ChangeKey) &&
+            !string.IsNullOrWhiteSpace(block.ChangeKey) &&
+            string.Equals(existing.ChangeKey, block.ChangeKey, StringComparison.Ordinal))
+            return;
+
         existing.CalendarId = block.CalendarId;
         existing.Subject = block.Subject;
         existing.StartUtc = block.StartUtc;
@@ -59,6 +67,9 @@ public sealed class AdviserAvailabilityProjectionRepository : IAdviserAvailabili
                 ct);
 
         if (existing is null)
+            return;
+
+        if (existing.LastSyncedUtc > syncedUtc)
             return;
 
         existing.IsCancelled = true;

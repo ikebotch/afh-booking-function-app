@@ -24,6 +24,7 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
     private readonly IClock _clock;
     private readonly ICalendarEventSnapshotRepository _snapshots;
     private readonly IAdviserAvailabilityProjectionRepository _availabilityProjection;
+    private readonly CalendarProjectionOptions _projectionOptions;
 
 
     public ProcessNotificationsHandler(
@@ -35,7 +36,8 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
        ICalendarGateway calendar,
        IUnitOfWork uow,
        IClock clock,
-       IAdviserAvailabilityProjectionRepository availabilityProjection)
+       IAdviserAvailabilityProjectionRepository availabilityProjection,
+       IOptions<CalendarProjectionOptions> projectionOptions)
     {
         _logger = logger;
         _opts = opts.Value;
@@ -46,6 +48,7 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
         _uow = uow;
         _clock = clock;
         _availabilityProjection = availabilityProjection;
+        _projectionOptions = projectionOptions.Value;
     }
 
     public async Task<Result> HandleAsync(CalendarNotificationsRequest? envelope, CancellationToken ct)
@@ -81,6 +84,27 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
             {
                 accepted = false;
                 rejectReason = "Invalid ClientState";
+            }
+
+            if (!string.IsNullOrWhiteSpace(subscriptionId) && !string.IsNullOrWhiteSpace(eventId))
+            {
+                var sinceUtc = _clock.UtcNow.AddMinutes(-Math.Max(1, _projectionOptions.DedupeWindowMinutes));
+                var duplicate = await _notifications.ExistsRecentDuplicateAsync(
+                    subscriptionId,
+                    eventId,
+                    changeType,
+                    sinceUtc,
+                    ct);
+
+                if (duplicate)
+                {
+                    _logger.LogInformation(
+                        "Skipping duplicate calendar notification. SubscriptionId={SubscriptionId} EventId={EventId} ChangeType={ChangeType}",
+                        subscriptionId,
+                        eventId,
+                        changeType);
+                    continue;
+                }
             }
 
             // raw payload (store the notification as JSON, truncate to column limit)
@@ -144,6 +168,8 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
                     {
                         // whatever your gateway returns - you need these fields
                         var evt = await _calendar.GetEventAsync(sub.UserId, eventId!, ct);
+                        if (evt is null)
+                            throw new InvalidOperationException("Calendar event lookup returned null.");
 
                         var snap = CalendarEventSnapshot.CreateSuccess(
                             id: Guid.NewGuid().ToString("N"),

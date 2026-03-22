@@ -183,6 +183,21 @@ public sealed class BookingOperationalStoreInitializer : IHostedService
                 END
                 """,
                 cancellationToken: cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                IF OBJECT_ID('dbo.IntegrationSyncStates', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.IntegrationSyncStates (
+                        [Key] nvarchar(128) NOT NULL PRIMARY KEY,
+                        [Value] nvarchar(max) NOT NULL,
+                        UpdatedUtc datetime2 NOT NULL
+                    );
+                    CREATE INDEX IX_IntegrationSyncStates_UpdatedUtc
+                        ON dbo.IntegrationSyncStates(UpdatedUtc);
+                END
+                """,
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

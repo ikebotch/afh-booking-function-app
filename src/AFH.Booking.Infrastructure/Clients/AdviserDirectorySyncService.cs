@@ -11,20 +11,24 @@ namespace AFH.Booking.Infrastructure.Clients;
 
 public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
 {
+    private const string SyncCursorKey = "adviser_directory_last_sync_utc";
     private readonly HttpClient _http;
     private readonly AdviserDirectoryOptions _options;
     private readonly IAdviserProfileProjectionRepository _profiles;
+    private readonly IIntegrationSyncStateRepository _syncState;
     private readonly IClock _clock;
 
     public AdviserDirectorySyncService(
         HttpClient http,
         IOptions<AdviserDirectoryOptions> options,
         IAdviserProfileProjectionRepository profiles,
+        IIntegrationSyncStateRepository syncState,
         IClock clock)
     {
         _http = http;
         _options = options.Value;
         _profiles = profiles;
+        _syncState = syncState;
         _clock = clock;
     }
 
@@ -43,6 +47,16 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         var baseUrl = _options.BaseUrl.TrimEnd('/');
         var path = _options.CoverageEndpointPath.StartsWith('/') ? _options.CoverageEndpointPath : "/" + _options.CoverageEndpointPath;
         var url = baseUrl + path;
+
+        DateTime? sinceUtc = null;
+        var stateValue = await _syncState.GetValueAsync(SyncCursorKey, ct);
+        if (!string.IsNullOrWhiteSpace(stateValue) &&
+            DateTime.TryParse(stateValue, out var parsed))
+        {
+            sinceUtc = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+            var sepSince = url.Contains('?') ? "&" : "?";
+            url += $"{sepSince}sinceUtc={Uri.EscapeDataString(sinceUtc.Value.ToString("O"))}";
+        }
         if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
         {
             var sep = url.Contains('?') ? "&" : "?";
@@ -78,6 +92,7 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
             .ToList();
 
         await _profiles.UpsertRangeAsync(records, ct);
+        await _syncState.UpsertValueAsync(SyncCursorKey, now.ToString("O"), now, ct);
         return new AdviserDirectorySyncResult
         {
             SyncedAtUtc = now,

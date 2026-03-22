@@ -1,15 +1,21 @@
 using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Domain.Options;
 using AFH.Booking.Functions.Http;
+using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Functions.V1.Calendar;
 
 public sealed class ProjectedScheduleBatchFunction
 {
     private readonly IAdviserAvailabilityProjectionRepository _projection;
+    private readonly CalendarProjectionOptions _options;
 
-    public ProjectedScheduleBatchFunction(IAdviserAvailabilityProjectionRepository projection)
+    public ProjectedScheduleBatchFunction(
+        IAdviserAvailabilityProjectionRepository projection,
+        IOptions<CalendarProjectionOptions> options)
     {
         _projection = projection;
+        _options = options.Value;
     }
 
     [Function("Calendar_ProjectedScheduleBatch")]
@@ -38,6 +44,9 @@ public sealed class ProjectedScheduleBatchFunction
         foreach (var userId in users)
         {
             var blocks = await _projection.ListBusyBlocksAsync(userId, payload.StartUtc, payload.EndUtc, ct);
+            var lastSyncedUtc = await _projection.GetLastSyncedUtcAsync(userId, ct);
+            var staleAfterMinutes = Math.Max(1, _options.StaleAfterMinutes);
+            var isStale = !lastSyncedUtc.HasValue || (DateTime.UtcNow - lastSyncedUtc.Value).TotalMinutes > staleAfterMinutes;
             var bookings = blocks.Select(x => new
             {
                 bookingId = x.ProviderEventId,
@@ -52,7 +61,13 @@ public sealed class ProjectedScheduleBatchFunction
                 userId,
                 state = "Ok",
                 message = (string?)null,
-                bookings
+                bookings,
+                projection = new
+                {
+                    isStale,
+                    staleAfterMinutes,
+                    lastSyncedUtc
+                }
             });
         }
 

@@ -33,6 +33,7 @@ public static class ServiceCollectionExtensions
         services.Configure<AzureAdOptions>(config.GetSection(AzureAdOptions.SectionName));
         services.Configure<LocationServiceOptions>(config.GetSection(LocationServiceOptions.SectionName));
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));
+        services.Configure<CalendarProjectionOptions>(config.GetSection(CalendarProjectionOptions.SectionName));
         services.Configure<NotificationsOptions>(config.GetSection(NotificationsOptions.SectionName));
         services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
 
@@ -119,6 +120,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ICalendarEventSnapshotRepository, CalendarEventSnapshotRepository>();
         services.AddScoped<IAdviserAvailabilityProjectionRepository, AdviserAvailabilityProjectionRepository>();
         services.AddScoped<IAdviserProfileProjectionRepository, AdviserProfileProjectionRepository>();
+        services.AddScoped<IIntegrationSyncStateRepository, IntegrationSyncStateRepository>();
         services.AddScoped<ICalendarSubscriptionRepository, CalendarSubscriptionRepository>();
         services.AddScoped<ICalendarNotificationRepository, CalendarNotificationRepository>();
         services.AddScoped<IApprovalWorkflowService, DbApprovalWorkflowService>();

@@ -3,6 +3,8 @@ namespace AFH.Booking.Application.Abstractions.Persistence;
 public interface IAdviserProfileProjectionRepository
 {
     Task UpsertRangeAsync(IReadOnlyList<AdviserProfileProjectionRecord> advisers, CancellationToken ct);
+    Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct);
+    Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct);
 }
 
 public sealed class AdviserProfileProjectionRecord

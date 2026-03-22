@@ -57,4 +57,57 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
             row.SourceVersion = adviser.SourceVersion;
         }
     }
+
+    public async Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct)
+    {
+        take = Math.Clamp(take, 1, 500);
+
+        var query = _db.AdviserProfileProjections.AsNoTracking();
+        if (sinceUtc.HasValue)
+            query = query.Where(x => x.LastSyncedUtc > sinceUtc.Value);
+
+        var rows = await query
+            .OrderBy(x => x.LastSyncedUtc)
+            .Take(take)
+            .ToListAsync(ct);
+
+        return rows.Select(Map).ToList();
+    }
+
+    public async Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct)
+    {
+        var row = await _db.AdviserProfileProjections
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.AdviserId == adviserId, ct);
+
+        return row is null ? null : Map(row);
+    }
+
+    private static AdviserProfileProjectionRecord Map(AdviserProfileProjectionModel row)
+    {
+        IReadOnlyList<string> skills;
+        try
+        {
+            skills = JsonSerializer.Deserialize<List<string>>(row.SkillsJson) ?? [];
+        }
+        catch
+        {
+            skills = [];
+        }
+
+        return new AdviserProfileProjectionRecord
+        {
+            AdviserId = row.AdviserId,
+            DisplayName = row.DisplayName,
+            Region = row.Region,
+            HomePostcode = row.HomePostcode,
+            IsActive = row.IsActive,
+            Rating = row.Rating,
+            Skills = skills,
+            CoverageRadiusMiles = row.CoverageRadiusMiles,
+            MaxTravelTimeMinutes = row.MaxTravelTimeMinutes,
+            LastSyncedUtc = row.LastSyncedUtc,
+            SourceVersion = row.SourceVersion
+        };
+    }
 }

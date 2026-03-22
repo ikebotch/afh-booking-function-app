@@ -23,6 +23,7 @@ public sealed class BookingDbContext : DbContext
     public DbSet<CalendarEventSnapshotModel> CalendarEventSnapshots => Set<CalendarEventSnapshotModel>();
     public DbSet<AdviserAvailabilityBlockModel> AdviserAvailabilityBlocks => Set<AdviserAvailabilityBlockModel>();
     public DbSet<AdviserProfileProjectionModel> AdviserProfileProjections => Set<AdviserProfileProjectionModel>();
+    public DbSet<IntegrationSyncStateModel> IntegrationSyncStates => Set<IntegrationSyncStateModel>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);

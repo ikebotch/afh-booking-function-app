@@ -1,20 +1,21 @@
 using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Domain.Options;
 using AFH.Booking.Functions.Http;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Functions.V1.Admin;
 
 public sealed class GetAdviserAvailabilityProjectionFunction
 {
     private readonly IAdviserAvailabilityProjectionRepository _repo;
-    private readonly IConfiguration _configuration;
+    private readonly CalendarProjectionOptions _options;
 
     public GetAdviserAvailabilityProjectionFunction(
         IAdviserAvailabilityProjectionRepository repo,
-        IConfiguration configuration)
+        IOptions<CalendarProjectionOptions> options)
     {
         _repo = repo;
-        _configuration = configuration;
+        _options = options.Value;
     }
 
     [Function("Admin_GetAdviserAvailabilityProjection")]
@@ -43,7 +44,7 @@ public sealed class GetAdviserAvailabilityProjectionFunction
         var blocks = await _repo.ListBusyBlocksAsync(adviserId, startUtc, endUtc, ct);
         var lastSyncedUtc = await _repo.GetLastSyncedUtcAsync(adviserId, ct);
 
-        var staleAfterMinutes = Math.Max(1, _configuration.GetValue<int?>("AvailabilityProjection:StaleAfterMinutes") ?? 15);
+        var staleAfterMinutes = Math.Max(1, _options.StaleAfterMinutes);
         var isStale = !lastSyncedUtc.HasValue || (DateTime.UtcNow - lastSyncedUtc.Value).TotalMinutes > staleAfterMinutes;
 
         return await req.OkJsonAsync(new

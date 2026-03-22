@@ -1,6 +1,7 @@
-﻿using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Infrastructure.Persistence.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace AFH.Booking.Infrastructure.Persistence.Repositories;
 
@@ -21,12 +22,29 @@ public sealed class CalendarNotificationRepository : ICalendarNotificationReposi
             ChangeType = receipt.ChangeType,
             ReceivedUtc = receipt.ReceivedUtc,
             RawPayload = receipt.RawPayload,
-             ClientState = receipt.ClientState,
+            ClientState = receipt.ClientState,
             Accepted = receipt.Accepted,
             RejectReason = receipt.RejectReason
         };
         await _db.Set<CalendarNotificationReceiptModel>().AddAsync(model, ct);
 
         return receipt;
+    }
+
+    public async Task<bool> ExistsRecentDuplicateAsync(
+        string subscriptionId,
+        string eventId,
+        string? changeType,
+        DateTime sinceUtc,
+        CancellationToken ct)
+    {
+        return await _db.Set<CalendarNotificationReceiptModel>()
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.SubscriptionId == subscriptionId &&
+                     x.EventId == eventId &&
+                     x.ChangeType == changeType &&
+                     x.ReceivedUtc >= sinceUtc,
+                ct);
     }
 }

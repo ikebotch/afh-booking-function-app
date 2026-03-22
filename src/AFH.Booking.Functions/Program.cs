@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Composition;
+using AFH.Booking.Functions.Middleware;
 using AFH.Booking.Infrastructure.Composition;
 using Azure.Core.Serialization;
 using Microsoft.Extensions.Configuration;
@@ -6,7 +7,11 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 var host = new HostBuilder()
-    .ConfigureFunctionsWebApplication()
+    .ConfigureFunctionsWebApplication(app =>
+    {
+        app.UseMiddleware<CorrelationIdMiddleware>();
+        app.UseMiddleware<OperationAuditMiddleware>();
+    })
     .ConfigureAppConfiguration((ctx, cfg) =>
     {
         // Load configuration from local.settings.json and environment variables.

@@ -198,6 +198,35 @@ public sealed class BookingOperationalStoreInitializer : IHostedService
                 END
                 """,
                 cancellationToken: cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                IF OBJECT_ID('dbo.IntegrationOperationAudit', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.IntegrationOperationAudit (
+                        Id nvarchar(64) NOT NULL PRIMARY KEY,
+                        ServiceName nvarchar(64) NOT NULL,
+                        FunctionName nvarchar(256) NOT NULL,
+                        Method nvarchar(16) NOT NULL,
+                        Path nvarchar(512) NOT NULL,
+                        QueryString nvarchar(2048) NULL,
+                        CorrelationId nvarchar(128) NULL,
+                        OperationId nvarchar(128) NOT NULL,
+                        StatusCode int NOT NULL,
+                        DurationMs bigint NOT NULL,
+                        ErrorType nvarchar(128) NULL,
+                        ErrorMessage nvarchar(2048) NULL,
+                        CreatedUtc datetime2 NOT NULL
+                    );
+                    CREATE INDEX IX_IntegrationOperationAudit_CreatedUtc
+                        ON dbo.IntegrationOperationAudit(CreatedUtc);
+                    CREATE INDEX IX_IntegrationOperationAudit_CorrelationId
+                        ON dbo.IntegrationOperationAudit(CorrelationId);
+                    CREATE INDEX IX_IntegrationOperationAudit_FunctionName_CreatedUtc
+                        ON dbo.IntegrationOperationAudit(FunctionName, CreatedUtc);
+                END
+                """,
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

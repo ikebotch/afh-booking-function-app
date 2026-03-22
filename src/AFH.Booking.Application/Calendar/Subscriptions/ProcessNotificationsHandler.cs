@@ -23,6 +23,7 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
     private readonly ICalendarEventSnapshotRepository _snapshots;
+    private readonly IAdviserAvailabilityProjectionRepository _availabilityProjection;
 
 
     public ProcessNotificationsHandler(
@@ -33,7 +34,8 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
        ICalendarEventSnapshotRepository snapshots,
        ICalendarGateway calendar,
        IUnitOfWork uow,
-       IClock clock)
+       IClock clock,
+       IAdviserAvailabilityProjectionRepository availabilityProjection)
     {
         _logger = logger;
         _opts = opts.Value;
@@ -43,6 +45,7 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
         _calendar = calendar;
         _uow = uow;
         _clock = clock;
+        _availabilityProjection = availabilityProjection;
     }
 
     public async Task<Result> HandleAsync(CalendarNotificationsRequest? envelope, CancellationToken ct)
@@ -112,6 +115,20 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
 
 
 
+            // Keep projection in sync for delete events even when no snapshot fetch is possible.
+            if (accepted && n.ChangeType is "deleted")
+            {
+                var sub = await _subscriptions.GetBySubscriptionIdAsync(subscriptionId!, ct);
+                if (sub is not null)
+                {
+                    await _availabilityProjection.DeleteBusyBlockAsync(
+                        sub.UserId,
+                        eventId!,
+                        _clock.UtcNow,
+                        ct);
+                }
+            }
+
             // 2) Only attempt snapshot fetch for accepted created/updated
             if (accepted && (n.ChangeType is "created" or "updated"))
             {
@@ -144,6 +161,27 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
                         );
 
                         await _snapshots.AddAsync(snap, ct); // or UpsertAsync
+
+                        if (evt.StartUtc < evt.EndUtc)
+                        {
+                            await _availabilityProjection.UpsertBusyBlockAsync(
+                                new AdviserBusyBlockProjection
+                                {
+                                    Id = Guid.NewGuid().ToString("N"),
+                                    AdviserId = sub.UserId,
+                                    ProviderEventId = eventId!,
+                                    CalendarId = evt.CalendarId,
+                                    Subject = evt.Subject,
+                                    StartUtc = DateTime.SpecifyKind(evt.StartUtc, DateTimeKind.Utc),
+                                    EndUtc = DateTime.SpecifyKind(evt.EndUtc, DateTimeKind.Utc),
+                                    IsCancelled = false,
+                                    ChangeKey = evt.ChangeKey,
+                                    ICalUId = evt.ICalUId,
+                                    LastSyncedUtc = _clock.UtcNow,
+                                    SourceReceiptId = receipt.Id
+                                },
+                                ct);
+                        }
                     }
                     catch (Exception ex)
                     {

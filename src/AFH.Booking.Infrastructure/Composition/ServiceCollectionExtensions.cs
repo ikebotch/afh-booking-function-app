@@ -34,6 +34,7 @@ public static class ServiceCollectionExtensions
         services.Configure<LocationServiceOptions>(config.GetSection(LocationServiceOptions.SectionName));
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));
         services.Configure<NotificationsOptions>(config.GetSection(NotificationsOptions.SectionName));
+        services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
 
         var db = config.GetSection(BookingDbOptions.SectionName).Get<BookingDbOptions>() ?? new BookingDbOptions();
         db.ConnectionString = string.IsNullOrWhiteSpace(db.ConnectionString)
@@ -116,10 +117,21 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBookingSlotRepository, BookingSlotRepository>();
         services.AddScoped<IBookingHoldRepository, BookingHoldRepository>();
         services.AddScoped<ICalendarEventSnapshotRepository, CalendarEventSnapshotRepository>();
+        services.AddScoped<IAdviserAvailabilityProjectionRepository, AdviserAvailabilityProjectionRepository>();
+        services.AddScoped<IAdviserProfileProjectionRepository, AdviserProfileProjectionRepository>();
         services.AddScoped<ICalendarSubscriptionRepository, CalendarSubscriptionRepository>();
         services.AddScoped<ICalendarNotificationRepository, CalendarNotificationRepository>();
         services.AddScoped<IApprovalWorkflowService, DbApprovalWorkflowService>();
         services.AddScoped<IEmailBounceService, EmailBounceService>();
+        services.AddHttpClient<IAdviserDirectorySyncService, AdviserDirectorySyncService>((sp, http) =>
+        {
+            var options = sp.GetRequiredService<IOptions<AdviserDirectoryOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(options.BaseUrl))
+                http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddHostedService<AdviserDirectoryProjectionSyncWorker>();
         services.AddScoped<IClientNotificationService, ClientNotificationService>();
         services.AddScoped<IDuplicateClientService, DuplicateClientService>();
         services.AddScoped<IDownstreamUpdateService, DownstreamUpdateService>();

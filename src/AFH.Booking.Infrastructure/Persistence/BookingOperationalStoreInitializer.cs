@@ -130,6 +130,59 @@ public sealed class BookingOperationalStoreInitializer : IHostedService
                 END
                 """,
                 cancellationToken: cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                IF OBJECT_ID('dbo.AdviserAvailabilityBlocks', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.AdviserAvailabilityBlocks (
+                        Id nvarchar(64) NOT NULL PRIMARY KEY,
+                        AdviserId nvarchar(256) NOT NULL,
+                        ProviderEventId nvarchar(512) NOT NULL,
+                        CalendarId nvarchar(512) NULL,
+                        Subject nvarchar(512) NULL,
+                        StartUtc datetime2 NOT NULL,
+                        EndUtc datetime2 NOT NULL,
+                        IsCancelled bit NOT NULL,
+                        ChangeKey nvarchar(256) NULL,
+                        ICalUId nvarchar(512) NULL,
+                        LastSyncedUtc datetime2 NOT NULL,
+                        SourceReceiptId nvarchar(64) NULL
+                    );
+                    CREATE UNIQUE INDEX UX_AdviserAvailabilityBlocks_AdviserId_ProviderEventId
+                        ON dbo.AdviserAvailabilityBlocks(AdviserId, ProviderEventId);
+                    CREATE INDEX IX_AdviserAvailabilityBlocks_AdviserId_StartUtc_EndUtc
+                        ON dbo.AdviserAvailabilityBlocks(AdviserId, StartUtc, EndUtc);
+                    CREATE INDEX IX_AdviserAvailabilityBlocks_AdviserId_LastSyncedUtc
+                        ON dbo.AdviserAvailabilityBlocks(AdviserId, LastSyncedUtc);
+                END
+                """,
+                cancellationToken: cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                IF OBJECT_ID('dbo.AdviserProfileProjections', 'U') IS NULL
+                BEGIN
+                    CREATE TABLE dbo.AdviserProfileProjections (
+                        AdviserId nvarchar(256) NOT NULL PRIMARY KEY,
+                        DisplayName nvarchar(256) NOT NULL,
+                        Region nvarchar(128) NULL,
+                        HomePostcode nvarchar(32) NULL,
+                        IsActive bit NOT NULL,
+                        Rating float NOT NULL,
+                        SkillsJson nvarchar(max) NOT NULL,
+                        CoverageRadiusMiles float NULL,
+                        MaxTravelTimeMinutes int NULL,
+                        LastSyncedUtc datetime2 NOT NULL,
+                        SourceVersion nvarchar(128) NULL
+                    );
+                    CREATE INDEX IX_AdviserProfileProjections_IsActive_Region
+                        ON dbo.AdviserProfileProjections(IsActive, Region);
+                    CREATE INDEX IX_AdviserProfileProjections_LastSyncedUtc
+                        ON dbo.AdviserProfileProjections(LastSyncedUtc);
+                END
+                """,
+                cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {

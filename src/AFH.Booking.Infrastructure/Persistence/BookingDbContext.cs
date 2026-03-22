@@ -21,6 +21,8 @@ public sealed class BookingDbContext : DbContext
     public DbSet<CalendarSubscriptionModel> CalendarSubscriptions => Set<CalendarSubscriptionModel>();
     public DbSet<CalendarNotificationReceiptModel> CalendarNotificationReceipts => Set<CalendarNotificationReceiptModel>();
     public DbSet<CalendarEventSnapshotModel> CalendarEventSnapshots => Set<CalendarEventSnapshotModel>();
+    public DbSet<AdviserAvailabilityBlockModel> AdviserAvailabilityBlocks => Set<AdviserAvailabilityBlockModel>();
+    public DbSet<AdviserProfileProjectionModel> AdviserProfileProjections => Set<AdviserProfileProjectionModel>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);

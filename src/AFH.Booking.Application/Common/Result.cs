@@ -38,6 +38,6 @@ public sealed class Result<T> : Result
     public static Result<T> NotFound(string msg)
         => new(false, default, HttpStatusCode.NotFound, msg, Errors.NotFound);
 
-    public static Result<T> Fail(HttpStatusCode status, string msg, string? code = null)
+    public static new Result<T> Fail(HttpStatusCode status, string msg, string? code = null)
         => new(false, default, status, msg, code ?? status.ToString());
 }

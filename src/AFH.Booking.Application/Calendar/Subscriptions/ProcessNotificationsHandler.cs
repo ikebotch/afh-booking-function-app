@@ -122,18 +122,17 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
 
 
 
-            var receipt = await _notifications.AddAsync(
-                 CalendarNotificationReceipt.Create(
-                     subscriptionId: subscriptionId!,
-                     eventId: eventId!,
-                     changeType: changeType,
-                     clientState: clientState,
-                     accepted: accepted,
-                     rejectReason: rejectReason,
-                     receivedUtc: _clock.UtcNow,
-                     rawPayload: rawPayload
-                    ),
-                 ct);
+            var receipt = CalendarNotificationReceipt.Create(
+                subscriptionId: subscriptionId!,
+                eventId: eventId!,
+                changeType: changeType,
+                clientState: clientState,
+                accepted: accepted,
+                rejectReason: rejectReason,
+                receivedUtc: _clock.UtcNow,
+                rawPayload: rawPayload);
+
+            await _notifications.AddAsync(receipt, ct);
 
 
 

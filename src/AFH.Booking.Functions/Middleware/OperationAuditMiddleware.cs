@@ -1,8 +1,8 @@
 using AFH.Booking.Infrastructure.Persistence;
+using AFH.Booking.Infrastructure.Persistence.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.Functions.Worker.Middleware;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System.Diagnostics;
@@ -63,42 +63,23 @@ public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
             {
                 await using var scope = _scopeFactory.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<BookingDbContext>();
-                await db.Database.ExecuteSqlRawAsync(
-                    """
-                    INSERT INTO dbo.IntegrationOperationAudit
-                    (
-                        Id,
-                        ServiceName,
-                        FunctionName,
-                        Method,
-                        Path,
-                        QueryString,
-                        CorrelationId,
-                        OperationId,
-                        StatusCode,
-                        DurationMs,
-                        ErrorType,
-                        ErrorMessage,
-                        CreatedUtc
-                    )
-                    VALUES
-                    (
-                        {0},{1},{2},{3},{4},{5},{6},{7},{8},{9},{10},{11},{12}
-                    )
-                    """,
-                    Guid.NewGuid().ToString("N"),
-                    "booking",
-                    functionName,
-                    method,
-                    path,
-                    query,
-                    correlationId ?? string.Empty,
-                    operationId,
-                    statusCode,
-                    durationMs,
-                    errorType,
-                    errorMessage,
-                    createdUtc);
+                db.IntegrationOperationAudits.Add(new IntegrationOperationAuditModel
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ServiceName = "booking",
+                    FunctionName = functionName,
+                    Method = method,
+                    Path = path,
+                    QueryString = query,
+                    CorrelationId = correlationId,
+                    OperationId = operationId,
+                    StatusCode = statusCode,
+                    DurationMs = durationMs,
+                    ErrorType = errorType,
+                    ErrorMessage = errorMessage,
+                    CreatedUtc = createdUtc
+                });
+                await db.SaveChangesAsync(CancellationToken.None);
             }
             catch (Exception ex)
             {

@@ -33,6 +33,7 @@ public sealed class CalendarViewQueryHandler : ICalendarViewQueryHandler
                 startUtc: q.StartUtc,
                 endUtc: q.EndUtc,
                 timezone: q.Timezone,
+                freshnessMode: "PreferCached",
                 ct: ct);
 
             items.Add(new CalendarViewDto
@@ -61,4 +62,3 @@ public sealed class CalendarViewQueryHandler : ICalendarViewQueryHandler
         return Result<List<CalendarViewDto>>.Ok(items);
     }
 }
-

@@ -21,6 +21,7 @@ public interface ICalendarGateway
         DateTime startUtc,
         DateTime endUtc,
         string timezone,
+        string? freshnessMode,
         CancellationToken ct);
 }
 

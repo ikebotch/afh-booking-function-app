@@ -2,8 +2,8 @@
 
 ## Service Responsibilities
 - Booking service: system of record for booking transactions, holds, confirmations, cancellations, rearrangements, projections, and approval workflows.
-- Location service: in-person adviser discovery, filtering, ranking, travel evaluation, and policy-driven availability shaping.
-- Calendar service: calendar-provider facade for schedule lookup, appointment lifecycle, Graph subscriptions, and Graph notification intake.
+- Location service: in-person adviser discovery, filtering, ranking, travel evaluation, adviser reference caching, and policy-driven availability shaping.
+- Calendar service: calendar-provider facade for schedule lookup, appointment lifecycle, Graph subscriptions, Graph notification intake, and calendar projection reads.
 
 ## Endpoint Classification
 - Public:
@@ -40,6 +40,23 @@
 - Critical service URLs, internal tokens, and timezone settings are read from typed options rather than hard-coded values.
 - Lifecycle reason-code source, lifecycle notification behavior, escalation placeholders, and governance placeholders are also configuration-backed through `Lifecycle:*`.
 - Do not commit real secrets or live URLs into backend settings files.
+
+## Cached Search And Projection Model
+- Booking remains orchestration-only on the hot path:
+  - it asks Location for ranked adviser candidates
+  - it asks Calendar for schedule/conflict validation, hold updates, confirm updates, and cancel updates
+- Location hot path now prefers:
+  - `AdviserReferenceCache` for adviser profile/filtering inputs
+  - `GeoCacheEntries` for coordinate lookups
+  - `RouteCacheEntries` for routing/travel reuse
+  - Calendar batch schedule reads with `PreferCached`
+- Calendar owns the Graph anti-corruption layer and its local operational read model:
+  - `CalendarProjectionEvents`
+  - `MailboxProjectionStates`
+- Freshness policy:
+  1. search and ranking use cached/batched reads where possible
+  2. booking confirmation/conflict validation uses fresher calendar reads before mutation
+  3. live calendar reads write back into the calendar projection
 
 ## Timezone Strategy
 - UTC remains the storage and transport baseline for booking, location, and calendar flows.

@@ -174,12 +174,15 @@ public sealed class CalendarGateway : ICalendarGateway
         DateTime startUtc,
         DateTime endUtc,
         string timezone,
+        string? freshnessMode,
         CancellationToken ct)
     {
         EnsureConfigured();
 
         var path =
             $"/api/v1/calendar/users/{Uri.EscapeDataString(userId)}/schedule?startUtc={Uri.EscapeDataString(startUtc.ToString("O"))}&endUtc={Uri.EscapeDataString(endUtc.ToString("O"))}";
+        if (!string.IsNullOrWhiteSpace(freshnessMode))
+            path += $"&freshnessMode={Uri.EscapeDataString(freshnessMode)}";
         var url = BuildUrl(path);
 
         using var req = new HttpRequestMessage(HttpMethod.Get, url);

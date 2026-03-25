@@ -3,7 +3,7 @@
 # =============================
 
 # Build number format (appears as $(Build.BuildNumber))
-name: LocationApp_$(Date:yyyyMMdd).$(Rev:r)
+name: BookingApp_$(Date:yyyyMMdd).$(Rev:r)
 
 trigger:
 - main

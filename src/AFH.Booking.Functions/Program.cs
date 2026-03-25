@@ -48,10 +48,11 @@ var host = new HostBuilder()
         // Fine-grained filters
         logging.AddFilter("Microsoft", LogLevel.Warning);
         logging.AddFilter("System", LogLevel.Warning);
-        logging.AddFilter("AFH.Acs.Recorder", LogLevel.Information);
+        logging.AddFilter("AFH.Acs.Functions", LogLevel.Information);
 
         logging.AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.None);
-        logging.AddFilter("AFH.Acs.Recorder.Functions", LogLevel.Information);
+        logging.AddFilter("AFH.Acs.Recorder", LogLevel.Information);
+        logging.AddFilter("AFH.Acs.Functions.Functions", LogLevel.Information);
         logging.AddFilter("Default", LogLevel.Warning);
 
         logging.AddFilter("Microsoft.Azure.WebJobs", LogLevel.Information);

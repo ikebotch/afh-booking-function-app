@@ -35,13 +35,29 @@ public sealed class CreateApprovalRequestFunction
         if (!string.Equals(requestedBy, "Adviser", StringComparison.OrdinalIgnoreCase))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Only Adviser requests require approval.", ct, "Validation");
 
-        var created = await _approvals.CreateAsync(
-            bookingId: bookingId.Trim(),
-            changeType: changeType,
-            requestedBy: "Adviser",
-            reasonCode: body?.ReasonCode,
-            reasonDetail: body?.ReasonDetail,
-            ct: ct);
+        if (string.IsNullOrWhiteSpace(body?.ReasonCode))
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, "reasonCode is required for adviser approval requests.", ct, "Validation");
+
+        if (string.Equals(changeType, "Rearrange", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(body?.NewSlotId))
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, "newSlotId is required for adviser rearrangement approval requests.", ct, "Validation");
+
+        object created;
+        try
+        {
+            created = await _approvals.CreateAsync(new CreateApprovalWorkflowRequest(
+                BookingId: bookingId.Trim(),
+                ChangeType: changeType,
+                RequestedBy: "Adviser",
+                RequesterId: body?.RequesterId,
+                ReasonCode: body?.ReasonCode,
+                ReasonDetail: body?.ReasonDetail,
+                NewSlotId: body?.NewSlotId,
+                CorrelationId: BookingChangeRequestContext.GetCorrelationId(req)), ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, ex.Message, ct, "Validation");
+        }
 
         return await req.CreatedJsonAsync(created, ct);
     }

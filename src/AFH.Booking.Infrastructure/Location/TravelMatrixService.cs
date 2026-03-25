@@ -3,6 +3,7 @@ using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Location;
 using AFH.Booking.Domain.Location.Travel;
 using AFH.Booking.Domain.Options;
+using AFH.Booking.Infrastructure.Auth;
 using AFH.Booking.Infrastructure.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -18,29 +19,33 @@ public sealed class TravelMatrixService : ITravelMatrixService
 
     private readonly HttpClient _http;
     private readonly LocationServiceOptions _opt;
+    private readonly IInternalServiceAuthenticator _authenticator;
     private readonly ILogger<TravelMatrixService> _logger;
 
     public TravelMatrixService(
         HttpClient http,
         IOptions<LocationServiceOptions> opt,
+        IInternalServiceAuthenticator authenticator,
         ILogger<TravelMatrixService> logger)
     {
         _http = http;
         _opt = opt.Value;
+        _authenticator = authenticator;
         _logger = logger;
     }
 
     public async Task<TravelMatrixResult> GetAsync(TravelMatrixRequest request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_opt.MasterKey))
-            throw new InvalidOperationException($"{LocationServiceOptions.SectionName}:MasterKey is required.");
+        if (string.IsNullOrWhiteSpace(_opt.BaseUrl))
+            throw new InvalidOperationException($"{LocationServiceOptions.SectionName}:BaseUrl is required.");
 
-        // Map your domain request -> location service request
-        //var payload = Map(request);
+        using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{_opt.BaseUrl.TrimEnd('/')}/api/v1/location/inperson/advisers/search")
+        {
+            Content = JsonContent.Create(request, options: JsonOptions)
+        };
+        _authenticator.Apply(httpRequest, _opt.InternalToken);
 
-        var url = $"{_opt.BaseUrl}/api/v1/location/inperson/advisers/search?code={Uri.EscapeDataString(_opt.MasterKey)}";
-
-        using var resp = await _http.PostAsJsonAsync(url, request, JsonOptions, ct);
+        using var resp = await _http.SendAsync(httpRequest, ct);
 
         if (resp.IsSuccessStatusCode)
         {
@@ -59,7 +64,7 @@ public sealed class TravelMatrixService : ITravelMatrixService
      
 
         if (resp.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-            throw new InvalidOperationException("Location service rejected the request (check master key).");
+            throw new InvalidOperationException("Location service rejected the request (check internal bearer configuration).");
 
         return new TravelMatrixResult(); // degrade gracefully
     }

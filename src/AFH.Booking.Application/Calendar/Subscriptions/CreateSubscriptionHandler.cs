@@ -51,14 +51,9 @@ public sealed class CreateSubscriptionHandler : ICreateSubscriptionHandler
         var utcNow = _clock.UtcNow;
 
 
-        var code = Uri.EscapeDataString((_opts.FunctionKey ?? string.Empty).Trim());
-
-
         var placeholders = new Dictionary<string, string>
                 {
                     { "baseUrl", _opts.BaseUrl },
-                    { "functionKey", code },
-
                 };
 
         string genNotificationUrl = UrlTemplateHelper.Build(_opts.NotificationsUrl, placeholders);
@@ -66,9 +61,6 @@ public sealed class CreateSubscriptionHandler : ICreateSubscriptionHandler
         var notificationUrl = string.IsNullOrWhiteSpace(cmd.NotificationUrl)
             ? genNotificationUrl
             : cmd.NotificationUrl;
-
-        notificationUrl = EnsureNotificationUrlHasFunctionCode(notificationUrl, _opts.FunctionKey);
-
 
         var clientState = string.IsNullOrWhiteSpace(cmd.ClientState)
             ? _opts.ClientState
@@ -166,29 +158,4 @@ public sealed class CreateSubscriptionHandler : ICreateSubscriptionHandler
         return template.Replace("{userId}", userId, StringComparison.OrdinalIgnoreCase).Trim();
     }
 
-    private static string EnsureNotificationUrlHasFunctionCode(string url, string? functionKey)
-    {
-        if (string.IsNullOrWhiteSpace(url) || string.IsNullOrWhiteSpace(functionKey))
-            return url;
-
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-            return url;
-
-        var existingQuery = uri.Query.TrimStart('?');
-        var hasCode = existingQuery
-            .Split('&', StringSplitOptions.RemoveEmptyEntries)
-            .Select(p => p.Split('=', 2)[0])
-            .Any(k => string.Equals(k, "code", StringComparison.OrdinalIgnoreCase));
-
-        if (hasCode)
-            return url;
-
-        var encoded = Uri.EscapeDataString(functionKey);
-        var newQuery = string.IsNullOrWhiteSpace(existingQuery)
-            ? $"code={encoded}"
-            : $"{existingQuery}&code={encoded}";
-
-        var builder = new UriBuilder(uri) { Query = newQuery };
-        return builder.Uri.AbsoluteUri;
-    }
 }

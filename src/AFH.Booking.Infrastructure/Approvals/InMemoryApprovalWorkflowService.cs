@@ -21,17 +21,11 @@ public sealed class InMemoryApprovalWorkflowService : IApprovalWorkflowService
         public string? ReviewNotes { get; set; }
     }
 
-    private static readonly string[] DefaultApprovers = ["Ian"];
+    private static readonly string[] DefaultApprovers = ["Booking Approvers"];
 
     private readonly ConcurrentDictionary<string, ApprovalRecord> _records = new(StringComparer.OrdinalIgnoreCase);
 
-    public Task<ApprovalRequestResponse> CreateAsync(
-        string bookingId,
-        string changeType,
-        string requestedBy,
-        string? reasonCode,
-        string? reasonDetail,
-        CancellationToken ct)
+    public Task<ApprovalRequestResponse> CreateAsync(CreateApprovalWorkflowRequest request, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
         var id = Guid.NewGuid().ToString("N");
@@ -39,12 +33,12 @@ public sealed class InMemoryApprovalWorkflowService : IApprovalWorkflowService
         var record = new ApprovalRecord
         {
             RequestId = id,
-            BookingId = bookingId,
-            ChangeType = changeType,
-            RequestedBy = requestedBy,
+            BookingId = request.BookingId,
+            ChangeType = request.ChangeType,
+            RequestedBy = request.RequestedBy,
             RequestedUtc = now,
-            ReasonCode = reasonCode,
-            ReasonDetail = reasonDetail
+            ReasonCode = request.ReasonCode,
+            ReasonDetail = request.ReasonDetail
         };
 
         _records[id] = record;
@@ -71,22 +65,17 @@ public sealed class InMemoryApprovalWorkflowService : IApprovalWorkflowService
         return Task.FromResult<ApprovalRequestResponse?>(ToResponse(record));
     }
 
-    public Task<ApprovalRequestResponse?> ReviewAsync(
-        string requestId,
-        bool approved,
-        string reviewer,
-        string? notes,
-        CancellationToken ct)
+    public Task<ApprovalRequestResponse?> ReviewAsync(ReviewApprovalWorkflowRequest request, CancellationToken ct)
     {
-        if (!_records.TryGetValue(requestId, out var record))
+        if (!_records.TryGetValue(request.RequestId, out var record))
             return Task.FromResult<ApprovalRequestResponse?>(null);
 
         if (!string.Equals(record.Status, "Pending", StringComparison.OrdinalIgnoreCase))
             return Task.FromResult<ApprovalRequestResponse?>(ToResponse(record));
 
-        record.Status = approved ? "Approved" : "Rejected";
-        record.Reviewer = reviewer;
-        record.ReviewNotes = notes;
+        record.Status = request.Approved ? "Approved" : "Rejected";
+        record.Reviewer = request.Reviewer;
+        record.ReviewNotes = request.Notes;
         record.ReviewedUtc = DateTime.UtcNow;
 
         return Task.FromResult<ApprovalRequestResponse?>(ToResponse(record));
@@ -117,6 +106,7 @@ public sealed class InMemoryApprovalWorkflowService : IApprovalWorkflowService
         {
             RequestId = record.RequestId,
             BookingId = record.BookingId,
+            TransactionId = "in-memory",
             ChangeType = record.ChangeType,
             RequestedBy = record.RequestedBy,
             Status = record.Status,

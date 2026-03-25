@@ -2,6 +2,7 @@ using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Infrastructure.Http;
 using AFH.Booking.Domain.Options;
+using AFH.Booking.Infrastructure.Auth;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;
@@ -16,15 +17,18 @@ public sealed class CalendarGateway : ICalendarGateway
 
     private readonly HttpClient _http;
     private readonly CalendarSubscriptionOptions _options;
+    private readonly IInternalServiceAuthenticator _authenticator;
     private readonly ILogger<CalendarGateway> _logger;
 
     public CalendarGateway(
         HttpClient http,
         IOptions<CalendarSubscriptionOptions> options,
+        IInternalServiceAuthenticator authenticator,
         ILogger<CalendarGateway> logger)
     {
         _http = http;
         _options = options.Value;
+        _authenticator = authenticator;
         _logger = logger;
     }
 
@@ -61,7 +65,7 @@ public sealed class CalendarGateway : ICalendarGateway
             })
         };
 
-        var url = BuildUrl("/api/v1/calendar/appointments", includeFunctionKeyInQuery: true);
+        var url = BuildUrl("/api/v1/calendar/appointments");
         using var req = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = JsonContent.Create(payload, options: JsonOptions)
@@ -90,7 +94,7 @@ public sealed class CalendarGateway : ICalendarGateway
             showAs = ev.ShowAs.ToString()
         };
 
-        var url = BuildUrl($"/api/v1/calendar/appointments/{Uri.EscapeDataString(ev.EventId)}", includeFunctionKeyInQuery: true);
+        var url = BuildUrl($"/api/v1/calendar/appointments/{Uri.EscapeDataString(ev.EventId)}");
         using var req = new HttpRequestMessage(HttpMethod.Patch, url)
         {
             Content = JsonContent.Create(payload, options: JsonOptions)
@@ -113,7 +117,7 @@ public sealed class CalendarGateway : ICalendarGateway
 
         var path =
             $"/api/v1/calendar/appointments/{Uri.EscapeDataString(providerEventId)}?userId={Uri.EscapeDataString(userId)}";
-        var url = BuildUrl(path, includeFunctionKeyInQuery: true);
+        var url = BuildUrl(path);
 
         using var req = new HttpRequestMessage(HttpMethod.Delete, url);
         AddAuth(req);
@@ -130,7 +134,7 @@ public sealed class CalendarGateway : ICalendarGateway
         EnsureConfigured();
 
         var path = $"/api/v1/calendar/appointments/{Uri.EscapeDataString(eventId)}?userId={Uri.EscapeDataString(userId)}";
-        var url = BuildUrl(path, includeFunctionKeyInQuery: true);
+        var url = BuildUrl(path);
 
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         AddAuth(req);
@@ -156,7 +160,12 @@ public sealed class CalendarGateway : ICalendarGateway
             StartUtc = payload.StartUtc,
             EndUtc = payload.EndUtc,
             ChangeKey = payload.ChangeKey,
-            ICalUId = payload.ICalUId
+            ICalUId = payload.ICalUId,
+            ShowAs = payload.ShowAs,
+            HasLocation = payload.HasLocation,
+            LocationDisplayName = payload.LocationDisplayName,
+            IsRecurring = payload.IsRecurring,
+            RecurrencePattern = payload.RecurrencePattern
         };
     }
 
@@ -171,7 +180,7 @@ public sealed class CalendarGateway : ICalendarGateway
 
         var path =
             $"/api/v1/calendar/users/{Uri.EscapeDataString(userId)}/schedule?startUtc={Uri.EscapeDataString(startUtc.ToString("O"))}&endUtc={Uri.EscapeDataString(endUtc.ToString("O"))}";
-        var url = BuildUrl(path, includeFunctionKeyInQuery: true);
+        var url = BuildUrl(path);
 
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         AddAuth(req);
@@ -216,22 +225,16 @@ public sealed class CalendarGateway : ICalendarGateway
             throw new InvalidOperationException("Calendar:BaseUrl is required.");
     }
 
-    private string BuildUrl(string path, bool includeFunctionKeyInQuery)
+    private string BuildUrl(string path)
     {
         var baseUrl = _options.BaseUrl.TrimEnd('/');
         var normalizedPath = path.StartsWith('/') ? path : $"/{path}";
-
-        if (!includeFunctionKeyInQuery || string.IsNullOrWhiteSpace(_options.FunctionKey))
-            return baseUrl + normalizedPath;
-
-        var separator = normalizedPath.Contains('?') ? "&" : "?";
-        return $"{baseUrl}{normalizedPath}{separator}code={Uri.EscapeDataString(_options.FunctionKey)}";
+        return baseUrl + normalizedPath;
     }
 
     private void AddAuth(HttpRequestMessage req)
     {
-        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
-            req.Headers.TryAddWithoutValidation("x-functions-key", _options.FunctionKey);
+        _authenticator.Apply(req, _options.InternalToken);
     }
 
     private static async Task<T?> ReadEnvelopedOrRawAsync<T>(HttpResponseMessage response, CancellationToken ct)
@@ -270,6 +273,11 @@ public sealed class CalendarGateway : ICalendarGateway
         public DateTime EndUtc { get; set; }
         public string? ChangeKey { get; set; }
         public string? ICalUId { get; set; }
+        public string? ShowAs { get; set; }
+        public bool HasLocation { get; set; }
+        public string? LocationDisplayName { get; set; }
+        public bool IsRecurring { get; set; }
+        public string? RecurrencePattern { get; set; }
     }
 
     private sealed class ScheduleResponse

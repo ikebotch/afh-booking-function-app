@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
@@ -19,6 +20,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
     private readonly IClock _clock;
     private readonly ICalendarGateway _calendar;
     private readonly IMeetingLinkFactory _meetingLinks;
+    private readonly IBookingConflictService _conflicts;
 
     public ConfirmBookingHandler(
         IBookingHoldRepository holds,
@@ -27,7 +29,8 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         IUnitOfWork uow,
         IClock clock,
         ICalendarGateway calendar,
-        IMeetingLinkFactory meetingLinks)
+        IMeetingLinkFactory meetingLinks,
+        IBookingConflictService conflicts)
     {
         _holds = holds;
         _slots = slots;
@@ -36,6 +39,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         _clock = clock;
         _calendar = calendar;
         _meetingLinks = meetingLinks;
+        _conflicts = conflicts;
     }
 
     public async Task<Result<ConfirmBookingResponse>> HandleAsync(ConfirmBookingCommand cmd, CancellationToken ct)
@@ -50,24 +54,33 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
             return Result<ConfirmBookingResponse>.NotFound($"Hold '{cmd.HoldId}' not found.");
 
         if (hold.Status == BookingHoldStatus.Cancelled)
-            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, "Hold already cancelled.", Errors.Conflict);
+            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, "Hold already cancelled.", Errors.HoldCancelled);
 
         if (hold.Status == BookingHoldStatus.Confirmed)
-            return OkResponse(hold);
+            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, "Hold already confirmed.", Errors.HoldAlreadyConfirmed);
 
         if (hold.ExpiresUtc <= utcNow)
-            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, "Hold has expired.", Errors.Conflict);
+            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, "Hold has expired.", Errors.HoldExpired);
 
         if (string.IsNullOrWhiteSpace(hold.SlotId))
-            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, "Hold has no slotId.", Errors.Conflict);
+            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, "Hold has no slotId.", Errors.HoldStateInvalid);
 
         var slot = await _slots.GetAsync(hold.SlotId, ct);
         if (slot is null)
-            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, $"Slot '{hold.SlotId}' not found.", Errors.Conflict);
+            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, $"Slot '{hold.SlotId}' not found.", Errors.HoldSlotMissing);
 
         var tx = await _tx.GetForUpdateAsync(slot.TransactionId, ct);
         if (tx is null)
-            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' not found.", Errors.Conflict);
+            return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' not found.", Errors.HoldTransactionMissing);
+
+        var conflicts = await _conflicts.EvaluateConfirmationConflictsAsync(hold, slot, tx, ct);
+        if (conflicts.IsBlocked)
+        {
+            return Result<ConfirmBookingResponse>.Fail(
+                HttpStatusCode.Conflict,
+                conflicts.ErrorMessage ?? "Booking confirmation blocked by calendar conflict.",
+                conflicts.ErrorCode ?? Errors.Conflict);
+        }
 
         hold.Confirm(utcNow);
         await _holds.UpdateAsync(hold, ct);

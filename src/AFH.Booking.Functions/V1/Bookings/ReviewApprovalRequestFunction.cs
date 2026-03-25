@@ -29,12 +29,12 @@ public sealed class ReviewApprovalRequestFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, "Validation");
 
-        var review = await _approvals.ReviewAsync(
-            requestId.Trim(),
-            approved: body.Approved,
-            reviewer: string.IsNullOrWhiteSpace(body.Reviewer) ? "Ian" : body.Reviewer.Trim(),
-            notes: body.Notes,
-            ct: ct);
+        var review = await _approvals.ReviewAsync(new ReviewApprovalWorkflowRequest(
+            RequestId: requestId.Trim(),
+            Approved: body.Approved,
+            Reviewer: string.IsNullOrWhiteSpace(body.Reviewer) ? "Approver" : body.Reviewer.Trim(),
+            Notes: body.Notes,
+            CorrelationId: BookingChangeRequestContext.GetCorrelationId(req)), ct);
 
         if (review is null)
             return await req.ProblemAsync(HttpStatusCode.NotFound, $"Approval request '{requestId}' was not found.", ct, "NotFound");

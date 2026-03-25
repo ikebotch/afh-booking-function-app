@@ -86,6 +86,18 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         return m is null ? null : m.ToDomain();
     }
 
+    public async Task<BookingHold?> GetByCalendarEventIdAsync(string providerEventId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(providerEventId))
+            throw new ArgumentException("providerEventId is required.", nameof(providerEventId));
+
+        var m = await _db.Holds
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.CalendarProviderEventId == providerEventId, ct);
+
+        return m is null ? null : m.ToDomain();
+    }
+
     public async Task<BookingHold?> GetActiveBySlotIdAsync(string slotId, DateTime utcNow, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(slotId))

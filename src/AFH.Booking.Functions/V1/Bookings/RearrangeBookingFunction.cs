@@ -71,7 +71,8 @@ public sealed class RearrangeBookingFunction
             NewSlotId = body.NewSlotId,
             RequestedBy = requestedBy,
             ReasonCode = body.ReasonCode,
-            ReasonDetail = body.ReasonDetail
+            ReasonDetail = body.ReasonDetail,
+            CorrelationId = req.Headers.TryGetValues("x-correlation-id", out var values) ? values.FirstOrDefault() : null
         };
 
         var result = await _handler.HandleAsync(cmd, ct);

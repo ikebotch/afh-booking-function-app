@@ -11,6 +11,7 @@ var host = new HostBuilder()
     {
         app.UseMiddleware<CorrelationIdMiddleware>();
         app.UseMiddleware<OperationAuditMiddleware>();
+        app.UseMiddleware<InternalApiAuthMiddleware>();
     })
     .ConfigureAppConfiguration((ctx, cfg) =>
     {
@@ -61,6 +62,7 @@ var host = new HostBuilder()
         services.AddBookingApplication();
         services.AddBookingInfrastructure(ctx.Configuration);
         services.AddHttpClient();
+        services.Configure<InternalApiAuthOptions>(ctx.Configuration.GetSection(InternalApiAuthOptions.SectionName));
 
         services.Configure<WorkerOptions>(options =>
         {
@@ -68,9 +70,11 @@ var host = new HostBuilder()
                 new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-                    DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
+                    DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
+                    PropertyNameCaseInsensitive = true
                 });
         });
+
     })
     .Build();
 

@@ -4,6 +4,7 @@ using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Bookings.Mappings;
 using AFH.Booking.Application.Bookings.Queries;
 using AFH.Booking.Application.Calendar.Queries;
+using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Contracts.V1.Common;
 using AFH.Booking.Contracts.V1.Responses;
@@ -29,6 +30,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
     private readonly IBookingSlotRepository _slotRepo;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
+    private readonly ITimeZoneProvider _timeZoneProvider;
     private readonly ILogger<AvailabilityHandler> _logger;
 
     public AvailabilityHandler(
@@ -40,6 +42,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         IBookingSlotRepository slotRepo,
         IUnitOfWork uow,
         IClock clock,
+        ITimeZoneProvider timeZoneProvider,
         ILogger<AvailabilityHandler> logger)
     {
         _scorer = scorer;
@@ -50,6 +53,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         _slotRepo = slotRepo;
         _uow = uow;
         _clock = clock;
+        _timeZoneProvider = timeZoneProvider;
         _logger = logger;
     }
 
@@ -239,7 +243,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                 transactionRef: q.TransactionId ?? q.ClientId!,
                 proposedStartUtc: firstSlot,
                 duration: TimeSpan.FromMinutes(q.Duration),
-                timezone: "Europe/London",
+                timezone: _timeZoneProvider.DefaultTimeZoneId,
                 isRemote: q.IsRemote,
                 meetingType: q.MeetingType,
                 locationRef: q.LocationRef,
@@ -354,7 +358,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             AdviserList = advisers,
             StartUtc = start,
             EndUtc = end,
-            Timezone = "Europe/London"
+            Timezone = _timeZoneProvider.DefaultTimeZoneId
         }, ct);
 
         if (!calResult.IsSuccess)
@@ -476,7 +480,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             AdviserList = single,
             StartUtc = blockedStartUtc,
             EndUtc = blockedEndUtc,
-            Timezone = "Europe/London"
+            Timezone = _timeZoneProvider.DefaultTimeZoneId
         }, ct);
 
         if (!calResult.IsSuccess || calResult.Value is null)

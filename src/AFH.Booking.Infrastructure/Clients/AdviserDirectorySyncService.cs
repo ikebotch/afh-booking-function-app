@@ -3,6 +3,7 @@ using AFH.Booking.Application.Abstractions.Calendar.Subscription;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Domain.Options;
+using AFH.Booking.Infrastructure.Auth;
 using AFH.Booking.Infrastructure.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,6 +17,7 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
     private const string SyncCursorKey = "adviser_directory_last_sync_utc";
     private readonly HttpClient _http;
     private readonly AdviserDirectoryOptions _options;
+    private readonly IInternalServiceAuthenticator _authenticator;
     private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IIntegrationSyncStateRepository _syncState;
     private readonly IClock _clock;
@@ -26,6 +28,7 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
     public AdviserDirectorySyncService(
         HttpClient http,
         IOptions<AdviserDirectoryOptions> options,
+        IInternalServiceAuthenticator authenticator,
         IAdviserProfileProjectionRepository profiles,
         IIntegrationSyncStateRepository syncState,
         IClock clock,
@@ -35,6 +38,7 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
     {
         _http = http;
         _options = options.Value;
+        _authenticator = authenticator;
         _profiles = profiles;
         _syncState = syncState;
         _clock = clock;
@@ -72,15 +76,8 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
             var sepSince = url.Contains('?') ? "&" : "?";
             url += $"{sepSince}sinceUtc={Uri.EscapeDataString(sinceUtc.Value.ToString("O"))}";
         }
-        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
-        {
-            var sep = url.Contains('?') ? "&" : "?";
-            url += $"{sep}code={Uri.EscapeDataString(_options.FunctionKey)}";
-        }
-
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
-            req.Headers.TryAddWithoutValidation("x-functions-key", _options.FunctionKey);
+        _authenticator.Apply(req, _options.InternalToken);
 
         using var res = await _http.SendAsync(req, ct);
         res.EnsureSuccessStatusCode();

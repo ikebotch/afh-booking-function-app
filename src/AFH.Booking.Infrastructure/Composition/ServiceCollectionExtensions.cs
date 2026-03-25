@@ -1,21 +1,27 @@
 using AFH.Booking.Application.Abstractions.Approvals;
+using AFH.Booking.Application.Abstractions.Bookings;
+using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Calendar.Subscription;
 using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Domain.Options;
+using AFH.Booking.Infrastructure.Approvals;
+using AFH.Booking.Infrastructure.Auth;
+using AFH.Booking.Infrastructure.Bookings;
 using AFH.Booking.Infrastructure.Calendar;
 using AFH.Booking.Infrastructure.Clients;
 using AFH.Booking.Infrastructure.Location;
 using AFH.Booking.Infrastructure.Meetings;
-using AFH.Booking.Infrastructure.Approvals;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace AFH.Booking.Infrastructure.Composition;
 
@@ -35,7 +41,15 @@ public static class ServiceCollectionExtensions
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));
         services.Configure<CalendarProjectionOptions>(config.GetSection(CalendarProjectionOptions.SectionName));
         services.Configure<NotificationsOptions>(config.GetSection(NotificationsOptions.SectionName));
+        services.Configure<BookingChangeAccessOptions>(config.GetSection(BookingChangeAccessOptions.SectionName));
+        services.Configure<ApprovalRoutingOptions>(config.GetSection(ApprovalRoutingOptions.SectionName));
+        services.Configure<LifecycleReasonOptions>(config.GetSection(LifecycleReasonOptions.SectionName));
+        services.Configure<LifecycleNotificationOptions>(config.GetSection(LifecycleNotificationOptions.SectionName));
+        services.Configure<LifecycleEscalationOptions>(config.GetSection(LifecycleEscalationOptions.SectionName));
+        services.Configure<LifecycleGovernanceOptions>(config.GetSection(LifecycleGovernanceOptions.SectionName));
+        services.Configure<OutlookGovernanceOptions>(config.GetSection(OutlookGovernanceOptions.SectionName));
         services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
+        services.AddSingleton<IInternalServiceAuthenticator, InternalBearerServiceAuthenticator>();
 
         var db = config.GetSection(BookingDbOptions.SectionName).Get<BookingDbOptions>() ?? new BookingDbOptions();
         db.ConnectionString = string.IsNullOrWhiteSpace(db.ConnectionString)
@@ -123,6 +137,13 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IIntegrationSyncStateRepository, IntegrationSyncStateRepository>();
         services.AddScoped<ICalendarSubscriptionRepository, CalendarSubscriptionRepository>();
         services.AddScoped<ICalendarNotificationRepository, CalendarNotificationRepository>();
+        services.AddScoped<ILifecycleEventRepository, LifecycleEventRepository>();
+        services.AddScoped<ILifecycleStepRepository, LifecycleStepRepository>();
+        services.AddScoped<INotificationDispatchRepository, NotificationDispatchRepository>();
+        services.AddScoped<IOperationalIssueRepository, OperationalIssueRepository>();
+        services.AddScoped<IBookingChangeAccessService, HmacBookingChangeAccessService>();
+        services.AddScoped<IApprovalRoutingService, ConfigurationApprovalRoutingService>();
+        services.AddScoped<IApprovalNotificationService, ApprovalNotificationService>();
         services.AddScoped<IApprovalWorkflowService, DbApprovalWorkflowService>();
         services.AddScoped<IEmailBounceService, EmailBounceService>();
         services.AddHttpClient<IAdviserDirectorySyncService, AdviserDirectorySyncService>((sp, http) =>
@@ -135,6 +156,8 @@ public static class ServiceCollectionExtensions
         });
         services.AddHostedService<AdviserDirectoryProjectionSyncWorker>();
         services.AddScoped<IClientNotificationService, ClientNotificationService>();
+        services.AddScoped<IOperationalNotificationService, OperationalNotificationService>();
+        services.AddScoped<INotificationService>(sp => (INotificationService)sp.GetRequiredService<IClientNotificationService>());
         services.AddScoped<IDuplicateClientService, DuplicateClientService>();
         services.AddScoped<IDownstreamUpdateService, DownstreamUpdateService>();
 
@@ -156,10 +179,14 @@ public static class ServiceCollectionExtensions
             var options = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(options.BaseUrl))
                 http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
-
             http.Timeout = TimeSpan.FromSeconds(30);
         });
         services.AddHostedService<BookingOperationalStoreInitializer>();
+        services.AddSingleton(new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DictionaryKeyPolicy = JsonNamingPolicy.CamelCase
+        });
 
         return services;
     }

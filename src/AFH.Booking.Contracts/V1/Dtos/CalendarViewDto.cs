@@ -14,7 +14,7 @@ public sealed class CalendarViewDto
     public IReadOnlyList<string>? Categories { get; init; }
 
     public bool MailboxUnavailable { get; init; }
-    public string Message { get; init; } = string.Empty;
+    public string Message { get; init; }
 
     public List<CalendarBlock> Conflicts { get; init; } = [];
 }

@@ -1,20 +1,29 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# AFH Booking Service
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+## What It Owns
+- Booking orchestration and booking operational state.
+- Hold, confirm, cancel, rearrange, approval, and projection workflows.
+- Internal calls to the location service for in-person adviser search.
+- Internal calls to the calendar service for appointment and subscription work.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+## Local Setup
+1. Copy `src/AFH.Booking.Functions/local.settings.template.json` to `src/AFH.Booking.Functions/local.settings.json`.
+2. Fill in connection strings, external integrations, and the shared internal bearer token.
+3. Keep `InternalApiAuth:AllowAnonymousInDevelopment=true` only for local development.
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+## Internal Auth
+- Booking-to-calendar and booking-to-location calls use `Authorization: Bearer <token>`.
+- Booking internal calendar routes use the same bearer token via `InternalApiAuth:*`.
+- Do not add `?code=` or `x-functions-key` to backend-to-backend calls.
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+## Build And Test
+- `dotnet test AFH.BookingService.sln`
+
+## SQL Migration Note
+- Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.
+- Create and apply an EF migration from the infrastructure project before deploying to shared environments.
+- Treat that migration as required infra work for this backend phase.
+
+## More Detail
+- See `docs/backend-architecture.md` for service boundaries, endpoint classification, configuration, and timezone handling.
+- The same document now also covers lifecycle SQL/audit tables, orchestration sequencing, and deferred cancellation/rearrangement work for later phases.

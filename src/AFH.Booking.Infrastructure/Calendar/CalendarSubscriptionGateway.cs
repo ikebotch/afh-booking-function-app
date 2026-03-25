@@ -2,6 +2,7 @@ using AFH.Booking.Application.Abstractions.Calendar.Subscription;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Infrastructure.Http;
 using AFH.Booking.Domain.Options;
+using AFH.Booking.Infrastructure.Auth;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;
@@ -16,15 +17,18 @@ public sealed class CalendarSubscriptionGateway : ICalendarSubscriptionGateway
 
     private readonly HttpClient _http;
     private readonly CalendarSubscriptionOptions _opts;
+    private readonly IInternalServiceAuthenticator _authenticator;
     private readonly ILogger<CalendarSubscriptionGateway> _logger;
 
     public CalendarSubscriptionGateway(
         HttpClient http,
         IOptions<CalendarSubscriptionOptions> opts,
+        IInternalServiceAuthenticator authenticator,
         ILogger<CalendarSubscriptionGateway> logger)
     {
         _http = http;
         _opts = opts.Value;
+        _authenticator = authenticator;
         _logger = logger;
     }
 
@@ -55,7 +59,7 @@ public sealed class CalendarSubscriptionGateway : ICalendarSubscriptionGateway
             expirationUtc = request.ExpirationUtc
         };
 
-        var url = BuildUrl("/api/v1/calendar/subscriptions", includeFunctionKeyInQuery: true);
+        var url = BuildUrl("/api/v1/calendar/subscriptions");
         using var req = new HttpRequestMessage(HttpMethod.Post, url)
         {
             Content = JsonContent.Create(payload, options: JsonOptions)
@@ -100,7 +104,7 @@ public sealed class CalendarSubscriptionGateway : ICalendarSubscriptionGateway
         if (string.IsNullOrWhiteSpace(subscriptionId))
             return Result.Fail(HttpStatusCode.BadRequest, "subscriptionId is required.", "Validation");
 
-        var url = BuildUrl($"/api/v1/calendar/subscriptions/{Uri.EscapeDataString(subscriptionId)}", includeFunctionKeyInQuery: true);
+        var url = BuildUrl($"/api/v1/calendar/subscriptions/{Uri.EscapeDataString(subscriptionId)}");
         using var req = new HttpRequestMessage(HttpMethod.Delete, url);
         AddAuth(req);
 
@@ -126,22 +130,16 @@ public sealed class CalendarSubscriptionGateway : ICalendarSubscriptionGateway
         return Result.Ok();
     }
 
-    private string BuildUrl(string path, bool includeFunctionKeyInQuery)
+    private string BuildUrl(string path)
     {
         var baseUrl = _opts.BaseUrl.TrimEnd('/');
         var normalizedPath = path.StartsWith('/') ? path : $"/{path}";
-
-        if (!includeFunctionKeyInQuery || string.IsNullOrWhiteSpace(_opts.FunctionKey))
-            return baseUrl + normalizedPath;
-
-        var separator = normalizedPath.Contains('?') ? "&" : "?";
-        return $"{baseUrl}{normalizedPath}{separator}code={Uri.EscapeDataString(_opts.FunctionKey)}";
+        return baseUrl + normalizedPath;
     }
 
     private void AddAuth(HttpRequestMessage req)
     {
-        if (!string.IsNullOrWhiteSpace(_opts.FunctionKey))
-            req.Headers.TryAddWithoutValidation("x-functions-key", _opts.FunctionKey);
+        _authenticator.Apply(req, _opts.InternalToken);
     }
 
     private static async Task<T?> ReadEnvelopedOrRawAsync<T>(HttpResponseMessage response, CancellationToken ct)

@@ -1,9 +1,10 @@
 using System.Net.Http.Json;
 using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.Common;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Infrastructure.Persistence;
-using AFH.Booking.Infrastructure.Persistence.Models;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Logging;
@@ -11,32 +12,35 @@ using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Infrastructure.Clients;
 
-public sealed class ClientNotificationService : IClientNotificationService
+public sealed class ClientNotificationService : IClientNotificationService, INotificationService
 {
-    private readonly BookingDbContext _db;
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
     private readonly IClientDirectory _clients;
+    private readonly INotificationDispatchRepository _dispatches;
+    private readonly IUnitOfWork _uow;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly NotificationsOptions _options;
     private readonly ILogger<ClientNotificationService> _logger;
 
     public ClientNotificationService(
-        BookingDbContext db,
         IBookingHoldRepository holds,
         IBookingSlotRepository slots,
         IBookingTransactionRepository transactions,
         IClientDirectory clients,
+        INotificationDispatchRepository dispatches,
+        IUnitOfWork uow,
         IHttpClientFactory httpClientFactory,
         IOptions<NotificationsOptions> options,
         ILogger<ClientNotificationService> logger)
     {
-        _db = db;
         _holds = holds;
         _slots = slots;
         _transactions = transactions;
         _clients = clients;
+        _dispatches = dispatches;
+        _uow = uow;
         _httpClientFactory = httpClientFactory;
         _options = options.Value;
         _logger = logger;
@@ -50,9 +54,23 @@ public sealed class ClientNotificationService : IClientNotificationService
         bool sendEmail,
         CancellationToken ct)
     {
-        var hold = await _holds.GetAsync(bookingId, ct);
+        return await SendBookingNotificationAsync(
+            new NotificationDispatchRequest(
+                bookingId,
+                eventType,
+                message,
+                sendSms,
+                sendEmail),
+            ct);
+    }
+
+    public async Task<NotificationDispatchResponse> SendBookingNotificationAsync(
+        NotificationDispatchRequest request,
+        CancellationToken ct)
+    {
+        var hold = await _holds.GetAsync(request.BookingId, ct);
         if (hold is null)
-            throw new InvalidOperationException($"Hold '{bookingId}' was not found.");
+            throw new InvalidOperationException($"Hold '{request.BookingId}' was not found.");
 
         var slot = await _slots.GetAsync(hold.SlotId, ct);
         if (slot is null)
@@ -63,34 +81,34 @@ public sealed class ClientNotificationService : IClientNotificationService
             throw new InvalidOperationException($"Transaction '{slot.TransactionId}' was not found.");
 
         var client = await _clients.GetAsync(tx.TransactionRef, ct);
-        var defaultSmsBody = string.IsNullOrWhiteSpace(message)
-            ? $"Your booking has been updated ({eventType}) for {slot.StartUtc:yyyy-MM-dd HH:mm} with {slot.AdviserName}."
-            : message.Trim();
+        var defaultSmsBody = string.IsNullOrWhiteSpace(request.Message)
+            ? $"Your booking has been updated ({request.EventType}) for {slot.StartUtc:yyyy-MM-dd HH:mm} with {slot.AdviserName}."
+            : request.Message!.Trim();
 
         var clientDisplayName = $"{client?.FirstName} {client?.LastName}".Trim();
         if (string.IsNullOrWhiteSpace(clientDisplayName))
             clientDisplayName = null;
 
         var emailTemplate = BookingNotificationEmailTemplate.Build(
-            eventType: eventType,
+            eventType: request.EventType,
             clientDisplayName: clientDisplayName,
             adviserName: slot.AdviserName,
             startUtc: slot.StartUtc,
             endUtc: slot.EndUtc,
             timezoneId: tx.Timezone,
             isRemote: tx.IsRemote,
-            customMessage: message);
+            customMessage: request.Message);
 
-        var smsStatus = sendSms ? "Pending" : "Skipped";
-        var emailStatus = sendEmail ? "Pending" : "Skipped";
+        var smsStatus = request.SendSms ? "Pending" : "Skipped";
+        var emailStatus = request.SendEmail ? "Pending" : "Skipped";
         var providerMessageId = Guid.NewGuid().ToString("N")[..20];
 
-        if (sendSms)
+        if (request.SendSms)
         {
             smsStatus = await SendSmsAsync(client?.Phone, defaultSmsBody, ct);
         }
 
-        if (sendEmail)
+        if (request.SendEmail)
         {
             emailStatus = string.IsNullOrWhiteSpace(client?.Email)
                 ? "Skipped"
@@ -98,42 +116,76 @@ public sealed class ClientNotificationService : IClientNotificationService
         }
 
         // Persist plain text because current provider path renders stored content as text/plain.
-        var persistedBody = sendEmail ? emailTemplate.TextBody : defaultSmsBody;
+        var persistedBody = request.SendEmail ? emailTemplate.TextBody : defaultSmsBody;
         if (persistedBody.Length > 3900)
             persistedBody = persistedBody[..3900];
 
-        var dispatch = new NotificationDispatchModel
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            BookingId = bookingId,
-            EventType = eventType,
-            SmsRequested = sendSms,
-            EmailRequested = sendEmail,
-            SmsStatus = smsStatus,
-            EmailStatus = emailStatus,
-            RecipientPhone = client?.Phone,
-            RecipientEmail = client?.Email,
-            ProviderMessageId = providerMessageId,
-            MessageBody = persistedBody,
-            CreatedUtc = DateTime.UtcNow,
-            UpdatedUtc = DateTime.UtcNow
-        };
+        var outcomeCode = ResolveOutcomeCode(smsStatus, emailStatus);
+        var failureDetails = outcomeCode == LifecycleStepStatuses.Failed
+            ? BuildFailureDetails(smsStatus, emailStatus)
+            : null;
 
-        _db.NotificationDispatches.Add(dispatch);
-        await _db.SaveChangesAsync(ct);
+        var dispatchId = Guid.NewGuid().ToString("N");
+        var now = DateTime.UtcNow;
+        await _dispatches.AddAsync(new NotificationDispatchRecord(
+            Id: dispatchId,
+            BookingId: request.BookingId,
+            TransactionId: tx.Id,
+            TransactionRef: tx.TransactionRef,
+            EventType: request.EventType,
+            SmsRequested: request.SendSms,
+            EmailRequested: request.SendEmail,
+            SmsStatus: smsStatus,
+            EmailStatus: emailStatus,
+            OutcomeCode: outcomeCode,
+            FailureDetails: failureDetails,
+            RecipientPhone: client?.Phone,
+            RecipientEmail: client?.Email,
+            ProviderMessageId: providerMessageId,
+            MessageBody: persistedBody,
+            LifecycleEventId: request.LifecycleEventId,
+            CorrelationId: request.CorrelationId,
+            CreatedUtc: now,
+            UpdatedUtc: now), ct);
+        await _uow.SaveChangesAsync(ct);
 
         return new NotificationDispatchResponse
         {
-            DispatchId = dispatch.Id,
-            BookingId = dispatch.BookingId,
-            EventType = dispatch.EventType,
-            SmsRequested = dispatch.SmsRequested,
-            EmailRequested = dispatch.EmailRequested,
-            SmsStatus = dispatch.SmsStatus,
-            EmailStatus = dispatch.EmailStatus,
-            ProviderMessageId = dispatch.ProviderMessageId,
-            CreatedUtc = dispatch.CreatedUtc
+            DispatchId = dispatchId,
+            BookingId = request.BookingId,
+            EventType = request.EventType,
+            SmsRequested = request.SendSms,
+            EmailRequested = request.SendEmail,
+            SmsStatus = smsStatus,
+            EmailStatus = emailStatus,
+            ProviderMessageId = providerMessageId,
+            CreatedUtc = now
         };
+    }
+
+    private static string ResolveOutcomeCode(string smsStatus, string emailStatus)
+    {
+        if (smsStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase) ||
+            emailStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return LifecycleStepStatuses.Failed;
+        }
+
+        if (smsStatus == "Skipped" && emailStatus == "Skipped")
+            return LifecycleStepStatuses.Skipped;
+
+        return LifecycleStepStatuses.Succeeded;
+    }
+
+    private static string? BuildFailureDetails(string smsStatus, string emailStatus)
+    {
+        var parts = new List<string>();
+        if (smsStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase))
+            parts.Add($"SMS={smsStatus}");
+        if (emailStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase))
+            parts.Add($"Email={emailStatus}");
+
+        return parts.Count == 0 ? null : string.Join("; ", parts);
     }
 
     private async Task<string> SendSmsAsync(string? phone, string message, CancellationToken ct)

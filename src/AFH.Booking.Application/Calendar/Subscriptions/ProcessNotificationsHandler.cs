@@ -1,4 +1,5 @@
 ﻿using AFH.Booking.Application.Abstractions.Calendar.Subscription;
+using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Domain.Calendar;
@@ -25,6 +26,7 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
     private readonly ICalendarEventSnapshotRepository _snapshots;
     private readonly IAdviserAvailabilityProjectionRepository _availabilityProjection;
     private readonly CalendarProjectionOptions _projectionOptions;
+    private readonly ICalendarGovernanceService _governance;
 
 
     public ProcessNotificationsHandler(
@@ -37,7 +39,8 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
        IUnitOfWork uow,
        IClock clock,
        IAdviserAvailabilityProjectionRepository availabilityProjection,
-       IOptions<CalendarProjectionOptions> projectionOptions)
+       IOptions<CalendarProjectionOptions> projectionOptions,
+       ICalendarGovernanceService governance)
     {
         _logger = logger;
         _opts = opts.Value;
@@ -49,6 +52,7 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
         _clock = clock;
         _availabilityProjection = availabilityProjection;
         _projectionOptions = projectionOptions.Value;
+        _governance = governance;
     }
 
     public async Task<Result> HandleAsync(CalendarNotificationsRequest? envelope, CancellationToken ct)
@@ -122,17 +126,18 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
 
 
 
-            var receipt = CalendarNotificationReceipt.Create(
-                subscriptionId: subscriptionId!,
-                eventId: eventId!,
-                changeType: changeType,
-                clientState: clientState,
-                accepted: accepted,
-                rejectReason: rejectReason,
-                receivedUtc: _clock.UtcNow,
-                rawPayload: rawPayload);
-
-            await _notifications.AddAsync(receipt, ct);
+            var receipt = await _notifications.AddAsync(
+                 CalendarNotificationReceipt.Create(
+                     subscriptionId: subscriptionId!,
+                     eventId: eventId!,
+                     changeType: changeType,
+                     clientState: clientState,
+                     accepted: accepted,
+                     rejectReason: rejectReason,
+                     receivedUtc: _clock.UtcNow,
+                     rawPayload: rawPayload
+                    ),
+                 ct);
 
 
 
@@ -148,6 +153,12 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
                         sub.UserId,
                         eventId!,
                         _clock.UtcNow,
+                        ct);
+
+                    await _governance.HandleDeletedEventAsync(
+                        sub.UserId,
+                        eventId!,
+                        null,
                         ct);
                 }
             }
@@ -207,6 +218,13 @@ public sealed class ProcessNotificationsHandler : IProcessNotificationsHandler
                                 },
                                 ct);
                         }
+
+                        await _governance.HandleSnapshotAsync(
+                            sub.UserId,
+                            eventId!,
+                            evt,
+                            null,
+                            ct);
                     }
                     catch (Exception ex)
                     {

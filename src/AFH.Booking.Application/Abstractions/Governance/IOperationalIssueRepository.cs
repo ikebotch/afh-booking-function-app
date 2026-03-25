@@ -1,0 +1,26 @@
+namespace AFH.Booking.Application.Abstractions.Governance;
+
+public interface IOperationalIssueRepository
+{
+    Task AddAsync(OperationalIssueRecord record, CancellationToken ct);
+    Task<OperationalIssueRecord?> GetLatestAsync(string adviserId, string providerEventId, string code, CancellationToken ct);
+    Task<int> CountRecentAsync(string adviserId, string code, DateTime sinceUtc, CancellationToken ct);
+    Task UpdateAsync(OperationalIssueRecord record, CancellationToken ct);
+}
+
+public sealed record OperationalIssueRecord(
+    string Id,
+    string IssueType,
+    string Code,
+    string Severity,
+    string Status,
+    DateTime DetectedUtc,
+    string? BookingId,
+    string? TransactionId,
+    string? TransactionRef,
+    string? AdviserId,
+    string? ProviderEventId,
+    string? CorrelationId,
+    string? MetadataJson,
+    int EscalationCount,
+    DateTime? LastEscalatedUtc);

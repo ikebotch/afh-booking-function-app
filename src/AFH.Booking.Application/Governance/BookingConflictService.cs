@@ -1,0 +1,104 @@
+using AFH.Booking.Application.Abstractions.Governance;
+using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.Common;
+using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Domain.Bookings;
+using AFH.Booking.Domain.Transactions;
+
+namespace AFH.Booking.Application.Governance;
+
+public sealed class BookingConflictService : IBookingConflictService
+{
+    private const int DefaultCompanyBufferMinutes = 30;
+
+    private readonly IAdviserAvailabilityProjectionRepository _availabilityProjection;
+    private readonly IOperationalIssueRepository _issues;
+    private readonly IUnitOfWork _uow;
+    private readonly IClock _clock;
+
+    public BookingConflictService(
+        IAdviserAvailabilityProjectionRepository availabilityProjection,
+        IOperationalIssueRepository issues,
+        IUnitOfWork uow,
+        IClock clock)
+    {
+        _availabilityProjection = availabilityProjection;
+        _issues = issues;
+        _uow = uow;
+        _clock = clock;
+    }
+
+    public async Task<BookingConflictCheckResult> EvaluateConfirmationConflictsAsync(
+        BookingHold hold,
+        BookingSlot slot,
+        BookingTransaction transaction,
+        CancellationToken ct)
+    {
+        var bufferStartUtc = slot.StartUtc.AddMinutes(-(transaction.IsRemote ? 0 : GetBufferMinutes(slot)));
+        var bufferEndUtc = slot.EndUtc.AddMinutes(transaction.IsRemote ? 0 : Math.Max(0, slot.CompanyBufferMinutes ?? DefaultCompanyBufferMinutes));
+
+        var blocks = await _availabilityProjection.ListBusyBlocksAsync(slot.AdviserId, bufferStartUtc, bufferEndUtc, ct);
+
+        var relevantBlocks = blocks
+            .Where(x => !x.IsCancelled)
+            .Where(x => !string.Equals(x.ProviderEventId, hold.CalendarProviderEventId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (relevantBlocks.Count == 0)
+        {
+            return new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>());
+        }
+
+        var details = new List<BookingConflictDetail>();
+        foreach (var block in relevantBlocks)
+        {
+            var code = block.StartUtc < slot.EndUtc && block.EndUtc > slot.StartUtc
+                ? Errors.BookingConflictDoubleBooked
+                : Errors.BookingConflictBufferViolation;
+
+            var message = code == Errors.BookingConflictDoubleBooked
+                ? $"Adviser {slot.AdviserId} already has an overlapping Outlook event."
+                : $"Adviser {slot.AdviserId} has an Outlook buffer conflict.";
+
+            details.Add(new BookingConflictDetail(code, message, block.StartUtc, block.EndUtc, block.ProviderEventId));
+
+            await _issues.AddAsync(new OperationalIssueRecord(
+                Id: Guid.NewGuid().ToString("N"),
+                IssueType: OutlookIssueTypes.Conflict,
+                Code: code,
+                Severity: "Error",
+                Status: OperationalIssueStatuses.Open,
+                DetectedUtc: _clock.UtcNow,
+                BookingId: hold.Id,
+                TransactionId: transaction.Id,
+                TransactionRef: transaction.TransactionRef,
+                AdviserId: slot.AdviserId,
+                ProviderEventId: block.ProviderEventId,
+                CorrelationId: null,
+                MetadataJson: System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    holdId = hold.Id,
+                    slotId = slot.Id,
+                    requestedStartUtc = slot.StartUtc,
+                    requestedEndUtc = slot.EndUtc,
+                    conflictStartUtc = block.StartUtc,
+                    conflictEndUtc = block.EndUtc,
+                    block.Subject
+                }),
+                EscalationCount: 0,
+                LastEscalatedUtc: null), ct);
+        }
+
+        await _uow.SaveChangesAsync(ct);
+
+        var first = details[0];
+        return new BookingConflictCheckResult(true, first.Code, first.Message, details);
+    }
+
+    private static int GetBufferMinutes(BookingSlot slot)
+    {
+        var travelMinutes = Math.Max(0, slot.TravelMinutes ?? 0);
+        var companyBufferMinutes = Math.Max(0, slot.CompanyBufferMinutes ?? DefaultCompanyBufferMinutes);
+        return travelMinutes + companyBufferMinutes;
+    }
+}

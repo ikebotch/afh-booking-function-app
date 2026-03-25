@@ -8,4 +8,9 @@ public sealed class CalendarEventDetails
     public DateTime EndUtc { get; init; }
     public string? ChangeKey { get; init; }
     public string? ICalUId { get; init; }
+    public string? ShowAs { get; init; }
+    public bool HasLocation { get; init; }
+    public string? LocationDisplayName { get; init; }
+    public bool IsRecurring { get; init; }
+    public string? RecurrencePattern { get; init; }
 }

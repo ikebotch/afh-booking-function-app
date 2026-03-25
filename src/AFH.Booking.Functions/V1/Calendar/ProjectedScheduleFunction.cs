@@ -20,7 +20,7 @@ public sealed class ProjectedScheduleFunction
 
     [Function("Calendar_ProjectedSchedule")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/calendar/users/{userId}/schedule")]
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/calendar/users/{userId}/schedule")]
         HttpRequestData req,
         string userId,
         CancellationToken ct)

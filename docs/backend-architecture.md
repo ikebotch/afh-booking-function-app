@@ -4,6 +4,7 @@
 - Booking service: system of record for booking transactions, holds, confirmations, cancellations, rearrangements, projections, and approval workflows.
 - Location service: in-person adviser discovery, filtering, ranking, travel evaluation, adviser reference caching, and policy-driven availability shaping.
 - Calendar service: calendar-provider facade for schedule lookup, appointment lifecycle, Graph subscriptions, Graph notification intake, and calendar projection reads.
+- ACS service: ACS session and join-link concerns only on the booking path. Booking requests the session/link, then calls Calendar separately for Outlook changes.
 
 ## Endpoint Classification
 - Public:
@@ -18,17 +19,23 @@
   - Booking admin endpoints remain function-key protected because they are not part of the backend-to-backend bearer flow in this repo pass.
 
 ## Internal Auth Model
-- Backend-to-backend calls now use `Authorization: Bearer <shared internal token>`.
+- Backend-to-backend calls now use function-specific keys at the Functions boundary plus `Authorization: Bearer <shared internal token>`.
 - The bearer token is configured with:
   - Booking inbound: `InternalApiAuth:*`
+  - Booking outbound to ACS: `Acs:InternalToken`
+  - Booking outbound to ACS function auth: `Acs:FunctionKey`
   - Booking outbound to calendar: `Calendars:InternalToken`
+  - Booking outbound to calendar function auth: `Calendars:FunctionKey`
   - Booking outbound to location: `LocationService:InternalToken`
+  - Booking outbound to location function auth: `LocationService:FunctionKey`
   - Booking adviser projection sync: `AdviserDirectory:InternalToken`
   - Location inbound: `InternalApiAuth:*`
   - Location outbound to calendar: `CalendarService:InternalToken`
+  - Location outbound to calendar function auth: `CalendarService:FunctionKey`
   - Calendar inbound: `InternalApiAuth:*`
+  - Calendar outbound to booking webhook function auth: `GraphWebhook:BookingFunctionKey`
   - Calendar outbound to booking webhook: `GraphWebhook:BookingInternalToken`
-- Backend-to-backend `?code=` and `x-functions-key` usage has been removed from the in-scope internal paths.
+- Internal function keys remain part of the design for function apps, but master-key and `?code=` query-string usage should not be used on routine service-to-service paths.
 
 ## Public And Webhook Exceptions
 - Calendar notifications must remain externally callable because Microsoft Graph performs the callback challenge and delivery.
@@ -132,6 +139,7 @@
 ## Deferred Items
 - Adviser approval remains at the existing function/approval-service boundary; it is not yet moved into the lifecycle orchestrators.
 - Full Outlook auto-restore and deletion-governance enforcement remain partial; current code records and escalates controlled reconciliation rather than recreating deleted events automatically.
+- ACS still contains legacy Graph and SharePoint-facing endpoints outside the booking orchestration path; those paths should be retired behind Calendar and Location ownership in a later phase.
 - No dashboard or UI work is included in this phase.
 - EF migrations for the new lifecycle tables/columns, including `OperationalIssues`, should be created before deployment to a shared environment.
 

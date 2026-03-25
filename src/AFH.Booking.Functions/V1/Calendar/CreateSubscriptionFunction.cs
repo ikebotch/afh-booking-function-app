@@ -18,7 +18,7 @@ public sealed class CreateSubscriptionFunction
 
     [Function("Calendar_Subscriptions_Create")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/calendar/subscriptions")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/calendar/subscriptions")] HttpRequestData req,
         CancellationToken ct)
     {
         try

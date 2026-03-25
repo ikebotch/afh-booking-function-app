@@ -43,6 +43,8 @@ public sealed class TravelMatrixService : ITravelMatrixService
         {
             Content = JsonContent.Create(request, options: JsonOptions)
         };
+        if (!string.IsNullOrWhiteSpace(_opt.FunctionKey))
+            httpRequest.Headers.TryAddWithoutValidation("x-functions-key", _opt.FunctionKey.Trim());
         _authenticator.Apply(httpRequest, _opt.InternalToken);
 
         using var resp = await _http.SendAsync(httpRequest, ct);

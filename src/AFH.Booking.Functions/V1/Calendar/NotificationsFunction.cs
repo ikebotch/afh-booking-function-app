@@ -20,7 +20,7 @@ public sealed class NotificationsFunction
 
     [Function("Calendar_Notifications")]
     public async Task<HttpResponseData> Run(
-    [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = "v1/calendar/notifications")] HttpRequestData req,
+    [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = "v1/calendar/notifications")] HttpRequestData req,
     CancellationToken ct)
     {
         try

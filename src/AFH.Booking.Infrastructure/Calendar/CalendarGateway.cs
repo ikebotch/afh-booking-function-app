@@ -237,6 +237,9 @@ public sealed class CalendarGateway : ICalendarGateway
 
     private void AddAuth(HttpRequestMessage req)
     {
+        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
+            req.Headers.TryAddWithoutValidation("x-functions-key", _options.FunctionKey.Trim());
+
         _authenticator.Apply(req, _options.InternalToken);
     }
 

@@ -8,13 +8,13 @@
 
 ## Local Setup
 1. Copy `src/AFH.Booking.Functions/local.settings.template.json` to `src/AFH.Booking.Functions/local.settings.json`.
-2. Fill in connection strings, external integrations, and the shared internal bearer token.
+2. Fill in connection strings, external integrations, function keys, and the shared internal bearer token.
 3. Keep `InternalApiAuth:AllowAnonymousInDevelopment=true` only for local development.
 
 ## Internal Auth
-- Booking-to-calendar and booking-to-location calls use `Authorization: Bearer <token>`.
-- Booking internal calendar routes use the same bearer token via `InternalApiAuth:*`.
-- Do not add `?code=` or `x-functions-key` to backend-to-backend calls.
+- Booking-to-calendar, booking-to-location, and booking-to-ACS internal calls now use function-specific keys plus `Authorization: Bearer <token>`.
+- Booking internal calendar routes also require function-level auth plus the shared bearer token via `InternalApiAuth:*`.
+- Do not use the master key for routine backend-to-backend traffic.
 
 ## Build And Test
 - `dotnet test AFH.BookingService.sln`

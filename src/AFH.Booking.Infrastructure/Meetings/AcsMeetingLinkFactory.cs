@@ -1,7 +1,8 @@
-﻿using AFH.Booking.Application.Abstractions.Meetings;
+using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 
 namespace AFH.Booking.Infrastructure.Meetings;
@@ -33,11 +34,21 @@ public sealed class AcsMeetingLinkFactory : IMeetingLinkFactory
             return null;
         }
 
-        // Example call; align to your actual endpoint
-        var res = await _http.PostAsJsonAsync("/api/v1/meetings/link", new { bookingId }, ct);
-        res.EnsureSuccessStatusCode();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/meetings/link")
+        {
+            Content = JsonContent.Create(new { bookingId })
+        };
 
-        var payload = await res.Content.ReadFromJsonAsync<MeetingLinkResponse>(cancellationToken: ct);
+        if (!string.IsNullOrWhiteSpace(_opts.Value.FunctionKey))
+            request.Headers.TryAddWithoutValidation("x-functions-key", _opts.Value.FunctionKey.Trim());
+
+        if (!string.IsNullOrWhiteSpace(_opts.Value.InternalToken))
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _opts.Value.InternalToken.Trim());
+
+        using var response = await _http.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadFromJsonAsync<MeetingLinkResponse>(cancellationToken: ct);
         return payload?.JoinUrl;
     }
 

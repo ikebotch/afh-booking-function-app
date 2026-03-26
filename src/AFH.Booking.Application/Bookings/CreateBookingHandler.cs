@@ -62,9 +62,17 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
 
         var (slot, tx) = loadResult.Value;
 
-        var holdCheck = await EnsureNoActiveHoldAsync(slot, utcNow, ct);
+        var releaseExisting = await ReplaceExistingHoldIfNeededAsync(slot, tx, utcNow, ct);
+        if (!releaseExisting.IsSuccess)
+            return FailFrom<CreateBookingResponse>(releaseExisting);
+
+        var holdCheck = await EnsureNoActiveHoldAsync(slot, tx, utcNow, ct);
         if (!holdCheck.IsSuccess)
             return FailFrom<CreateBookingResponse>(holdCheck);
+
+        var availabilityCheck = await EnsureFreshAvailabilityAsync(slot, tx, ct);
+        if (!availabilityCheck.IsSuccess)
+            return FailFrom<CreateBookingResponse>(availabilityCheck);
 
         var holdCreate = CreateHold(slot, utcNow);
         if (!holdCreate.IsSuccess)
@@ -141,7 +149,56 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         return Result<(BookingSlot, BookingTransaction)>.Ok((slot, tx));
     }
 
-    private async Task<Result<Unit>> EnsureNoActiveHoldAsync(BookingSlot slot, DateTime utcNow, CancellationToken ct)
+    private async Task<Result<Unit>> ReplaceExistingHoldIfNeededAsync(
+        BookingSlot slot,
+        BookingTransaction tx,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        var existing = await _holdRepo.GetActiveByTransactionIdAsync(slot.TransactionId, utcNow, ct);
+        if (existing is null)
+            return Result<Unit>.Ok(Unit.Value);
+
+        if (!string.IsNullOrWhiteSpace(existing.CalendarProviderEventId))
+        {
+            try
+            {
+                await _calendar.CancelBookingEventAsync(
+                    existing.UserId,
+                    existing.CalendarProviderEventId,
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to remove existing calendar hold marker for BookingId={BookingId} TransactionId={TransactionId} SlotId={SlotId}",
+                    existing.Id,
+                    tx.Id,
+                    existing.SlotId);
+
+                return Result<Unit>.Fail(
+                    HttpStatusCode.Conflict,
+                    "Unable to remove the existing booking hold marker before re-checking availability.",
+                    Errors.Conflict);
+            }
+        }
+
+        existing.Cancel("Superseded by a new hold attempt.", utcNow);
+        await _holdRepo.UpdateAsync(existing, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        _logger.LogInformation(
+            "Cancelled existing active hold before creating a fresh replacement. OldHoldId={OldHoldId} TransactionId={TransactionId} OldSlotId={OldSlotId} NewSlotId={NewSlotId}",
+            existing.Id,
+            tx.Id,
+            existing.SlotId,
+            slot.Id);
+
+        return Result<Unit>.Ok(Unit.Value);
+    }
+
+    private async Task<Result<Unit>> EnsureNoActiveHoldAsync(BookingSlot slot, BookingTransaction tx, DateTime utcNow, CancellationToken ct)
     {
         var existing = await _holdRepo.GetActiveBySlotIdAsync(slot.Id, utcNow, ct);
         if (existing is not null)
@@ -150,6 +207,53 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
                 HttpStatusCode.Conflict,
                 "This slot is already on hold.",
                 Errors.Conflict);
+        }
+
+        return Result<Unit>.Ok(Unit.Value);
+    }
+
+    private async Task<Result<Unit>> EnsureFreshAvailabilityAsync(
+        BookingSlot slot,
+        BookingTransaction tx,
+        CancellationToken ct)
+    {
+        var windows = BuildHoldWindows(slot, tx);
+
+        var availability = await _calendar.CheckAvailabilityAsync(
+            slot.AdviserId,
+            windows.HoldStartUtc,
+            windows.HoldEndUtc,
+            tx.Timezone,
+            "ForceRefresh",
+            ct);
+
+        if (availability.MailboxUnavailable)
+        {
+            _logger.LogWarning(
+                "Fresh hold validation could not verify mailbox availability for TransactionId={TransactionId} SlotId={SlotId} AdviserId={AdviserId} StartUtc={StartUtc} EndUtc={EndUtc}. Message={Message}",
+                tx.Id,
+                slot.Id,
+                slot.AdviserId,
+                windows.HoldStartUtc,
+                windows.HoldEndUtc,
+                availability.StatusMessage);
+
+            return Result<Unit>.Fail(
+                HttpStatusCode.Conflict,
+                string.IsNullOrWhiteSpace(availability.StatusMessage)
+                    ? "Unable to verify current adviser availability."
+                    : availability.StatusMessage,
+                Errors.Conflict);
+        }
+
+        if (!availability.IsFree)
+        {
+            return Result<Unit>.Fail(
+                HttpStatusCode.Conflict,
+                string.IsNullOrWhiteSpace(availability.StatusMessage)
+                    ? "The requested slot is no longer available."
+                    : availability.StatusMessage,
+                Errors.BookingConflictDoubleBooked);
         }
 
         return Result<Unit>.Ok(Unit.Value);
@@ -197,7 +301,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
 
         var subject = BuildSubject(tx);
 
-        var body = HoldBookingTemplate.BuildHoldBodyTemplate(slot, tx, hold, windows);
+        var calendarTemplate = HoldBookingTemplate.BuildHoldTemplate(slot, tx, hold, windows);
 
         CalendarLocation? calendarLocation = null;
         if (!tx.IsRemote)
@@ -222,7 +326,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
                 timezone: tx.Timezone,
                 isRemote: tx.IsRemote,
                 categories: new[] { "AFH Booking", "Hold" },
-                body: body,
+                body: calendarTemplate.CalendarDescription,
                 providerEventId: hold.CalendarProviderEventId,
                 location: tx.IsRemote ? null : calendarLocation,
                 attendees: null,

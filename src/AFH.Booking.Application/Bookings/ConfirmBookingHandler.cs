@@ -99,7 +99,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         {
             var windows = BuildHoldWindows(slot, tx);
 
-            var body = ConfirmedBookingTemplate.BuildConfirmedBodyTemplate(
+            var calendarTemplate = ConfirmedBookingTemplate.BuildConfirmedTemplate(
                 slot: slot,
                 tx: tx,
                 booking: hold,
@@ -111,7 +111,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
                 userId: slot.AdviserId,
                 providerEventId: hold.CalendarProviderEventId,
                 showAs: BookingShowAs.Busy,
-                body: body,
+                body: calendarTemplate.CalendarDescription,
                 categories: new[] { "AFH Booking", "Confirmed" });
 
             await _calendar.UpdateBookingEventAsync(calendarEvent, ct);

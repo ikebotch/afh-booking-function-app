@@ -4,7 +4,7 @@ namespace AFH.Booking.Application.EmailTemplates;
 
 public static class BookingNotificationEmailTemplate
 {
-    public static EmailTemplateResult Build(
+    public static NotificationTemplateContent Build(
         string eventType,
         string? clientDisplayName,
         string? adviserName,
@@ -29,9 +29,30 @@ public static class BookingNotificationEmailTemplate
             : customMessage.Trim();
 
         var subject = $"AFH Booking: {heading}";
-        var textBody =
-            $"Hello {greetingName}, your booking was updated ({safeEventType}). " +
-            $"When: {whenLine}. Adviser: {adviser}. Type: {locationLine}. {note}";
+        var textBody = string.Join(
+            Environment.NewLine,
+            [
+                $"Hello {greetingName},",
+                string.Empty,
+                $"Your booking has been updated: {heading}.",
+                $"When: {whenLine}",
+                $"Adviser: {adviser}",
+                $"Meeting type: {locationLine}",
+                string.Empty,
+                note,
+                string.Empty,
+                "This is an automated AFH booking notification."
+            ]);
+
+        var calendarDescription = string.Join(
+            Environment.NewLine,
+            [
+                $"AFH Booking - {heading}",
+                $"When: {whenLine}",
+                $"Adviser: {adviser}",
+                $"Meeting type: {locationLine}",
+                $"Note: {note}"
+            ]);
 
         var htmlBody = $@"
 <!doctype html>
@@ -93,7 +114,7 @@ public static class BookingNotificationEmailTemplate
   </body>
 </html>";
 
-        return new EmailTemplateResult(subject, htmlBody, textBody);
+        return new NotificationTemplateContent(subject, htmlBody, textBody, calendarDescription);
     }
 
     private static string GetHeading(string eventType)
@@ -152,7 +173,8 @@ public static class BookingNotificationEmailTemplate
     }
 }
 
-public sealed record EmailTemplateResult(
+public sealed record NotificationTemplateContent(
     string Subject,
     string HtmlBody,
-    string TextBody);
+    string TextBody,
+    string CalendarDescription);

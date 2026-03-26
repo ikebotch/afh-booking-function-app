@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Approvals;
+using AFH.Booking.Application.Abstractions.Auth;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Calendar.Subscription;
@@ -37,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.Configure<AcsOptions>(config.GetSection(AcsOptions.SectionName));
         services.Configure<XPlanOptions>(config.GetSection(XPlanOptions.SectionName));
         services.Configure<AzureAdOptions>(config.GetSection(AzureAdOptions.SectionName));
+        services.Configure<DomainUserAuthOptions>(config.GetSection(DomainUserAuthOptions.SectionName));
         services.Configure<LocationServiceOptions>(config.GetSection(LocationServiceOptions.SectionName));
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));
         services.Configure<CalendarProjectionOptions>(config.GetSection(CalendarProjectionOptions.SectionName));
@@ -50,6 +52,8 @@ public static class ServiceCollectionExtensions
         services.Configure<OutlookGovernanceOptions>(config.GetSection(OutlookGovernanceOptions.SectionName));
         services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
         services.AddSingleton<IInternalServiceAuthenticator, InternalBearerServiceAuthenticator>();
+        services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();
+        services.AddSingleton<ICurrentUserProfileResolver, DomainUserProfileResolver>();
 
         var db = config.GetSection(BookingDbOptions.SectionName).Get<BookingDbOptions>() ?? new BookingDbOptions();
         db.ConnectionString = string.IsNullOrWhiteSpace(db.ConnectionString)
@@ -155,11 +159,13 @@ public static class ServiceCollectionExtensions
             http.Timeout = TimeSpan.FromSeconds(30);
         });
         services.AddHostedService<AdviserDirectoryProjectionSyncWorker>();
+        services.AddScoped<IEmailNotificationSender, ComposedEmailNotificationSender>();
         services.AddScoped<IClientNotificationService, ClientNotificationService>();
         services.AddScoped<IOperationalNotificationService, OperationalNotificationService>();
         services.AddScoped<INotificationService>(sp => (INotificationService)sp.GetRequiredService<IClientNotificationService>());
         services.AddScoped<IDuplicateClientService, DuplicateClientService>();
         services.AddScoped<IDownstreamUpdateService, DownstreamUpdateService>();
+        services.AddScoped<IDownstreamUpdateReconciliationService, DownstreamUpdateService>();
 
         services.AddHttpClient("sms-provider", (sp, http) =>
         {

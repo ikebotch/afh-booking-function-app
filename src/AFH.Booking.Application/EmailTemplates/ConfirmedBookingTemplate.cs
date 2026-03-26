@@ -6,7 +6,7 @@ namespace AFH.Booking.Application.EmailTemplates;
 
 public static class ConfirmedBookingTemplate
 {
-    public static string BuildConfirmedBodyTemplate(
+    public static NotificationTemplateContent BuildConfirmedTemplate(
         BookingSlot slot,
         BookingTransaction tx,
         BookingHold booking,        
@@ -33,7 +33,24 @@ public static class ConfirmedBookingTemplate
             ? $"Join link: {(string.IsNullOrWhiteSpace(joinUrl) ? "TBC" : joinUrl)}"
             : $"Location: {FormatLocation(location)}";
 
-        return
+        var subject = "AFH Booking: Booking Confirmed";
+        var textBody =
+$@"Hello,
+
+Your booking is now confirmed.
+
+Transaction reference: {tx.TransactionRef}
+Booking ID: {booking.Id}
+Adviser: {slot.AdviserName}
+Meeting type: {(string.IsNullOrWhiteSpace(tx.MeetingType) ? "N/A" : tx.MeetingType)}
+When: {slotLocal}
+{whereLine}
+
+{travelLine}
+
+This is an automated AFH booking notification.";
+
+        var calendarDescription =
 $@"AFH Booking (CONFIRMED)
 
 TransactionRef: {tx.TransactionRef}
@@ -59,6 +76,27 @@ Calendar block:
 Notes:
 - This booking is confirmed.
 - Please allow time for travel and preparation either side of the meeting.";
+
+        var htmlBody =
+$@"<!doctype html>
+<html lang=""en"">
+  <head><meta charset=""utf-8"" /><meta name=""viewport"" content=""width=device-width, initial-scale=1"" /><title>{Escape(subject)}</title></head>
+  <body style=""font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;"">
+    <h1 style=""font-size:22px;"">Your booking is confirmed</h1>
+    <ul>
+      <li><strong>Transaction reference:</strong> {Escape(tx.TransactionRef)}</li>
+      <li><strong>Booking ID:</strong> {Escape(booking.Id)}</li>
+      <li><strong>Adviser:</strong> {Escape(slot.AdviserName)}</li>
+      <li><strong>Meeting type:</strong> {Escape(string.IsNullOrWhiteSpace(tx.MeetingType) ? "N/A" : tx.MeetingType)}</li>
+      <li><strong>When:</strong> {Escape(slotLocal)}</li>
+      <li><strong>Where:</strong> {Escape(whereLine)}</li>
+    </ul>
+    <p>{Escape(travelLine)}</p>
+    <p>This is an automated AFH booking notification.</p>
+  </body>
+</html>";
+
+        return new NotificationTemplateContent(subject, htmlBody, textBody, calendarDescription);
     }
 
     private static string FormatUtc(DateTime utc)
@@ -98,4 +136,16 @@ Notes:
         return string.Join(", ", parts);
     }
 
+    private static string Escape(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        return value
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal)
+            .Replace("'", "&#39;", StringComparison.Ordinal);
+    }
 }

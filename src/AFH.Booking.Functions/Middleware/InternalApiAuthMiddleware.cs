@@ -85,10 +85,10 @@ public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
         await next(context);
     }
 
-    internal static bool IsPublic(string path) =>
+    public static bool IsPublic(string path) =>
         PublicRoutePrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
-    internal static bool RequiresInternalBearer(string path) =>
+    public static bool RequiresInternalBearer(string path) =>
         InternalBearerRoutes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     private static async Task RejectAsync(

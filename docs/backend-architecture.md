@@ -11,6 +11,8 @@
   - Booking: health and docs.
   - Location: health and docs.
   - Calendar: health, docs/openapi, and Graph notification callback.
+- Domain user:
+  - Booking: `GET /api/v1/me` requires a valid Entra bearer token and is used for frontend session bootstrap.
 - Internal:
   - Booking: calendar notification intake, internal projected schedule, and internal subscription creation.
   - Location: adviser search, batch search, coverage, and license endpoints.
@@ -36,6 +38,14 @@
   - Calendar outbound to booking webhook function auth: `GraphWebhook:BookingFunctionKey`
   - Calendar outbound to booking webhook: `GraphWebhook:BookingInternalToken`
 - Internal function keys remain part of the design for function apps, but master-key and `?code=` query-string usage should not be used on routine service-to-service paths.
+
+## Domain User Auth Model
+- Domain-user authentication is separate from the internal service-to-service bearer token model.
+- The Vue app signs users in with Microsoft Entra ID / Azure AD and sends the Entra access token to Booking as `Authorization: Bearer <token>`.
+- Booking validates issuer, audience, lifetime, tenant, and optional domain restrictions before treating the request as authenticated.
+- Booking resolves application roles and derived capabilities server-side from claims and `DomainUserAuth:*` role-mapping configuration.
+- `GET /api/v1/me` is the frontend bootstrap endpoint for current user identity, roles, and capabilities.
+- Frontends may use the returned roles/capabilities for menus and route guards, but Booking remains the authority for policy enforcement.
 
 ## Public And Webhook Exceptions
 - Calendar notifications must remain externally callable because Microsoft Graph performs the callback challenge and delivery.
@@ -139,7 +149,9 @@
 ## Deferred Items
 - Adviser approval remains at the existing function/approval-service boundary; it is not yet moved into the lifecycle orchestrators.
 - Full Outlook auto-restore and deletion-governance enforcement remain partial; current code records and escalates controlled reconciliation rather than recreating deleted events automatically.
-- ACS still contains legacy Graph and SharePoint-facing endpoints outside the booking orchestration path; those paths should be retired behind Calendar and Location ownership in a later phase.
+- ACS no longer exposes the pure Graph calendar/user lookup or SharePoint-backed adviser lookup endpoints on the active repo surface.
+- Two legacy ACS SharePoint-backed endpoints remain temporarily for ATR/client-overview and transcription reads; they are explicitly deprecated and are outside the booking lifecycle path.
+- Booking verification is still partially blocked by compile issues in `tests/AFH.Booking.Tests` after infrastructure cleanup; that is now the main booking-side verification gap rather than the retired duplicate approval workflow file.
 - No dashboard or UI work is included in this phase.
 - EF migrations for the new lifecycle tables/columns, including `OperationalIssues`, should be created before deployment to a shared environment.
 

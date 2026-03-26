@@ -5,24 +5,29 @@ using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Infrastructure.Clients;
 
-public sealed class DownstreamUpdateService : IDownstreamUpdateService
+public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstreamUpdateReconciliationService
 {
     private readonly BookingDbContext _db;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly XPlanOptions _xPlanOptions;
+    private readonly ILogger<DownstreamUpdateService> _logger;
 
     public DownstreamUpdateService(
         BookingDbContext db,
         IHttpClientFactory httpClientFactory,
-        IOptions<XPlanOptions> xPlanOptions)
+        IOptions<XPlanOptions> xPlanOptions,
+        ILogger<DownstreamUpdateService> logger)
     {
         _db = db;
         _httpClientFactory = httpClientFactory;
         _xPlanOptions = xPlanOptions.Value;
+        _logger = logger;
     }
 
     public async Task<DownstreamUpdateResponse> PublishBookingChangeAsync(
@@ -47,16 +52,80 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService
         _db.DownstreamUpdates.Add(row);
         await _db.SaveChangesAsync(ct);
 
+        await DispatchAsync(row, correlationId: null, ct);
+
+        return ToResponse(row);
+    }
+
+    public async Task<DownstreamUpdateReconciliationResponse> ReconcileAsync(
+        int maxCount,
+        int olderThanMinutes,
+        bool includePending,
+        string? correlationId,
+        CancellationToken ct)
+    {
+        var cutoffUtc = DateTime.UtcNow.AddMinutes(-Math.Max(0, olderThanMinutes));
+        var candidates = (await _db.DownstreamUpdates
+                .Where(x => (x.ProcessedUtc ?? x.CreatedUtc) <= cutoffUtc)
+                .OrderBy(x => x.ProcessedUtc ?? x.CreatedUtc)
+                .ToListAsync(ct))
+            .Where(x => string.Equals(x.Status, "Failed", StringComparison.OrdinalIgnoreCase) ||
+                        (includePending && string.Equals(x.Status, "Pending", StringComparison.OrdinalIgnoreCase)))
+            .Take(Math.Clamp(maxCount, 1, 100))
+            .ToList();
+
+        var results = new List<DownstreamUpdateReconciliationItemResponse>(candidates.Count);
+        foreach (var row in candidates)
+        {
+            var previousStatus = row.Status;
+            row.AttemptCount += 1;
+            await DispatchAsync(row, correlationId, ct);
+            results.Add(new DownstreamUpdateReconciliationItemResponse
+            {
+                UpdateId = row.Id,
+                BookingId = row.BookingId,
+                ChangeType = row.ChangeType,
+                PreviousStatus = previousStatus,
+                CurrentStatus = row.Status,
+                AttemptCount = row.AttemptCount,
+                ProcessedUtc = row.ProcessedUtc,
+                ErrorMessage = row.ErrorMessage
+            });
+        }
+
+        return new DownstreamUpdateReconciliationResponse
+        {
+            RequestedCount = candidates.Count,
+            RetriedCount = results.Count,
+            SucceededCount = results.Count(x => string.Equals(x.CurrentStatus, "Sent", StringComparison.OrdinalIgnoreCase)),
+            FailedCount = results.Count(x => !string.Equals(x.CurrentStatus, "Sent", StringComparison.OrdinalIgnoreCase)),
+            Results = results
+        };
+    }
+
+    private async Task DispatchAsync(
+        DownstreamUpdateModel row,
+        string? correlationId,
+        CancellationToken ct)
+    {
         if (!_xPlanOptions.Enabled || string.IsNullOrWhiteSpace(_xPlanOptions.BaseUrl))
         {
             row.Status = "ConfiguredOff";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
-            return ToResponse(row);
+            return;
         }
 
         try
         {
+            _logger.LogInformation(
+                "Publishing downstream booking change. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} AttemptCount={AttemptCount} CorrelationId={CorrelationId}",
+                row.Id,
+                row.BookingId,
+                row.ChangeType,
+                row.AttemptCount,
+                correlationId);
+
             var http = _httpClientFactory.CreateClient("xplan-updates");
             http.BaseAddress = new Uri(_xPlanOptions.BaseUrl, UriKind.Absolute);
             if (!string.IsNullOrWhiteSpace(_xPlanOptions.ApiKey))
@@ -64,10 +133,10 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService
 
             var payload = new
             {
-                bookingId,
-                changeType,
-                transactionRef,
-                payload = payloadJson,
+                bookingId = row.BookingId,
+                changeType = row.ChangeType,
+                transactionRef = row.TransactionRef,
+                payload = row.PayloadJson,
                 occurredUtc = DateTime.UtcNow
             };
 
@@ -76,6 +145,17 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService
             row.ErrorMessage = response.IsSuccessStatusCode ? null : $"XPlan responded {(int)response.StatusCode}";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Downstream booking change failed. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} StatusCode={StatusCode} CorrelationId={CorrelationId}",
+                    row.Id,
+                    row.BookingId,
+                    row.ChangeType,
+                    (int)response.StatusCode,
+                    correlationId);
+            }
         }
         catch (Exception ex)
         {
@@ -83,9 +163,16 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService
             row.ErrorMessage = ex.Message;
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
-        }
 
-        return ToResponse(row);
+            _logger.LogWarning(
+                ex,
+                "Downstream booking change threw. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} AttemptCount={AttemptCount} CorrelationId={CorrelationId}",
+                row.Id,
+                row.BookingId,
+                row.ChangeType,
+                row.AttemptCount,
+                correlationId);
+        }
     }
 
     private static DownstreamUpdateResponse ToResponse(DownstreamUpdateModel model)

@@ -12,6 +12,7 @@ var host = new HostBuilder()
         app.UseMiddleware<CorrelationIdMiddleware>();
         app.UseMiddleware<OperationAuditMiddleware>();
         app.UseMiddleware<InternalApiAuthMiddleware>();
+        app.UseMiddleware<DomainUserAuthMiddleware>();
     })
     .ConfigureAppConfiguration((ctx, cfg) =>
     {
@@ -64,6 +65,7 @@ var host = new HostBuilder()
         services.AddBookingInfrastructure(ctx.Configuration);
         services.AddHttpClient();
         services.Configure<InternalApiAuthOptions>(ctx.Configuration.GetSection(InternalApiAuthOptions.SectionName));
+        services.Configure<DomainUserAuthOptions>(ctx.Configuration.GetSection(DomainUserAuthOptions.SectionName));
 
         services.Configure<WorkerOptions>(options =>
         {

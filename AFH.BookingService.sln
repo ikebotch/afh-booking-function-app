@@ -5,7 +5,7 @@ VisualStudioVersion = 18.0.11222.15
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AFH.Booking.Domain", "src\AFH.Booking.Domain\AFH.Booking.Domain.csproj", "{8DC530BB-F52A-3CAC-36D3-B1524AAB80A2}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AFH.Booking.Contracts", "src\AFH.Booking.Contracts\AFH.Booking.Contracts.csproj", "{E5EB6FA5-8F82-5528-7329-79F1F3207D0B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AFH.Booking.Contract", "src\AFH.Booking.Contract\AFH.Booking.Contract.csproj", "{E5EB6FA5-8F82-5528-7329-79F1F3207D0B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AFH.Booking.Application", "src\AFH.Booking.Application\AFH.Booking.Application.csproj", "{CA04A335-B793-FA50-EEB8-19E5CF21F0CD}"
 EndProject

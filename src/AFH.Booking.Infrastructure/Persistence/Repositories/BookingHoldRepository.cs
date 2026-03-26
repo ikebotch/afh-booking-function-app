@@ -115,6 +115,25 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         return m is null ? null : m.ToDomain();
     }
 
+    public async Task<BookingHold?> GetActiveByTransactionIdAsync(string transactionId, DateTime utcNow, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(transactionId))
+            throw new ArgumentException("transactionId is required.", nameof(transactionId));
+
+        utcNow = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
+
+        var model = await _db.Holds
+            .AsNoTracking()
+            .Include(x => x.Slot)
+            .Where(x => x.Slot.TransactionId == transactionId)
+            .Where(x => x.HoldExpiresUtc > utcNow)
+            .Where(x => x.Status == HoldStatus.Active)
+            .OrderByDescending(x => x.CreatedUtc)
+            .FirstOrDefaultAsync(ct);
+
+        return model is null ? null : model.ToDomain();
+    }
+
     public async Task UpdateAsync(BookingHold hold, CancellationToken ct)
     {
         if (hold is null) throw new ArgumentNullException(nameof(hold));

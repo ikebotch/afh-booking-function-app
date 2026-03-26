@@ -6,6 +6,7 @@ public static class Errors
     public const string Validation = "Validation";
     public const string Conflict = "Conflict";
     public const string Unauthorized = "Unauthorized";
+    public const string Forbidden = "Forbidden";
     public const string ServerError = "ServerError";
     public const string HoldCancelled = "HoldCancelled";
     public const string HoldExpired = "HoldExpired";

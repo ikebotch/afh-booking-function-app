@@ -6,7 +6,7 @@ namespace AFH.Booking.Application.EmailTemplates;
 
 public static class HoldBookingTemplate
 {
-    public static string BuildHoldBodyTemplate(
+    public static NotificationTemplateContent BuildHoldTemplate(
         BookingSlot slot,
         BookingTransaction tx,
         BookingHold hold,
@@ -36,12 +36,30 @@ public static class HoldBookingTemplate
             ? $"Company buffer: {windows.CompanyBufferMinutes} mins (pre/post meeting policy)"
             : "Company buffer: none";
 
-        return
-$@"AFH Booking (HOLD)
+        var subject = "AFH Booking: Hold Created";
+        var textBody =
+$@"Hello,
+
+We have placed a temporary hold on your requested booking while it is being confirmed.
+
+Transaction reference: {tx.TransactionRef}
+Hold ID: {hold.Id}
+Adviser: {slot.AdviserName}
+Meeting type: {(string.IsNullOrWhiteSpace(tx.MeetingType) ? "N/A" : tx.MeetingType)}
+When: {slotStartLocal} -> {slotEndLocal}
+Hold expires: {FormatUtc(hold.ExpiresUtc)}
+
+{travelLine}
+{companyLine}
+
+This is an automated AFH booking notification.";
+
+        var calendarDescription =
+$@"AFH Booking Hold
 
 TransactionRef: {tx.TransactionRef}
 HoldId: {hold.Id}
-AdviserId: {slot.AdviserId}
+Adviser: {slot.AdviserName}
 Meeting type: {(string.IsNullOrWhiteSpace(tx.MeetingType) ? "N/A" : tx.MeetingType)}
 Remote: {(tx.IsRemote ? "Yes" : "No")}
 Timezone: {tzId}
@@ -62,6 +80,29 @@ Hold expires (UTC): {FormatUtc(hold.ExpiresUtc)}
 Notes:
 - Temporary hold while booking is being confirmed.
 - This hold should block overlapping bookings.";
+
+        var htmlBody =
+$@"<!doctype html>
+<html lang=""en"">
+  <head><meta charset=""utf-8"" /><meta name=""viewport"" content=""width=device-width, initial-scale=1"" /><title>{Escape(subject)}</title></head>
+  <body style=""font-family:'Segoe UI',Arial,sans-serif;color:#1f2937;"">
+    <h1 style=""font-size:22px;"">Temporary booking hold created</h1>
+    <p>We have placed a temporary hold on your requested booking while it is being confirmed.</p>
+    <ul>
+      <li><strong>Transaction reference:</strong> {Escape(tx.TransactionRef)}</li>
+      <li><strong>Hold ID:</strong> {Escape(hold.Id)}</li>
+      <li><strong>Adviser:</strong> {Escape(slot.AdviserName)}</li>
+      <li><strong>Meeting type:</strong> {Escape(string.IsNullOrWhiteSpace(tx.MeetingType) ? "N/A" : tx.MeetingType)}</li>
+      <li><strong>When:</strong> {Escape(slotStartLocal)} -> {Escape(slotEndLocal)}</li>
+      <li><strong>Hold expires:</strong> {Escape(FormatUtc(hold.ExpiresUtc))}</li>
+    </ul>
+    <p>{Escape(travelLine)}</p>
+    <p>{Escape(companyLine)}</p>
+    <p>This is an automated AFH booking notification.</p>
+  </body>
+</html>";
+
+        return new NotificationTemplateContent(subject, htmlBody, textBody, calendarDescription);
     }
 
     private static string FormatUtc(DateTime utc)
@@ -87,6 +128,18 @@ Notes:
         }
     }
 
+    private static string Escape(string? value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return string.Empty;
+
+        return value
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal)
+            .Replace("'", "&#39;", StringComparison.Ordinal);
+    }
 }
 
 public sealed record HoldWindows(

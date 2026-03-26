@@ -11,6 +11,7 @@ public interface IBookingHoldRepository
     Task<BookingHold?> GetBySlotIdAsync(string slotId, CancellationToken ct);
     Task<BookingHold?> GetByCalendarEventIdAsync(string providerEventId, CancellationToken ct);
     Task<BookingHold?> GetActiveBySlotIdAsync(string slotId, DateTime utcNow, CancellationToken ct);
+    Task<BookingHold?> GetActiveByTransactionIdAsync(string transactionId, DateTime utcNow, CancellationToken ct);
 
     Task UpdateAsync(BookingHold hold, CancellationToken ct);
 

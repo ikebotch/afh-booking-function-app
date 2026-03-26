@@ -18,6 +18,7 @@ public sealed class ClientNotificationService : IClientNotificationService, INot
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
     private readonly IClientDirectory _clients;
+    private readonly IEmailNotificationSender _emailSender;
     private readonly INotificationDispatchRepository _dispatches;
     private readonly IUnitOfWork _uow;
     private readonly IHttpClientFactory _httpClientFactory;
@@ -29,6 +30,7 @@ public sealed class ClientNotificationService : IClientNotificationService, INot
         IBookingSlotRepository slots,
         IBookingTransactionRepository transactions,
         IClientDirectory clients,
+        IEmailNotificationSender emailSender,
         INotificationDispatchRepository dispatches,
         IUnitOfWork uow,
         IHttpClientFactory httpClientFactory,
@@ -39,6 +41,7 @@ public sealed class ClientNotificationService : IClientNotificationService, INot
         _slots = slots;
         _transactions = transactions;
         _clients = clients;
+        _emailSender = emailSender;
         _dispatches = dispatches;
         _uow = uow;
         _httpClientFactory = httpClientFactory;
@@ -110,9 +113,27 @@ public sealed class ClientNotificationService : IClientNotificationService, INot
 
         if (request.SendEmail)
         {
-            emailStatus = string.IsNullOrWhiteSpace(client?.Email)
-                ? "Skipped"
-                : (_options.EmailEnabled ? "Composed" : "ConfiguredOff");
+            if (string.IsNullOrWhiteSpace(client?.Email))
+            {
+                emailStatus = "Skipped";
+            }
+            else if (!_options.EmailEnabled)
+            {
+                emailStatus = "ConfiguredOff";
+            }
+            else
+            {
+                var emailResult = await _emailSender.SendAsync(
+                    new EmailNotificationMessage(
+                        client.Email,
+                        emailTemplate.Subject,
+                        emailTemplate.HtmlBody,
+                        emailTemplate.TextBody),
+                    ct);
+
+                emailStatus = emailResult.Status;
+                providerMessageId = emailResult.ProviderMessageId ?? providerMessageId;
+            }
         }
 
         // Persist plain text because current provider path renders stored content as text/plain.

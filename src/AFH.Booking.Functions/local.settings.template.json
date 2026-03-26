@@ -3,6 +3,10 @@
   "Values": {
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "APPLICATIONINSIGHTS_CONNECTION_STRING": "",
+    "ApplicationLogging:Provider": "Both",
+    "ApplicationLogging:MaxPayloadLength": "2048",
+    "ApplicationLogging:LogPayloads": "true",
     "BookingDb:ConnectionString": "Server=localhost;Database=AFH.Booking;Trusted_Connection=True;TrustServerCertificate=True",
     "Calendar:DefaultTimezone": "Europe/London",
     "AzureAd:TenantId": "<entra-tenant-id>",

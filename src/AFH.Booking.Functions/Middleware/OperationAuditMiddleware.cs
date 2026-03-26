@@ -1,10 +1,9 @@
-using AFH.Booking.Infrastructure.Persistence;
-using AFH.Booking.Infrastructure.Persistence.Models;
+using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.Functions.Worker.Middleware;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Net;
 
@@ -12,26 +11,23 @@ namespace AFH.Booking.Functions.Middleware;
 
 public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
 {
-    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IApplicationLogSink _applicationLogSink;
+    private readonly ApplicationLoggingOptions _loggingOptions;
     private readonly ILogger<OperationAuditMiddleware> _logger;
 
     public OperationAuditMiddleware(
-        IServiceScopeFactory scopeFactory,
+        IApplicationLogSink applicationLogSink,
+        IOptions<ApplicationLoggingOptions> loggingOptions,
         ILogger<OperationAuditMiddleware> logger)
     {
-        _scopeFactory = scopeFactory;
+        _applicationLogSink = applicationLogSink;
+        _loggingOptions = loggingOptions.Value;
         _logger = logger;
     }
 
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
     {
         var req = await context.GetHttpRequestDataAsync();
-        if (req is null)
-        {
-            await next(context);
-            return;
-        }
-
         var sw = Stopwatch.StartNew();
         Exception? unhandled = null;
         try
@@ -47,48 +43,57 @@ public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
         {
             sw.Stop();
             var response = context.GetInvocationResult().Value as HttpResponseData;
-            var statusCode = (int)(response?.StatusCode ?? (unhandled is null ? HttpStatusCode.OK : HttpStatusCode.InternalServerError));
+            var statusCode = response is null
+                ? (unhandled is null ? (int?)null : (int)HttpStatusCode.InternalServerError)
+                : (int)response.StatusCode;
             var correlationId = TryGetString(context, CorrelationIdMiddleware.ItemKey);
-            var operationId = context.InvocationId;
-            var functionName = context.FunctionDefinition.Name;
-            var method = req.Method;
-            var path = req.Url.AbsolutePath;
-            var query = req.Url.Query;
-            var errorType = unhandled?.GetType().Name;
-            var errorMessage = unhandled?.Message;
-            var durationMs = sw.ElapsedMilliseconds;
-            var createdUtc = DateTime.UtcNow;
 
             try
             {
-                await using var scope = _scopeFactory.CreateAsyncScope();
-                var db = scope.ServiceProvider.GetRequiredService<BookingDbContext>();
-                db.IntegrationOperationAudits.Add(new IntegrationOperationAuditModel
+                await _applicationLogSink.WriteAsync(new ApplicationLogEntry
                 {
-                    Id = Guid.NewGuid().ToString("N"),
-                    ServiceName = "booking",
-                    FunctionName = functionName,
-                    Method = method,
-                    Path = path,
-                    QueryString = query,
+                    OccurredUtc = DateTime.UtcNow,
+                    Level = GetLevel(unhandled, statusCode),
+                    Category = "FunctionInvocation",
+                    Operation = context.FunctionDefinition.Name,
                     CorrelationId = correlationId,
-                    OperationId = operationId,
-                    StatusCode = statusCode,
-                    DurationMs = durationMs,
-                    ErrorType = errorType,
-                    ErrorMessage = errorMessage,
-                    CreatedUtc = createdUtc
-                });
-                await db.SaveChangesAsync(CancellationToken.None);
+                    ContextId = context.InvocationId,
+                    EventType = unhandled is null ? "InvocationCompleted" : "InvocationFailed",
+                    Result = unhandled is null && (statusCode is null || statusCode < 400) ? "Success" : "Failure",
+                    Message = unhandled is null
+                        ? "Booking function invocation completed."
+                        : "Booking function invocation failed.",
+                    ExceptionType = unhandled?.GetType().Name,
+                    ExceptionMessage = unhandled?.Message,
+                    PayloadJson = ApplicationLogPayloadHelper.Serialize(new
+                    {
+                        Trigger = req is null ? "Function" : "Http",
+                        Method = req?.Method,
+                        Path = req?.Url.AbsolutePath,
+                        StatusCode = statusCode,
+                        DurationMs = sw.ElapsedMilliseconds
+                    }, _loggingOptions)
+                }, CancellationToken.None);
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex,
-                    "Failed to persist integration operation audit. Function={FunctionName} CorrelationId={CorrelationId}",
-                    functionName,
+                    "Failed to persist booking application log. Function={FunctionName} CorrelationId={CorrelationId}",
+                    context.FunctionDefinition.Name,
                     correlationId);
             }
         }
+    }
+
+    private static string GetLevel(Exception? unhandled, int? statusCode)
+    {
+        if (unhandled is not null || statusCode >= 500)
+            return "Error";
+
+        if (statusCode >= 400)
+            return "Warning";
+
+        return "Information";
     }
 
     private static string? TryGetString(FunctionContext context, string key)

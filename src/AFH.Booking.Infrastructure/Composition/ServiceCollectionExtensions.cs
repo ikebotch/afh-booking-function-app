@@ -15,6 +15,7 @@ using AFH.Booking.Infrastructure.Bookings;
 using AFH.Booking.Infrastructure.Calendar;
 using AFH.Booking.Infrastructure.Clients;
 using AFH.Booking.Infrastructure.Location;
+using AFH.Booking.Infrastructure.Logging;
 using AFH.Booking.Infrastructure.Meetings;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
@@ -51,6 +52,7 @@ public static class ServiceCollectionExtensions
         services.Configure<LifecycleGovernanceOptions>(config.GetSection(LifecycleGovernanceOptions.SectionName));
         services.Configure<OutlookGovernanceOptions>(config.GetSection(OutlookGovernanceOptions.SectionName));
         services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
+        services.Configure<ApplicationLoggingOptions>(config.GetSection(ApplicationLoggingOptions.SectionName));
         services.AddSingleton<IInternalServiceAuthenticator, InternalBearerServiceAuthenticator>();
         services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();
         services.AddSingleton<ICurrentUserProfileResolver, DomainUserProfileResolver>();
@@ -65,8 +67,26 @@ public static class ServiceCollectionExtensions
                 $"{BookingDbOptions.SectionName}:ConnectionString is required (or ConnectionStrings:BookingDb).");
 
         services.AddDbContext<BookingDbContext>(opt => { opt.UseSqlServer(db.ConnectionString); });
+        services.AddDbContextFactory<BookingDbContext>(opt => { opt.UseSqlServer(db.ConnectionString); });
 
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<DatabaseApplicationLogSink>();
+        services.AddScoped<ApplicationInsightsLogSink>(sp => new ApplicationInsightsLogSink(
+            sp.GetService<Microsoft.ApplicationInsights.TelemetryClient>(),
+            sp.GetRequiredService<IConfiguration>(),
+            sp.GetRequiredService<Microsoft.Extensions.Logging.ILogger<ApplicationInsightsLogSink>>()));
+        services.AddScoped<IApplicationLogSink>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<ApplicationLoggingOptions>>().Value;
+            return options.Provider switch
+            {
+                ApplicationLogProvider.Database => sp.GetRequiredService<DatabaseApplicationLogSink>(),
+                ApplicationLogProvider.ApplicationInsights => sp.GetRequiredService<ApplicationInsightsLogSink>(),
+                _ => new CompositeApplicationLogSink(
+                    sp.GetRequiredService<DatabaseApplicationLogSink>(),
+                    sp.GetRequiredService<ApplicationInsightsLogSink>())
+            };
+        });
 
         // Calendar service integration (AFH.Calendar function app)
         services.AddHttpClient<ICalendarGateway, CalendarGateway>((sp, http) =>

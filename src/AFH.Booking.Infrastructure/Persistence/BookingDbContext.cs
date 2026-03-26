@@ -29,9 +29,33 @@ public sealed class BookingDbContext : DbContext
     public DbSet<AdviserProfileProjectionModel> AdviserProfileProjections => Set<AdviserProfileProjectionModel>();
     public DbSet<IntegrationSyncStateModel> IntegrationSyncStates => Set<IntegrationSyncStateModel>();
     public DbSet<IntegrationOperationAuditModel> IntegrationOperationAudits => Set<IntegrationOperationAuditModel>();
+    public DbSet<ApplicationLogModel> ApplicationLogs => Set<ApplicationLogModel>();
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);
+
+        modelBuilder.Entity<ApplicationLogModel>(entity =>
+        {
+            entity.ToTable("ApplicationLogs");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Level).HasMaxLength(32).IsRequired();
+            entity.Property(x => x.Category).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Operation).HasMaxLength(256).IsRequired();
+            entity.Property(x => x.CorrelationId).HasMaxLength(128);
+            entity.Property(x => x.UserId).HasMaxLength(128);
+            entity.Property(x => x.ContextId).HasMaxLength(256);
+            entity.Property(x => x.EventType).HasMaxLength(128).IsRequired();
+            entity.Property(x => x.Result).HasMaxLength(64).IsRequired();
+            entity.Property(x => x.Message).HasMaxLength(2048).IsRequired();
+            entity.Property(x => x.ExceptionType).HasMaxLength(256);
+            entity.Property(x => x.ExceptionMessage).HasMaxLength(2048);
+            entity.Property(x => x.PayloadJson).HasMaxLength(4096);
+            entity.HasIndex(x => x.OccurredUtc);
+            entity.HasIndex(x => x.CorrelationId);
+            entity.HasIndex(x => new { x.Category, x.OccurredUtc });
+            entity.HasIndex(x => new { x.Operation, x.OccurredUtc });
+        });
+
         base.OnModelCreating(modelBuilder);
     }
 }

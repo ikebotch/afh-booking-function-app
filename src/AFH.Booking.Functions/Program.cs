@@ -61,6 +61,7 @@ var host = new HostBuilder()
     })
     .ConfigureServices((ctx, services) =>
     {
+        services.AddApplicationInsightsTelemetryWorkerService();
         services.AddBookingApplication();
         services.AddBookingInfrastructure(ctx.Configuration);
         services.AddHttpClient();

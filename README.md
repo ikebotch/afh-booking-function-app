@@ -8,8 +8,16 @@
 
 ## Local Setup
 1. Copy `src/AFH.Booking.Functions/local.settings.template.json` to `src/AFH.Booking.Functions/local.settings.json`.
-2. Fill in connection strings, external integrations, function keys, and the shared internal bearer token.
-3. Keep `InternalApiAuth:AllowAnonymousInDevelopment=true` only for local development.
+2. Fill in the required values:
+   `BookingDb:ConnectionString`, `Calendars:BaseUrl`, `Calendars:FunctionKey`, `Calendars:InternalToken`, `LocationService:BaseUrl`, `LocationService:FunctionKey`, `LocationService:InternalToken`, `InternalApiAuth:Token`.
+3. Fill in optional integrations only if you are using them locally:
+   `Acs:*`, `Leads:*`, `Notifications:*`, `AdviserDirectory:*`, `XPlan:*`, `DomainUserAuth:*`.
+4. Keep `InternalApiAuth:AllowAnonymousInDevelopment=true` only for local development.
+
+## Local Settings Conventions
+- Shared internal bearer auth uses `InternalApiAuth:Token` on the receiving service.
+- Outbound service calls use `<ServiceSection>:BaseUrl`, `<ServiceSection>:FunctionKey`, and `<ServiceSection>:InternalToken` where that downstream service requires both function auth and bearer auth.
+- Booking keeps existing section names such as `Calendars:*` and `LocationService:*` because those are the active bound options in code. This pass did not rename them because that would be a breaking config change.
 
 ## Internal Auth
 - Booking-to-calendar, booking-to-location, and booking-to-ACS internal calls now use function-specific keys plus `Authorization: Bearer <token>`.

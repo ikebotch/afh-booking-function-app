@@ -67,8 +67,12 @@ public static class ServiceCollectionExtensions
                 $"{BookingDbOptions.SectionName}:ConnectionString is required (or ConnectionStrings:BookingDb).");
 
         services.AddDbContext<BookingDbContext>(opt => { opt.UseSqlServer(db.ConnectionString); });
-        services.AddDbContextFactory<BookingDbContext>(opt => { opt.UseSqlServer(db.ConnectionString); });
-
+        services.AddDbContextFactory<BookingDbContext>(
+            options =>
+            {
+                options.UseSqlServer(db.ConnectionString);
+            },
+            ServiceLifetime.Scoped);
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<DatabaseApplicationLogSink>();
         services.AddScoped<ApplicationInsightsLogSink>(sp => new ApplicationInsightsLogSink(

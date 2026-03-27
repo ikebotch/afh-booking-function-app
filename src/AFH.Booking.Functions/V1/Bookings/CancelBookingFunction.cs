@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AFH.Booking.Functions.V1.Bookings;
 
+[BookingOpenApiTag("Bookings")]
 public sealed class CancelBookingFunction
 {
     private readonly IApprovalWorkflowService _approvals;
@@ -100,11 +101,6 @@ public sealed class CancelBookingFunction
         {
             _logger.LogWarning(ex, "Invalid JSON body in Bookings_CancelBooking.");
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Invalid JSON body.", ct, "InvalidJson");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception in Bookings_CancelBooking.");
-            return await req.ProblemAsync(HttpStatusCode.InternalServerError, "Something went wrong.", ct, "ServerError");
         }
     }
 

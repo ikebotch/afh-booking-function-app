@@ -8,6 +8,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Functions.V1.Bookings;
 
+[BookingOpenApiTag("Bookings")]
 public sealed class ConfirmHoldFunction
 {
     private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
@@ -51,11 +52,11 @@ public sealed class ConfirmHoldFunction
             }
             catch (JsonException)
             {
-                //return await req.ProblemAsync(
-                //    HttpStatusCode.BadRequest,
-                //    "Invalid JSON body.",
-                //    ct,
-                //    "InvalidJson");
+                return await req.ProblemAsync(
+                    HttpStatusCode.BadRequest,
+                    "Invalid JSON body.",
+                    ct,
+                    "InvalidJson");
             }
         }
 

@@ -5,6 +5,7 @@ using AFH.Booking.Functions.Http;
 
 namespace AFH.Booking.Functions.V2.Clients;
 
+[BookingOpenApiTag("Clients")]
 public sealed class GetClientByTransactionFunction
 {
     private readonly IClientDirectory _clients;

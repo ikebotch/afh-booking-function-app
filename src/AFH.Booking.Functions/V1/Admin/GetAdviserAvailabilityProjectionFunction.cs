@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Functions.V1.Admin;
 
+[BookingOpenApiTag("Internal/Admin")]
 public sealed class GetAdviserAvailabilityProjectionFunction
 {
     private readonly IAdviserAvailabilityProjectionRepository _repo;
@@ -19,6 +20,8 @@ public sealed class GetAdviserAvailabilityProjectionFunction
     }
 
     [Function("Admin_GetAdviserAvailabilityProjection")]
+    [BookingOpenApiQueryParameter("startUtc", "string", IsRequired = true, Format = "date-time", Description = "Inclusive UTC range start.")]
+    [BookingOpenApiQueryParameter("endUtc", "string", IsRequired = true, Format = "date-time", Description = "Exclusive UTC range end.")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/admin/advisers/{adviserId}/availability-projection")]
         HttpRequestData req,

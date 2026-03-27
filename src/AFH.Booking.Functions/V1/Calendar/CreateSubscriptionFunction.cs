@@ -3,6 +3,7 @@ using AFH.Booking.Functions.Http;
 
 namespace AFH.Booking.Functions.V1.Calendar;
 
+[BookingOpenApiTag("Calendar")]
 public sealed class CreateSubscriptionFunction
 {
     private readonly ICreateSubscriptionHandler _handler;
@@ -21,23 +22,15 @@ public sealed class CreateSubscriptionFunction
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/calendar/subscriptions")] HttpRequestData req,
         CancellationToken ct)
     {
-        try
-        {
-            var cmd = await req.ReadJsonAsync<CreateCalendarSubscriptionRequest>(ct);
-            if (cmd is null)
-                return await req.ProblemAsync(HttpStatusCode.BadRequest, "Invalid JSON body.", ct);
+        var cmd = await req.ReadJsonAsync<CreateCalendarSubscriptionRequest>(ct);
+        if (cmd is null)
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, "Invalid JSON body.", ct, Errors.Validation);
 
-            var result = await _handler.HandleAsync(cmd, ct);
+        var result = await _handler.HandleAsync(cmd, ct);
 
-            if (!result.IsSuccess)
-                return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);
+        if (!result.IsSuccess)
+            return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);
 
-            return await req.CreatedJsonAsync(result.Value!, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception in Calendar_Subscriptions_Create.");
-            return await req.ProblemAsync(HttpStatusCode.InternalServerError, "Something went wrong.", ct, "ServerError");
-        }
+        return await req.CreatedJsonAsync(result.Value!, ct);
     }
 }

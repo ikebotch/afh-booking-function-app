@@ -3,6 +3,7 @@ using AFH.Booking.Functions.Http;
 
 namespace AFH.Booking.Functions.V1.Admin;
 
+[BookingOpenApiTag("Internal/Admin")]
 public sealed class GetAdviserProjectionByIdFunction
 {
     private readonly IAdviserProfileProjectionRepository _profiles;

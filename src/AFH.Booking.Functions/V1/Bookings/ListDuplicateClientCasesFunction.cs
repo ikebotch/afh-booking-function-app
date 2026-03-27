@@ -5,6 +5,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Functions.V1.Bookings;
 
+[BookingOpenApiTag("Clients")]
 public sealed class ListDuplicateClientCasesFunction
 {
     private readonly IDuplicateClientService _duplicates;

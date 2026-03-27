@@ -7,6 +7,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Functions.V1.Bookings;
 
+[BookingOpenApiTag("Bookings")]
 public sealed class GetRearrangementOptionsFunction
 {
     private readonly IRearrangementOptionsHandler _handler;

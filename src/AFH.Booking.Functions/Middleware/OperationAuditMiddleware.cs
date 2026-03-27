@@ -2,6 +2,7 @@ using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.Functions.Worker.Middleware;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
@@ -11,17 +12,10 @@ namespace AFH.Booking.Functions.Middleware;
 
 public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
 {
-    private readonly IApplicationLogSink _applicationLogSink;
-    private readonly ApplicationLoggingOptions _loggingOptions;
     private readonly ILogger<OperationAuditMiddleware> _logger;
 
-    public OperationAuditMiddleware(
-        IApplicationLogSink applicationLogSink,
-        IOptions<ApplicationLoggingOptions> loggingOptions,
-        ILogger<OperationAuditMiddleware> logger)
+    public OperationAuditMiddleware(ILogger<OperationAuditMiddleware> logger)
     {
-        _applicationLogSink = applicationLogSink;
-        _loggingOptions = loggingOptions.Value;
         _logger = logger;
     }
 
@@ -50,30 +44,35 @@ public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
 
             try
             {
-                await _applicationLogSink.WriteAsync(new ApplicationLogEntry
+                var sink = context.InstanceServices.GetService<IApplicationLogSink>();
+                var loggingOptions = context.InstanceServices.GetService<IOptions<ApplicationLoggingOptions>>()?.Value;
+                if (sink is not null && loggingOptions is not null)
                 {
-                    OccurredUtc = DateTime.UtcNow,
-                    Level = GetLevel(unhandled, statusCode),
-                    Category = "FunctionInvocation",
-                    Operation = context.FunctionDefinition.Name,
-                    CorrelationId = correlationId,
-                    ContextId = context.InvocationId,
-                    EventType = unhandled is null ? "InvocationCompleted" : "InvocationFailed",
-                    Result = unhandled is null && (statusCode is null || statusCode < 400) ? "Success" : "Failure",
-                    Message = unhandled is null
-                        ? "Booking function invocation completed."
-                        : "Booking function invocation failed.",
-                    ExceptionType = unhandled?.GetType().Name,
-                    ExceptionMessage = unhandled?.Message,
-                    PayloadJson = ApplicationLogPayloadHelper.Serialize(new
+                    await sink.WriteAsync(new ApplicationLogEntry
                     {
-                        Trigger = req is null ? "Function" : "Http",
-                        Method = req?.Method,
-                        Path = req?.Url.AbsolutePath,
-                        StatusCode = statusCode,
-                        DurationMs = sw.ElapsedMilliseconds
-                    }, _loggingOptions)
-                }, CancellationToken.None);
+                        OccurredUtc = DateTime.UtcNow,
+                        Level = GetLevel(unhandled, statusCode),
+                        Category = "FunctionInvocation",
+                        Operation = context.FunctionDefinition.Name,
+                        CorrelationId = correlationId,
+                        ContextId = context.InvocationId,
+                        EventType = unhandled is null ? "InvocationCompleted" : "InvocationFailed",
+                        Result = unhandled is null && (statusCode is null || statusCode < 400) ? "Success" : "Failure",
+                        Message = unhandled is null
+                            ? "Booking function invocation completed."
+                            : "Booking function invocation failed.",
+                        ExceptionType = unhandled?.GetType().Name,
+                        ExceptionMessage = unhandled?.Message,
+                        PayloadJson = ApplicationLogPayloadHelper.Serialize(new
+                        {
+                            Trigger = req is null ? "Function" : "Http",
+                            Method = req?.Method,
+                            Path = req?.Url.AbsolutePath,
+                            StatusCode = statusCode,
+                            DurationMs = sw.ElapsedMilliseconds
+                        }, loggingOptions)
+                    }, CancellationToken.None);
+                }
             }
             catch (Exception ex)
             {

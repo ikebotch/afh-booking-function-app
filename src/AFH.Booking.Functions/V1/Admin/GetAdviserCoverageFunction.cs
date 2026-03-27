@@ -5,6 +5,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Functions.V1.Admin;
 
+[BookingOpenApiTag("Internal/Admin")]
 public sealed class GetAdviserCoverageFunction
 {
     private readonly IAdminCoverageService _coverageService;

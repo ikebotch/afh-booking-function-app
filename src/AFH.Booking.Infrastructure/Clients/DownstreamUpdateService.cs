@@ -142,25 +142,28 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
 
             var response = await http.PostAsJsonAsync("/api/booking-updates", payload, ct);
             row.Status = response.IsSuccessStatusCode ? "Sent" : "Failed";
-            row.ErrorMessage = response.IsSuccessStatusCode ? null : $"XPlan responded {(int)response.StatusCode}";
+            row.ErrorMessage = response.IsSuccessStatusCode
+                ? null
+                : $"XPlan:{DownstreamFailureClassifier.Classify(response.StatusCode)}:{(int)response.StatusCode}";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "Downstream booking change failed. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} StatusCode={StatusCode} CorrelationId={CorrelationId}",
+                    "Downstream booking change failed. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} StatusCode={StatusCode} FailureCategory={FailureCategory} CorrelationId={CorrelationId}",
                     row.Id,
                     row.BookingId,
                     row.ChangeType,
                     (int)response.StatusCode,
+                    DownstreamFailureClassifier.Classify(response.StatusCode),
                     correlationId);
             }
         }
         catch (Exception ex)
         {
             row.Status = "Failed";
-            row.ErrorMessage = ex.Message;
+            row.ErrorMessage = $"XPlanException:{ex.GetType().Name}";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
 

@@ -5,6 +5,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Functions.V1.Bookings;
 
+[BookingOpenApiTag("Approvals")]
 public sealed class ListPendingApprovalRequestsFunction
 {
     private readonly IApprovalWorkflowService _approvals;

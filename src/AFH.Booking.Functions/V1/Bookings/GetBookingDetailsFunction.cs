@@ -6,6 +6,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Functions.V1.Bookings;
 
+[BookingOpenApiTag("Bookings")]
 public sealed class GetBookingDetailsFunction
 {
     private readonly IBookingDetailsHandler _handler;

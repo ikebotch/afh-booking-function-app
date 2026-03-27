@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace AFH.Booking.Functions.V1.Calendar;
 
+[BookingOpenApiTag("Calendar")]
 public sealed class NotificationsFunction
 {
     private readonly IProcessNotificationsHandler _handler;

@@ -5,6 +5,7 @@ using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Middleware;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Functions.Middleware;
@@ -16,15 +17,12 @@ public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
         "/api/v1/me"
     ];
 
-    private readonly IApplicationLogSink _applicationLogSink;
-    private readonly ApplicationLoggingOptions _loggingOptions;
+    private readonly ILogger<DomainUserAuthMiddleware> _logger;
 
     public DomainUserAuthMiddleware(
-        IApplicationLogSink applicationLogSink,
-        IOptions<ApplicationLoggingOptions> loggingOptions)
+        ILogger<DomainUserAuthMiddleware> logger)
     {
-        _applicationLogSink = applicationLogSink;
-        _loggingOptions = loggingOptions.Value;
+        _logger = logger;
     }
 
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
@@ -99,26 +97,43 @@ public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
             ? value?.ToString()
             : null;
 
-        return _applicationLogSink.WriteAsync(new ApplicationLogEntry
+        try
         {
-            OccurredUtc = DateTime.UtcNow,
-            Level = statusCode == HttpStatusCode.InternalServerError ? "Error" : "Warning",
-            Category = "Authorization",
-            Operation = context.FunctionDefinition.Name,
-            CorrelationId = correlationId,
-            ContextId = context.InvocationId,
-            EventType = failureCode,
-            Result = "Failure",
-            Message = detail,
-            PayloadJson = ApplicationLogPayloadHelper.Serialize(new
+            var sink = context.InstanceServices.GetService<IApplicationLogSink>();
+            var loggingOptions = context.InstanceServices.GetService<IOptions<ApplicationLoggingOptions>>()?.Value;
+            if (sink is null || loggingOptions is null)
+                return Task.CompletedTask;
+
+            return sink.WriteAsync(new ApplicationLogEntry
             {
-                FailureSource = nameof(DomainUserAuthMiddleware),
-                FailureCode = failureCode,
-                StatusCode = (int)statusCode,
-                Path = request.Url.AbsolutePath,
-                Method = request.Method,
-                CorrelationId = correlationId
-            }, _loggingOptions)
-        }, CancellationToken.None);
+                OccurredUtc = DateTime.UtcNow,
+                Level = statusCode == HttpStatusCode.InternalServerError ? "Error" : "Warning",
+                Category = "Authorization",
+                Operation = context.FunctionDefinition.Name,
+                CorrelationId = correlationId,
+                ContextId = context.InvocationId,
+                EventType = failureCode,
+                Result = "Failure",
+                Message = detail,
+                PayloadJson = ApplicationLogPayloadHelper.Serialize(new
+                {
+                    FailureSource = nameof(DomainUserAuthMiddleware),
+                    FailureCode = failureCode,
+                    StatusCode = (int)statusCode,
+                    Path = request.Url.AbsolutePath,
+                    Method = request.Method,
+                    CorrelationId = correlationId
+                }, loggingOptions)
+            }, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to persist domain-user auth failure log. Function={FunctionName} CorrelationId={CorrelationId}",
+                context.FunctionDefinition.Name,
+                correlationId);
+            return Task.CompletedTask;
+        }
     }
 }

@@ -6,8 +6,7 @@ public static class RequestParsingExtensions
 {
     public static async Task<T?> ReadJsonAsync<T>(this HttpRequestData req, CancellationToken ct)
     {
-        using var s = req.Body;
-        return await JsonSerializer.DeserializeAsync<T>(s, Json.Options, ct);
+        return await JsonSerializer.DeserializeAsync<T>(req.Body, Json.Options, ct);
     }
 
     public static string? Query(this HttpRequestData req, string key)

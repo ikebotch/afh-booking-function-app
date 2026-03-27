@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Functions.V1.Calendar;
 
+[BookingOpenApiTag("Calendar")]
 public sealed class ProjectedScheduleFunction
 {
     private readonly IAdviserAvailabilityProjectionRepository _projection;
@@ -19,6 +20,8 @@ public sealed class ProjectedScheduleFunction
     }
 
     [Function("Calendar_ProjectedSchedule")]
+    [BookingOpenApiQueryParameter("startUtc", "string", IsRequired = true, Format = "date-time", Description = "Inclusive UTC range start.")]
+    [BookingOpenApiQueryParameter("endUtc", "string", IsRequired = true, Format = "date-time", Description = "Exclusive UTC range end.")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/calendar/users/{userId}/schedule")]
         HttpRequestData req,

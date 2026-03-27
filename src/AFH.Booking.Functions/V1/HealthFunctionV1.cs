@@ -2,6 +2,7 @@ using AFH.Booking.Functions.Http;
 
 namespace AFH.Calendar.Functions.Functions.V1;
 
+[BookingOpenApiTag("Health")]
 public sealed class HealthFunctionV1
 {
     [Function("CalendarHealthV1")]

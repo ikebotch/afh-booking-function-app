@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Domain.Options;
+using AFH.Booking.Infrastructure.Clients;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net.Http.Headers;
@@ -46,7 +47,15 @@ public sealed class AcsMeetingLinkFactory : IMeetingLinkFactory
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _opts.Value.InternalToken.Trim());
 
         using var response = await _http.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "ACS meeting-link request failed. BookingId={BookingId} Status={Status} FailureCategory={FailureCategory}",
+                bookingId,
+                (int)response.StatusCode,
+                DownstreamFailureClassifier.Classify(response.StatusCode));
+            throw new HttpRequestException("ACS meeting link request failed.", null, response.StatusCode);
+        }
 
         var payload = await response.Content.ReadFromJsonAsync<MeetingLinkResponse>(cancellationToken: ct);
         return payload?.JoinUrl;

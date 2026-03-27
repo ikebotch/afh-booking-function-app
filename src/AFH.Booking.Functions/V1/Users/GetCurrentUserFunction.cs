@@ -7,6 +7,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Functions.V1.Users;
 
+[BookingOpenApiTag("Users")]
 public sealed class GetCurrentUserFunction
 {
     private readonly ICurrentUserProfileResolver _profileResolver;

@@ -8,6 +8,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Functions.V1.Bookings;
 
+[BookingOpenApiTag("Bookings")]
 public sealed class SelfServiceRearrangeBookingFunction
 {
     private readonly IBookingChangeAccessService _accessService;

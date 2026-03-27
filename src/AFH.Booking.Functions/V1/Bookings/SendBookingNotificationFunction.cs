@@ -6,6 +6,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Functions.V1.Bookings;
 
+[BookingOpenApiTag("Notifications")]
 public sealed class SendBookingNotificationFunction
 {
     private readonly IClientNotificationService _notifications;

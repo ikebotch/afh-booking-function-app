@@ -3,6 +3,7 @@ using AFH.Booking.Functions.Http;
 
 namespace AFH.Booking.Functions.V1.Admin;
 
+[BookingOpenApiTag("Internal/Admin")]
 public sealed class GetAdviserProjectionFeedFunction
 {
     private readonly IAdviserProfileProjectionRepository _profiles;
@@ -13,6 +14,8 @@ public sealed class GetAdviserProjectionFeedFunction
     }
 
     [Function("Admin_GetAdviserProjectionFeed")]
+    [BookingOpenApiQueryParameter("sinceUtc", "string", Format = "date-time", Description = "Only return projections updated at or after this UTC timestamp.")]
+    [BookingOpenApiQueryParameter("take", "integer", Description = "Maximum number of advisers to return.")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/admin/advisers/projection/feed")]
         HttpRequestData req,

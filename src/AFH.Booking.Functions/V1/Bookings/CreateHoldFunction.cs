@@ -5,6 +5,7 @@ using AFH.Booking.Functions.Mapping;
 
 namespace AFH.Booking.Functions.V1.Bookings;
 
+[BookingOpenApiTag("Bookings")]
 public sealed class CreateHoldFunction
 {
     private readonly ICreateBookingHandler _handler;
@@ -23,24 +24,16 @@ public sealed class CreateHoldFunction
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/hold")] HttpRequestData req,
         CancellationToken ct)
     {
-        try
-        {
-            var body = await req.ReadJsonAsync<CreateHoldRequest>(ct);
-            if (body is null)
-                return await req.ProblemAsync(HttpStatusCode.BadRequest, "Invalid JSON body.", ct);
+        var body = await req.ReadJsonAsync<CreateHoldRequest>(ct);
+        if (body is null)
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, "Invalid JSON body.", ct, Errors.Validation);
 
-            var cmd = body.ToCommand();
-            var result = await _handler.HandleAsync(cmd, ct);
+        var cmd = body.ToCommand();
+        var result = await _handler.HandleAsync(cmd, ct);
 
-            if (!result.IsSuccess)
-                return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);
+        if (!result.IsSuccess)
+            return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);
 
-            return await req.CreatedJsonAsync(result.Value!, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Unhandled exception in Bookings_CreateHold.");
-            return await req.ProblemAsync(HttpStatusCode.InternalServerError, "Something went wrong.", ct, "ServerError");
-        }
+        return await req.CreatedJsonAsync(result.Value!, ct);
     }
 }

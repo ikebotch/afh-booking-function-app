@@ -3,6 +3,7 @@ using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Infrastructure.Http;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Auth;
+using AFH.Booking.Infrastructure.Clients;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Net;
@@ -73,7 +74,11 @@ public sealed class CalendarGateway : ICalendarGateway
         AddAuth(req);
 
         using var res = await _http.SendAsync(req, ct);
-        res.EnsureSuccessStatusCode();
+        if (!res.IsSuccessStatusCode)
+        {
+            LogDownstreamFailure("CreateBookingEvent", ev.UserId, res.StatusCode);
+            throw new HttpRequestException("Calendar service request failed.", null, res.StatusCode);
+        }
 
         var created = await ReadEnvelopedOrRawAsync<CreateAppointmentResponse>(res, ct);
         return created?.AppointmentId ?? created?.EventId;
@@ -105,7 +110,11 @@ public sealed class CalendarGateway : ICalendarGateway
         if (res.StatusCode == HttpStatusCode.NotFound)
             return null;
 
-        res.EnsureSuccessStatusCode();
+        if (!res.IsSuccessStatusCode)
+        {
+            LogDownstreamFailure("UpdateBookingEvent", ev.UserId, res.StatusCode);
+            throw new HttpRequestException("Calendar service request failed.", null, res.StatusCode);
+        }
 
         var updated = await ReadEnvelopedOrRawAsync<CreateAppointmentResponse>(res, ct);
         return updated?.AppointmentId ?? updated?.EventId ?? ev.EventId;
@@ -126,7 +135,11 @@ public sealed class CalendarGateway : ICalendarGateway
         if (res.StatusCode == HttpStatusCode.NotFound)
             return;
 
-        res.EnsureSuccessStatusCode();
+        if (!res.IsSuccessStatusCode)
+        {
+            LogDownstreamFailure("CancelBookingEvent", userId, res.StatusCode);
+            throw new HttpRequestException("Calendar service request failed.", null, res.StatusCode);
+        }
     }
 
     public async Task<CalendarEventDetails?> GetEventAsync(string userId, string eventId, CancellationToken ct = default)
@@ -145,7 +158,12 @@ public sealed class CalendarGateway : ICalendarGateway
 
         if (!res.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Calendar event lookup failed for EventId={EventId}. Status={Status}", eventId, (int)res.StatusCode);
+            _logger.LogWarning(
+                "Calendar event lookup failed. EventId={EventId} UserId={UserId} Status={Status} FailureCategory={FailureCategory}",
+                eventId,
+                userId,
+                (int)res.StatusCode,
+                DownstreamFailureClassifier.Classify(res.StatusCode));
             return null;
         }
 
@@ -191,11 +209,17 @@ public sealed class CalendarGateway : ICalendarGateway
         using var res = await _http.SendAsync(req, ct);
         if (!res.IsSuccessStatusCode)
         {
+            _logger.LogWarning(
+                "Calendar schedule lookup failed. UserId={UserId} Status={Status} FailureCategory={FailureCategory} FreshnessMode={FreshnessMode}",
+                userId,
+                (int)res.StatusCode,
+                DownstreamFailureClassifier.Classify(res.StatusCode),
+                freshnessMode);
             return new AdviserAvailabilityResult
             {
                 IsFree = false,
                 MailboxUnavailable = true,
-                StatusMessage = $"Calendar schedule lookup failed with status {(int)res.StatusCode}.",
+                StatusMessage = "Calendar schedule lookup failed because the calendar service is unavailable.",
                 Conflicts = Array.Empty<CalendarConflictBlock>()
             };
         }
@@ -220,6 +244,16 @@ public sealed class CalendarGateway : ICalendarGateway
             StatusMessage = conflicts.Count == 0 ? "Free" : "Conflicts found",
             Conflicts = conflicts
         };
+    }
+
+    private void LogDownstreamFailure(string operation, string userId, HttpStatusCode statusCode)
+    {
+        _logger.LogWarning(
+            "Calendar dependency call failed. Operation={Operation} UserId={UserId} Status={Status} FailureCategory={FailureCategory}",
+            operation,
+            userId,
+            (int)statusCode,
+            DownstreamFailureClassifier.Classify(statusCode));
     }
 
     private void EnsureConfigured()

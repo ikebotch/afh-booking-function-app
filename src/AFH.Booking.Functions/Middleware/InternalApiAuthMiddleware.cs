@@ -1,9 +1,11 @@
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Functions.Http;
-busing AFH.Booking.Infrastructure.Logging;
+using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Middleware;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Functions.Middleware;
@@ -26,19 +28,16 @@ public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
 
     private readonly InternalApiAuthOptions _options;
     private readonly IHostEnvironment _hostEnvironment;
-    private readonly IApplicationLogSink _applicationLogSink;
-    private readonly ApplicationLoggingOptions _loggingOptions;
+    private readonly ILogger<InternalApiAuthMiddleware> _logger;
 
     public InternalApiAuthMiddleware(
         IOptions<InternalApiAuthOptions> options,
         IHostEnvironment hostEnvironment,
-        IApplicationLogSink applicationLogSink,
-        IOptions<ApplicationLoggingOptions> loggingOptions)
+        ILogger<InternalApiAuthMiddleware> logger)
     {
         _options = options.Value;
         _hostEnvironment = hostEnvironment;
-        _applicationLogSink = applicationLogSink;
-        _loggingOptions = loggingOptions.Value;
+        _logger = logger;
     }
 
     public async Task Invoke(FunctionContext context, FunctionExecutionDelegate next)
@@ -123,26 +122,43 @@ public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
             ? value?.ToString()
             : null;
 
-        return _applicationLogSink.WriteAsync(new ApplicationLogEntry
+        try
         {
-            OccurredUtc = DateTime.UtcNow,
-            Level = statusCode == HttpStatusCode.InternalServerError ? "Error" : "Warning",
-            Category = "Authorization",
-            Operation = context.FunctionDefinition.Name,
-            CorrelationId = correlationId,
-            ContextId = context.InvocationId,
-            EventType = failureCode,
-            Result = "Failure",
-            Message = detail,
-            PayloadJson = ApplicationLogPayloadHelper.Serialize(new
+            var sink = context.InstanceServices.GetService<IApplicationLogSink>();
+            var loggingOptions = context.InstanceServices.GetService<IOptions<ApplicationLoggingOptions>>()?.Value;
+            if (sink is null || loggingOptions is null)
+                return Task.CompletedTask;
+
+            return sink.WriteAsync(new ApplicationLogEntry
             {
-                FailureSource = nameof(InternalApiAuthMiddleware),
-                FailureCode = failureCode,
-                StatusCode = (int)statusCode,
-                Path = request.Url.AbsolutePath,
-                Method = request.Method,
-                CorrelationId = correlationId
-            }, _loggingOptions)
-        }, CancellationToken.None);
+                OccurredUtc = DateTime.UtcNow,
+                Level = statusCode == HttpStatusCode.InternalServerError ? "Error" : "Warning",
+                Category = "Authorization",
+                Operation = context.FunctionDefinition.Name,
+                CorrelationId = correlationId,
+                ContextId = context.InvocationId,
+                EventType = failureCode,
+                Result = "Failure",
+                Message = detail,
+                PayloadJson = ApplicationLogPayloadHelper.Serialize(new
+                {
+                    FailureSource = nameof(InternalApiAuthMiddleware),
+                    FailureCode = failureCode,
+                    StatusCode = (int)statusCode,
+                    Path = request.Url.AbsolutePath,
+                    Method = request.Method,
+                    CorrelationId = correlationId
+                }, loggingOptions)
+            }, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to persist internal auth failure log. Function={FunctionName} CorrelationId={CorrelationId}",
+                context.FunctionDefinition.Name,
+                correlationId);
+            return Task.CompletedTask;
+        }
     }
 }

@@ -7,6 +7,7 @@ using AFH.Booking.Functions.Mapping;
 
 namespace AFH.Booking.Functions.V2.Availability;
 
+[BookingOpenApiTag("Availability")]
 public sealed class GetAvailabilityFunction
 {
     private readonly IAvailabilityHandler _handler;
@@ -26,7 +27,7 @@ public sealed class GetAvailabilityFunction
         if (string.IsNullOrWhiteSpace(transactionId))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "transactionId is required.", ct);
 
-        var body = await req.ReadFromJsonAsync<GetAvailabilityRequest>(ct);
+        var body = await req.ReadJsonAsync<GetAvailabilityRequest>(ct);
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct);
 

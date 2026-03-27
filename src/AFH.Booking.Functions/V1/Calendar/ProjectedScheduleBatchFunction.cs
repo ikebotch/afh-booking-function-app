@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Functions.V1.Calendar;
 
+[BookingOpenApiTag("Calendar")]
 public sealed class ProjectedScheduleBatchFunction
 {
     private readonly IAdviserAvailabilityProjectionRepository _projection;

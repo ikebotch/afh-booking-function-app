@@ -11,6 +11,7 @@ var host = new HostBuilder()
     {
         app.UseMiddleware<CorrelationIdMiddleware>();
         app.UseMiddleware<OperationAuditMiddleware>();
+        app.UseMiddleware<ExceptionHandlingMiddleware>();
         app.UseMiddleware<InternalApiAuthMiddleware>();
         app.UseMiddleware<DomainUserAuthMiddleware>();
     })

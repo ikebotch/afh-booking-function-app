@@ -31,6 +31,7 @@ public sealed class GetAdviserProjectionByIdFunction
         {
             adviserId = adviser.AdviserId,
             displayName = adviser.DisplayName,
+            mailboxUserId = adviser.MailboxUserId,
             homePostcode = adviser.HomePostcode,
             region = adviser.Region,
             skills = adviser.Skills,

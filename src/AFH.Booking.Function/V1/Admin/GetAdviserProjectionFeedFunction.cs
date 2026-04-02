@@ -35,6 +35,7 @@ public sealed class GetAdviserProjectionFeedFunction
         {
             adviserId = x.AdviserId,
             displayName = x.DisplayName,
+            mailboxUserId = x.MailboxUserId,
             homePostcode = x.HomePostcode,
             region = x.Region,
             skills = x.Skills,

@@ -33,7 +33,7 @@ steps:
   displayName: 'Build .NET'
   inputs:
     command: 'build'
-    projects: 'src/AFH.Booking.Functions/AFH.Booking.Functions.csproj'
+    projects: 'src/AFH.Booking.Function/AFH.Booking.Function.csproj'
     arguments: '--output $(Build.BinariesDirectory)/publish_output --configuration $(buildConfiguration)'
 
 

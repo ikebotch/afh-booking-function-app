@@ -60,6 +60,7 @@ public sealed class AdviserDirectorySyncServiceTests
                 Enabled = true,
                 BaseUrl = "https://location.example",
                 CoverageEndpointPath = "/api/v1/admin/adviser-coverage",
+                FunctionKey = "location-function-key",
                 InternalToken = "location-token"
             }),
             new InternalBearerServiceAuthenticator(),
@@ -74,6 +75,8 @@ public sealed class AdviserDirectorySyncServiceTests
 
         Assert.NotNull(captured);
         Assert.Equal("https://location.example/api/v1/admin/adviser-coverage", captured!.RequestUri!.ToString());
+        Assert.True(captured.Headers.TryGetValues("x-functions-key", out var functionKeyValues));
+        Assert.Equal("location-function-key", Assert.Single(functionKeyValues));
         Assert.Equal("location-token", captured.Headers.Authorization?.Parameter);
         Assert.Equal(1, result.SyncedCount);
 
@@ -107,6 +110,7 @@ public sealed class AdviserDirectorySyncServiceTests
                 Enabled = true,
                 BaseUrl = "https://location.example",
                 CoverageEndpointPath = "/api/v1/admin/adviser-coverage",
+                FunctionKey = "location-function-key",
                 InternalToken = "location-token"
             }),
             new InternalBearerServiceAuthenticator(),
@@ -130,6 +134,7 @@ public sealed class AdviserDirectorySyncServiceTests
         Assert.Contains("\"StatusCode\":401", entry.PayloadJson);
         Assert.Contains("/api/v1/admin/adviser-coverage", entry.PayloadJson);
         Assert.DoesNotContain("location-token", entry.PayloadJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain("location-function-key", entry.PayloadJson ?? string.Empty, StringComparison.Ordinal);
     }
 
     private sealed class RecordingProfiles : IAdviserProfileProjectionRepository

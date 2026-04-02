@@ -72,6 +72,8 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
             url += $"{sepSince}sinceUtc={Uri.EscapeDataString(sinceUtc.Value.ToString("O"))}";
         }
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
+            req.Headers.TryAddWithoutValidation("x-functions-key", _options.FunctionKey.Trim());
         _authenticator.Apply(req, _options.InternalToken);
 
         try

@@ -25,6 +25,7 @@
     "AdviserDirectory:Enabled": "true",
     "AdviserDirectory:BaseUrl": "http://localhost:7073",
     "AdviserDirectory:CoverageEndpointPath": "/api/v1/admin/adviser-coverage",
+    "AdviserDirectory:FunctionKey": "<location-function-key>",
     "AdviserDirectory:InternalToken": "<shared-internal-token>",
     "AdviserDirectory:SyncIntervalMinutes": "30",
     "Leads:BaseUrl": "https://leads.example",

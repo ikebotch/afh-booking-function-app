@@ -4,6 +4,8 @@ using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Auth;
 using AFH.Booking.Infrastructure.Clients;
 using AFH.Booking.Infrastructure.Http;
+using AFH.Booking.Infrastructure.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text;
@@ -63,7 +65,10 @@ public sealed class AdviserDirectorySyncServiceTests
             new InternalBearerServiceAuthenticator(),
             profiles,
             syncState,
-            new StubClock(now));
+            new StubClock(now),
+            new RecordingLogSink(),
+            Options.Create(new ApplicationLoggingOptions()),
+            NullLogger<AdviserDirectorySyncService>.Instance);
 
         var result = await sut.SyncAsync(CancellationToken.None);
 
@@ -88,6 +93,43 @@ public sealed class AdviserDirectorySyncServiceTests
         Assert.Equal("adviser_directory_last_sync_utc", syncState.LastKey);
         Assert.Equal(now.ToString("O"), syncState.LastValue);
         Assert.Equal(now, syncState.LastUpdatedUtc);
+    }
+
+    [Fact]
+    public async Task SyncAsync_WritesFailureToApplicationLogSink_WhenLocationReturnsUnauthorized()
+    {
+        var now = new DateTime(2026, 04, 02, 12, 30, 0, DateTimeKind.Utc);
+        var logSink = new RecordingLogSink();
+        var sut = new AdviserDirectorySyncService(
+            new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized))),
+            Options.Create(new AdviserDirectoryOptions
+            {
+                Enabled = true,
+                BaseUrl = "https://location.example",
+                CoverageEndpointPath = "/api/v1/admin/adviser-coverage",
+                InternalToken = "location-token"
+            }),
+            new InternalBearerServiceAuthenticator(),
+            new RecordingProfiles(),
+            new RecordingSyncState(),
+            new StubClock(now),
+            logSink,
+            Options.Create(new ApplicationLoggingOptions()),
+            NullLogger<AdviserDirectorySyncService>.Instance);
+
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(() => sut.SyncAsync(CancellationToken.None));
+
+        Assert.Contains("401", ex.Message, StringComparison.OrdinalIgnoreCase);
+        var entry = Assert.Single(logSink.Entries);
+        Assert.Equal("AdviserDirectorySync", entry.Category);
+        Assert.Equal("AdviserDirectoryProjectionSync", entry.Operation);
+        Assert.Equal("AdviserDirectorySyncFailed", entry.EventType);
+        Assert.Equal("Failure", entry.Result);
+        Assert.Equal("Warning", entry.Level);
+        Assert.Equal("HttpRequestException", entry.ExceptionType);
+        Assert.Contains("\"StatusCode\":401", entry.PayloadJson);
+        Assert.Contains("/api/v1/admin/adviser-coverage", entry.PayloadJson);
+        Assert.DoesNotContain("location-token", entry.PayloadJson ?? string.Empty, StringComparison.Ordinal);
     }
 
     private sealed class RecordingProfiles : IAdviserProfileProjectionRepository
@@ -123,6 +165,17 @@ public sealed class AdviserDirectorySyncServiceTests
             LastKey = key;
             LastValue = value;
             LastUpdatedUtc = updatedUtc;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingLogSink : IApplicationLogSink
+    {
+        public List<ApplicationLogEntry> Entries { get; } = [];
+
+        public Task WriteAsync(ApplicationLogEntry entry, CancellationToken cancellationToken = default)
+        {
+            Entries.Add(entry);
             return Task.CompletedTask;
         }
     }

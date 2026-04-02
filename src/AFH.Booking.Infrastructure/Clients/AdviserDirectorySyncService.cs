@@ -4,6 +4,8 @@ using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Auth;
 using AFH.Booking.Infrastructure.Http;
+using AFH.Booking.Infrastructure.Logging;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 
@@ -18,6 +20,9 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
     private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IIntegrationSyncStateRepository _syncState;
     private readonly IClock _clock;
+    private readonly IApplicationLogSink _logSink;
+    private readonly ApplicationLoggingOptions _loggingOptions;
+    private readonly ILogger<AdviserDirectorySyncService> _logger;
 
     public AdviserDirectorySyncService(
         HttpClient http,
@@ -25,7 +30,10 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         IInternalServiceAuthenticator authenticator,
         IAdviserProfileProjectionRepository profiles,
         IIntegrationSyncStateRepository syncState,
-        IClock clock)
+        IClock clock,
+        IApplicationLogSink logSink,
+        IOptions<ApplicationLoggingOptions> loggingOptions,
+        ILogger<AdviserDirectorySyncService> logger)
     {
         _http = http;
         _options = options.Value;
@@ -33,6 +41,9 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         _profiles = profiles;
         _syncState = syncState;
         _clock = clock;
+        _logSink = logSink;
+        _loggingOptions = loggingOptions.Value;
+        _logger = logger;
     }
 
     public async Task<AdviserDirectorySyncResult> SyncAsync(CancellationToken ct)
@@ -63,52 +74,66 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         _authenticator.Apply(req, _options.InternalToken);
 
-        using var res = await _http.SendAsync(req, ct);
-        res.EnsureSuccessStatusCode();
-
-        var payload = await ReadCoverageAsync(res, ct);
-        var now = _clock.UtcNow;
-
-        var records = payload
-            .Where(x => !string.IsNullOrWhiteSpace(x.Id))
-            .Select(x => new AdviserProfileProjectionRecord
-            {
-                AdviserId = x.Id.Trim(),
-                DisplayName = string.IsNullOrWhiteSpace(x.Name) ? x.Id.Trim() : x.Name.Trim(),
-                MailboxUserId = FirstNonEmpty(
-                    x.MailboxUserId,
-                    x.Mailbox,
-                    x.UserId,
-                    x.Email,
-                    x.AdviserEmail,
-                    x.PrincipalName,
-                    x.Id),
-                Region = x.Region?.Trim() ?? string.Empty,
-                HomePostcode = x.Postcode?.Trim() ?? string.Empty,
-                IsActive = x.IsActive ?? true,
-                Rating = x.Rating ?? 0d,
-                Skills = x.Skills?
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .Select(s => s.Trim())
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToArray()
-                    ?? Array.Empty<string>(),
-                CoverageRadiusMiles = x.RadiusMiles > 0 ? x.RadiusMiles : null,
-                MaxTravelTimeMinutes = x.MaxTravelTimeMinutes > 0 ? x.MaxTravelTimeMinutes : null,
-                LastSyncedUtc = now,
-                SourceVersion = now.ToString("O")
-            })
-            .ToList();
-
-        await _profiles.UpsertRangeAsync(records, ct);
-
-        await _syncState.UpsertValueAsync(SyncCursorKey, now.ToString("O"), now, ct);
-        return new AdviserDirectorySyncResult
+        try
         {
-            SyncedAtUtc = now,
-            SyncedCount = records.Count,
-            Source = url
-        };
+            using var res = await _http.SendAsync(req, ct);
+            res.EnsureSuccessStatusCode();
+
+            var payload = await ReadCoverageAsync(res, ct);
+            var now = _clock.UtcNow;
+
+            var records = payload
+                .Where(x => !string.IsNullOrWhiteSpace(x.Id))
+                .Select(x => new AdviserProfileProjectionRecord
+                {
+                    AdviserId = x.Id.Trim(),
+                    DisplayName = string.IsNullOrWhiteSpace(x.Name) ? x.Id.Trim() : x.Name.Trim(),
+                    MailboxUserId = FirstNonEmpty(
+                        x.MailboxUserId,
+                        x.Mailbox,
+                        x.UserId,
+                        x.Email,
+                        x.AdviserEmail,
+                        x.PrincipalName,
+                        x.Id),
+                    Region = x.Region?.Trim() ?? string.Empty,
+                    HomePostcode = x.Postcode?.Trim() ?? string.Empty,
+                    IsActive = x.IsActive ?? true,
+                    Rating = x.Rating ?? 0d,
+                    Skills = x.Skills?
+                        .Where(s => !string.IsNullOrWhiteSpace(s))
+                        .Select(s => s.Trim())
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray()
+                        ?? Array.Empty<string>(),
+                    CoverageRadiusMiles = x.RadiusMiles > 0 ? x.RadiusMiles : null,
+                    MaxTravelTimeMinutes = x.MaxTravelTimeMinutes > 0 ? x.MaxTravelTimeMinutes : null,
+                    LastSyncedUtc = now,
+                    SourceVersion = now.ToString("O")
+                })
+                .ToList();
+
+            await _profiles.UpsertRangeAsync(records, ct);
+
+            await _syncState.UpsertValueAsync(SyncCursorKey, now.ToString("O"), now, ct);
+            return new AdviserDirectorySyncResult
+            {
+                SyncedAtUtc = now,
+                SyncedCount = records.Count,
+                Source = url
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Adviser directory sync request failed. Endpoint={Endpoint} StatusCode={StatusCode}",
+                url,
+                TryGetHttpStatusCode(ex));
+
+            await TryWriteFailureLogAsync(url, sinceUtc, ex, ct);
+            throw;
+        }
     }
 
     private static async Task<IReadOnlyList<CoverageAdviserItem>> ReadCoverageAsync(HttpResponseMessage response, CancellationToken ct)
@@ -170,5 +195,60 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         }
 
         return string.Empty;
+    }
+
+    private async Task TryWriteFailureLogAsync(
+        string endpoint,
+        DateTime? sinceUtc,
+        Exception ex,
+        CancellationToken ct)
+    {
+        try
+        {
+            var endpointUri = Uri.TryCreate(endpoint, UriKind.Absolute, out var absoluteUri)
+                ? absoluteUri
+                : null;
+            var statusCode = TryGetHttpStatusCode(ex);
+
+            await _logSink.WriteAsync(new ApplicationLogEntry
+            {
+                OccurredUtc = _clock.UtcNow,
+                Level = "Warning",
+                Category = "AdviserDirectorySync",
+                Operation = "AdviserDirectoryProjectionSync",
+                ContextId = SyncCursorKey,
+                EventType = "AdviserDirectorySyncFailed",
+                Result = "Failure",
+                Message = "Adviser directory sync failed.",
+                ExceptionType = ex.GetType().Name,
+                ExceptionMessage = ex.Message,
+                PayloadJson = ApplicationLogPayloadHelper.Serialize(new
+                {
+                    Endpoint = endpointUri?.AbsoluteUri ?? endpoint,
+                    Path = endpointUri?.AbsolutePath,
+                    Method = "GET",
+                    StatusCode = statusCode,
+                    SinceUtc = sinceUtc?.ToString("O")
+                }, _loggingOptions)
+            }, ct);
+        }
+        catch (Exception sinkEx)
+        {
+            _logger.LogWarning(
+                sinkEx,
+                "Failed to persist adviser directory sync failure log. Endpoint={Endpoint}",
+                endpoint);
+        }
+    }
+
+    private static int? TryGetHttpStatusCode(Exception ex)
+    {
+        for (var current = ex; current is not null; current = current.InnerException)
+        {
+            if (current is HttpRequestException httpEx && httpEx.StatusCode.HasValue)
+                return (int)httpEx.StatusCode.Value;
+        }
+
+        return null;
     }
 }

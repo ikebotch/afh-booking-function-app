@@ -13,6 +13,7 @@ public sealed class AdviserProfileProjectionModelConfiguration : IEntityTypeConf
 
         b.Property(x => x.AdviserId).HasMaxLength(256);
         b.Property(x => x.DisplayName).IsRequired().HasMaxLength(256);
+        b.Property(x => x.MailboxUserId).HasMaxLength(256);
         b.Property(x => x.Region).HasMaxLength(128);
         b.Property(x => x.HomePostcode).HasMaxLength(32);
         b.Property(x => x.IsActive).IsRequired();

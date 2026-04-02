@@ -1,5 +1,6 @@
 ﻿using AFH.Booking.Application.Abstractions.Bookings.Handlers;
 using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Contracts.V1.Responses;
@@ -24,6 +25,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
     private readonly IBookingHoldRepository _holdRepo;
     private readonly IUnitOfWork _uow;
     private readonly ICalendarGateway _calendar;
+    private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IClientDirectory _clients;
     private readonly IClock _clock;
     private readonly ILogger<CreateBookingHandler> _logger;
@@ -34,6 +36,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         IBookingHoldRepository holdRepo,
         IUnitOfWork uow,
         ICalendarGateway calendar,
+        IAdviserProfileProjectionRepository profiles,
         IClientDirectory clients,
         IClock clock,
         ILogger<CreateBookingHandler> logger)
@@ -43,6 +46,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         _holdRepo = holdRepo;
         _uow = uow;
         _calendar = calendar;
+        _profiles = profiles;
         _clients = clients;
         _clock = clock;
         _logger = logger;
@@ -74,7 +78,8 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         if (!availabilityCheck.IsSuccess)
             return FailFrom<CreateBookingResponse>(availabilityCheck);
 
-        var holdCreate = CreateHold(slot, utcNow);
+        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
+        var holdCreate = CreateHold(slot, calendarUserId, utcNow);
         if (!holdCreate.IsSuccess)
             return FailFrom<CreateBookingResponse>(holdCreate);
 
@@ -163,8 +168,9 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         {
             try
             {
+                var existingCalendarUserId = await _profiles.ResolveCalendarUserIdAsync(existing.UserId, ct);
                 await _calendar.CancelBookingEventAsync(
-                    existing.UserId,
+                    existingCalendarUserId,
                     existing.CalendarProviderEventId,
                     ct);
             }
@@ -219,8 +225,9 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
     {
         var windows = BuildHoldWindows(slot, tx);
 
+        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
         var availability = await _calendar.CheckAvailabilityAsync(
-            slot.AdviserId,
+            calendarUserId,
             windows.HoldStartUtc,
             windows.HoldEndUtc,
             tx.Timezone,
@@ -262,13 +269,13 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
     // -------------------------
     // Domain creation
     // -------------------------
-    private static Result<BookingHold> CreateHold(BookingSlot slot, DateTime utcNow)
+    private static Result<BookingHold> CreateHold(BookingSlot slot, string calendarUserId, DateTime utcNow)
     {
         try
         {
             var hold = BookingHold.Create(
                 slotId: slot.Id,
-                userId: slot.AdviserId,
+                userId: calendarUserId,
                 utcNow: utcNow,
                 holdDuration: DefaultHoldWindow);
 
@@ -293,6 +300,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         CancellationToken ct)
     {
         var windows = BuildHoldWindows(slot, tx);
+        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
 
         _logger.LogInformation(
             "Creating calendar hold event for HoldId={HoldId} SlotId={SlotId} AdviserId={AdviserId} SlotStartUtc={SlotStartUtc} SlotEndUtc={SlotEndUtc} HoldStartUtc={HoldStartUtc} HoldEndUtc={HoldEndUtc} TravelBufferMins={TravelBufferMins} CompanyBufferMins={CompanyBufferMins}",
@@ -318,7 +326,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         try
         {
             calendarEvent = BookingCalendarEvent.Create(
-                userId: slot.AdviserId,
+                userId: calendarUserId,
                 externalId: $"hold:{hold.Id}",
                 subject: subject,
                 startUtc: windows.HoldStartUtc,

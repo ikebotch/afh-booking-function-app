@@ -1,4 +1,5 @@
 ﻿using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Contracts.V1.Responses;
 
@@ -6,17 +7,20 @@ public sealed class ReleaseHoldHandler : IReleaseHoldHandler
 {
     private readonly IBookingHoldRepository _holds;
     private readonly ICalendarGateway _calendar;
+    private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
 
     public ReleaseHoldHandler(
         IBookingHoldRepository holds,
         ICalendarGateway calendar,
+        IAdviserProfileProjectionRepository profiles,
         IUnitOfWork uow,
         IClock clock)
     {
         _holds = holds;
         _calendar = calendar;
+        _profiles = profiles;
         _uow = uow;
         _clock = clock;
     }
@@ -55,8 +59,9 @@ public sealed class ReleaseHoldHandler : IReleaseHoldHandler
         {
             try
             {
+                var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(hold.UserId, ct);
                 await _calendar.CancelBookingEventAsync(
-                    hold.UserId,
+                    calendarUserId,
                     hold.CalendarProviderEventId,
                     ct);
             }

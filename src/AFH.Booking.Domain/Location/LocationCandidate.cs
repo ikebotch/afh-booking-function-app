@@ -6,6 +6,7 @@ public sealed class LocationCandidate
 {
     public string AdviserId { get; set; } = default!;
     public string AdviserName { get; set; } = default!;
+    public string MailboxUserId { get; set; } = string.Empty;
     public bool GoldStar { get; set; }
     public string? Region { get; set; }
     public int? TravelMinutes { get; set; }

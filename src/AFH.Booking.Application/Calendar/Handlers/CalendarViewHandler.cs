@@ -38,7 +38,7 @@ public sealed class CalendarViewQueryHandler : ICalendarViewQueryHandler
 
             items.Add(new CalendarViewDto
             {
-                AdviserId = u.Email,
+                AdviserId = u.AdviserId,
                 IsBusy = !availability.IsFree,
                 MailboxUnavailable = availability.MailboxUnavailable,
                 Message = availability.StatusMessage,

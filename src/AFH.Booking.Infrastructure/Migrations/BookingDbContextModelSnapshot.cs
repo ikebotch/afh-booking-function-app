@@ -107,6 +107,11 @@ namespace AFH.Booking.Infrastructure.Migrations
                     b.Property<DateTime>("LastSyncedUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("MailboxUserId")
+                        .IsRequired()
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
+
                     b.Property<int?>("MaxTravelTimeMinutes")
                         .HasColumnType("int");
 

@@ -43,6 +43,7 @@ public sealed class CreateBookingHandlerTests
             holdRepo,
             new StubUnitOfWork(),
             calendar,
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubClientDirectory(),
             new StubClock(now),
             NullLogger<CreateBookingHandler>.Instance);
@@ -62,6 +63,8 @@ public sealed class CreateBookingHandlerTests
         Assert.NotNull(holdRepo.AddedHold);
         Assert.NotEqual(oldHold.Id, holdRepo.AddedHold!.Id);
         Assert.Equal("evt-old", calendar.CancelledEventId);
+        Assert.Equal("adviser.one@tenant.com", calendar.LastAvailabilityUserId);
+        Assert.Equal("adviser.one@tenant.com", calendar.LastCreatedUserId);
         Assert.Equal("ForceRefresh", calendar.LastFreshnessMode);
         Assert.DoesNotContain("<html", calendar.LastCreatedBody ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
@@ -82,6 +85,7 @@ public sealed class CreateBookingHandlerTests
             holdRepo,
             new StubUnitOfWork(),
             calendar,
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubClientDirectory(),
             new StubClock(now),
             NullLogger<CreateBookingHandler>.Instance);
@@ -93,6 +97,7 @@ public sealed class CreateBookingHandlerTests
         }, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
+        Assert.Equal("adviser.one@tenant.com", calendar.LastAvailabilityUserId);
         Assert.Equal(slot.StartUtc.AddMinutes(-45), calendar.LastAvailabilityStartUtc);
         Assert.Equal(slot.EndUtc.AddMinutes(30), calendar.LastAvailabilityEndUtc);
         Assert.Equal("ForceRefresh", calendar.LastFreshnessMode);
@@ -142,6 +147,7 @@ public sealed class CreateBookingHandlerTests
             holdRepo,
             new StubUnitOfWork(),
             calendar,
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubClientDirectory(),
             new StubClock(now),
             NullLogger<CreateBookingHandler>.Instance);
@@ -297,6 +303,27 @@ public sealed class CreateBookingHandlerTests
         public Task<ClientDirectoryItem?> GetAsync(string transactionRef, CancellationToken ct) => Task.FromResult<ClientDirectoryItem?>(null);
     }
 
+    private sealed class StubProfiles : IAdviserProfileProjectionRepository
+    {
+        private readonly AdviserProfileProjectionRecord? _record;
+
+        public StubProfiles(string adviserId, string mailboxUserId)
+        {
+            _record = new AdviserProfileProjectionRecord
+            {
+                AdviserId = adviserId,
+                DisplayName = adviserId,
+                MailboxUserId = mailboxUserId,
+                IsActive = true
+            };
+        }
+
+        public Task UpsertRangeAsync(IReadOnlyList<AdviserProfileProjectionRecord> advisers, CancellationToken ct) => Task.CompletedTask;
+        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>(_record is null ? [] : [_record]);
+        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>(_record is null ? [] : [_record]);
+        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct) => Task.FromResult(_record is not null && string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
+    }
+
     private sealed class StubClock : IClock
     {
         public StubClock(DateTime utcNow) => UtcNow = utcNow;
@@ -319,14 +346,17 @@ public sealed class CreateBookingHandlerTests
 
         public DateTime LastAvailabilityStartUtc { get; private set; }
         public DateTime LastAvailabilityEndUtc { get; private set; }
+        public string? LastAvailabilityUserId { get; private set; }
         public string? LastFreshnessMode { get; private set; }
         public string? CancelledEventId { get; private set; }
+        public string? LastCreatedUserId { get; private set; }
         public bool CreatedBookingEvent { get; private set; }
         public string? LastCreatedBody { get; private set; }
 
         public Task<string?> CreateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct)
         {
             CreatedBookingEvent = true;
+            LastCreatedUserId = ev.UserId;
             LastCreatedBody = ev.Body;
             _recorder.Record("create-calendar");
             return Task.FromResult<string?>("evt-new");
@@ -350,6 +380,7 @@ public sealed class CreateBookingHandlerTests
             string? freshnessMode,
             CancellationToken ct)
         {
+            LastAvailabilityUserId = userId;
             LastAvailabilityStartUtc = startUtc;
             LastAvailabilityEndUtc = endUtc;
             LastFreshnessMode = freshnessMode;

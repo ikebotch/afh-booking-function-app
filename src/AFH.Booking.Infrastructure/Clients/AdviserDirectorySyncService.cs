@@ -75,11 +75,24 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
             {
                 AdviserId = x.Id.Trim(),
                 DisplayName = string.IsNullOrWhiteSpace(x.Name) ? x.Id.Trim() : x.Name.Trim(),
+                MailboxUserId = FirstNonEmpty(
+                    x.MailboxUserId,
+                    x.Mailbox,
+                    x.UserId,
+                    x.Email,
+                    x.AdviserEmail,
+                    x.PrincipalName,
+                    x.Id),
                 Region = x.Region?.Trim() ?? string.Empty,
                 HomePostcode = x.Postcode?.Trim() ?? string.Empty,
-                IsActive = true,
-                Rating = 0d,
-                Skills = Array.Empty<string>(),
+                IsActive = x.IsActive ?? true,
+                Rating = x.Rating ?? 0d,
+                Skills = x.Skills?
+                    .Where(s => !string.IsNullOrWhiteSpace(s))
+                    .Select(s => s.Trim())
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray()
+                    ?? Array.Empty<string>(),
                 CoverageRadiusMiles = x.RadiusMiles > 0 ? x.RadiusMiles : null,
                 MaxTravelTimeMinutes = x.MaxTravelTimeMinutes > 0 ? x.MaxTravelTimeMinutes : null,
                 LastSyncedUtc = now,
@@ -133,6 +146,7 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
     {
         public string Id { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
+        public string? MailboxUserId { get; set; }
         public string? UserId { get; set; }
         public string? Mailbox { get; set; }
         public string? Email { get; set; }
@@ -140,7 +154,21 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         public string? PrincipalName { get; set; }
         public string? Region { get; set; }
         public string? Postcode { get; set; }
+        public bool? IsActive { get; set; }
+        public List<string>? Skills { get; set; }
+        public double? Rating { get; set; }
         public int MaxTravelTimeMinutes { get; set; }
         public double RadiusMiles { get; set; }
+    }
+
+    private static string FirstNonEmpty(params string?[] values)
+    {
+        foreach (var value in values)
+        {
+            if (!string.IsNullOrWhiteSpace(value))
+                return value.Trim();
+        }
+
+        return string.Empty;
     }
 }

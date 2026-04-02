@@ -139,6 +139,7 @@ public class ConfirmBookingHandlerTests
             new StubUnitOfWork(),
             new StubClock(now),
             calendar,
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(
                 true,
@@ -208,6 +209,7 @@ public class ConfirmBookingHandlerTests
             new StubUnitOfWork(),
             new StubClock(now),
             calendar,
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())));
 
@@ -215,6 +217,7 @@ public class ConfirmBookingHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.True(calendar.UpdateCalled);
+        Assert.Equal("adviser.one@tenant.com", calendar.LastUpdatedUserId);
         Assert.DoesNotContain("<html", calendar.LastUpdatedBody ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("https://meeting.example", calendar.LastUpdatedBody ?? string.Empty);
     }
@@ -228,6 +231,7 @@ public class ConfirmBookingHandlerTests
             new StubUnitOfWork(),
             new StubClock(DateTime.UtcNow),
             new StubCalendarGateway(),
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())));
     }
@@ -276,6 +280,27 @@ public class ConfirmBookingHandlerTests
         public Task<int> SaveChangesAsync(CancellationToken ct = default) => Task.FromResult(0);
     }
 
+    private sealed class StubProfiles : IAdviserProfileProjectionRepository
+    {
+        private readonly AdviserProfileProjectionRecord _record;
+
+        public StubProfiles(string adviserId, string mailboxUserId)
+        {
+            _record = new AdviserProfileProjectionRecord
+            {
+                AdviserId = adviserId,
+                DisplayName = adviserId,
+                MailboxUserId = mailboxUserId,
+                IsActive = true
+            };
+        }
+
+        public Task UpsertRangeAsync(IReadOnlyList<AdviserProfileProjectionRecord> advisers, CancellationToken ct) => Task.CompletedTask;
+        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>([_record]);
+        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>([_record]);
+        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct) => Task.FromResult(string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
+    }
+
     private sealed class StubClock : IClock
     {
         public StubClock(DateTime utcNow) => UtcNow = utcNow;
@@ -285,11 +310,13 @@ public class ConfirmBookingHandlerTests
     private sealed class StubCalendarGateway : ICalendarGateway
     {
         public bool UpdateCalled { get; private set; }
+        public string? LastUpdatedUserId { get; private set; }
         public string? LastUpdatedBody { get; private set; }
         public Task<string?> CreateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct) => Task.FromResult<string?>(null);
         public Task<string?> UpdateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct)
         {
             UpdateCalled = true;
+            LastUpdatedUserId = ev.UserId;
             LastUpdatedBody = ev.Body;
             return Task.FromResult<string?>(null);
         }

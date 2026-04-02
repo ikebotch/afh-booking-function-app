@@ -2,6 +2,7 @@ using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;
+using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Contracts.V1.Responses;
@@ -17,6 +18,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
     private readonly IBookingTransactionRepository _transactions;
     private readonly IUnitOfWork _uow;
     private readonly ICalendarGateway _calendar;
+    private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IClock _clock;
     private readonly INotificationService _notifications;
     private readonly IDownstreamUpdateService _downstreamUpdates;
@@ -29,6 +31,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         IBookingTransactionRepository transactions,
         IUnitOfWork uow,
         ICalendarGateway calendar,
+        IAdviserProfileProjectionRepository profiles,
         IClock clock,
         INotificationService notifications,
         IDownstreamUpdateService downstreamUpdates,
@@ -40,6 +43,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         _transactions = transactions;
         _uow = uow;
         _calendar = calendar;
+        _profiles = profiles;
         _clock = clock;
         _notifications = notifications;
         _downstreamUpdates = downstreamUpdates;
@@ -100,7 +104,8 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         {
             try
             {
-                await _calendar.CancelBookingEventAsync(slot.AdviserId, hold.CalendarProviderEventId!, ct);
+                var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
+                await _calendar.CancelBookingEventAsync(calendarUserId, hold.CalendarProviderEventId!, ct);
                 outlookStatus = LifecycleStepStatuses.Succeeded;
             }
             catch (Exception ex)

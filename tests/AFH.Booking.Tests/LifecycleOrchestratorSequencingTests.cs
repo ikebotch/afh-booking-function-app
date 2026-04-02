@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;
+using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Contracts.V1.Responses;
@@ -46,7 +47,7 @@ public sealed class LifecycleOrchestratorSequencingTests
         uow.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
         var calendar = new Mock<ICalendarGateway>();
-        calendar.Setup(x => x.CancelBookingEventAsync("adviser-1", "provider-1", It.IsAny<CancellationToken>()))
+        calendar.Setup(x => x.CancelBookingEventAsync("adviser.one@tenant.com", "provider-1", It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("outlook"))
             .Returns(Task.CompletedTask);
 
@@ -82,6 +83,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             txRepo.Object,
             uow.Object,
             calendar.Object,
+            new StubProfiles("adviser-1", "adviser.one@tenant.com"),
             new StubClock(DateTime.UtcNow),
             notifications.Object,
             downstream.Object,
@@ -193,5 +195,26 @@ public sealed class LifecycleOrchestratorSequencingTests
         }
 
         public DateTime UtcNow { get; }
+    }
+
+    private sealed class StubProfiles : IAdviserProfileProjectionRepository
+    {
+        private readonly AdviserProfileProjectionRecord _record;
+
+        public StubProfiles(string adviserId, string mailboxUserId)
+        {
+            _record = new AdviserProfileProjectionRecord
+            {
+                AdviserId = adviserId,
+                DisplayName = adviserId,
+                MailboxUserId = mailboxUserId,
+                IsActive = true
+            };
+        }
+
+        public Task UpsertRangeAsync(IReadOnlyList<AdviserProfileProjectionRecord> advisers, CancellationToken ct) => Task.CompletedTask;
+        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>([_record]);
+        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>([_record]);
+        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct) => Task.FromResult(string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
     }
 }

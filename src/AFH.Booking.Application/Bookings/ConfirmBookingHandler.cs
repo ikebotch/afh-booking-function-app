@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Meetings;
+using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Contracts.V1.Responses;
@@ -19,6 +20,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
     private readonly ICalendarGateway _calendar;
+    private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IMeetingLinkFactory _meetingLinks;
     private readonly IBookingConflictService _conflicts;
 
@@ -29,6 +31,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         IUnitOfWork uow,
         IClock clock,
         ICalendarGateway calendar,
+        IAdviserProfileProjectionRepository profiles,
         IMeetingLinkFactory meetingLinks,
         IBookingConflictService conflicts)
     {
@@ -38,6 +41,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         _uow = uow;
         _clock = clock;
         _calendar = calendar;
+        _profiles = profiles;
         _meetingLinks = meetingLinks;
         _conflicts = conflicts;
     }
@@ -98,6 +102,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         if (!string.IsNullOrWhiteSpace(hold.CalendarProviderEventId))
         {
             var windows = BuildHoldWindows(slot, tx);
+            var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
 
             var calendarTemplate = ConfirmedBookingTemplate.BuildConfirmedTemplate(
                 slot: slot,
@@ -108,7 +113,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
                 location: null);
 
             var calendarEvent = BookingCalendarEvent.Update(
-                userId: slot.AdviserId,
+                userId: calendarUserId,
                 providerEventId: hold.CalendarProviderEventId,
                 showAs: BookingShowAs.Busy,
                 body: calendarTemplate.CalendarDescription,

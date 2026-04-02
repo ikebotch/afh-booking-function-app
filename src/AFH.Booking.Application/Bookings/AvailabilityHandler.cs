@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Location;
+using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Bookings.Mappings;
 using AFH.Booking.Application.Bookings.Queries;
 using AFH.Booking.Application.Calendar.Queries;
@@ -26,6 +27,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
     private readonly ICalendarViewQueryHandler _calendarView;
     private readonly ITravelMatrixService _travelMatrix;
     private readonly IClientDirectory _clients;
+    private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IBookingTransactionRepository _txRepo;
     private readonly IBookingSlotRepository _slotRepo;
     private readonly IUnitOfWork _uow;
@@ -38,6 +40,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         ICalendarViewQueryHandler calendarView,
         ITravelMatrixService travelMatrix,
         IClientDirectory clients,
+        IAdviserProfileProjectionRepository profiles,
         IBookingTransactionRepository txRepo,
         IBookingSlotRepository slotRepo,
         IUnitOfWork uow,
@@ -49,6 +52,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         _calendarView = calendarView;
         _travelMatrix = travelMatrix;
         _clients = clients;
+        _profiles = profiles;
         _txRepo = txRepo;
         _slotRepo = slotRepo;
         _uow = uow;
@@ -188,26 +192,42 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
     {
         if (q.IsRemote)
         {
-            var remoteAdvisers = q.PreferredAdviserIds
+            var activeProfiles = await _profiles.ListActiveAsync(ct);
+            var profileById = activeProfiles.ToDictionary(x => x.AdviserId, StringComparer.OrdinalIgnoreCase);
+
+            var preferredIds = q.PreferredAdviserIds
                 .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
                 .Where(x => !q.ExcludeAdviserIds.Contains(x, StringComparer.OrdinalIgnoreCase))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Select(id => new AdviserDirectoryItem
+                .ToList();
+
+            IEnumerable<AdviserProfileProjectionRecord> remoteProfiles = preferredIds.Count > 0
+                ? preferredIds
+                    .Select(id => profileById.TryGetValue(id, out var profile)
+                        ? profile
+                        : new AdviserProfileProjectionRecord
+                        {
+                            AdviserId = id,
+                            DisplayName = id,
+                            MailboxUserId = id,
+                            IsActive = true
+                        })
+                : activeProfiles.Where(x => !q.ExcludeAdviserIds.Contains(x.AdviserId, StringComparer.OrdinalIgnoreCase));
+
+            var remoteAdvisers = remoteProfiles
+                .Where(x => !string.IsNullOrWhiteSpace(x.AdviserId))
+                .Select(x => new AdviserDirectoryItem
                 {
-                    AdviserId = id,
-                    Name = id,
-                    Email = id
+                    AdviserId = x.AdviserId,
+                    Name = string.IsNullOrWhiteSpace(x.DisplayName) ? x.AdviserId : x.DisplayName,
+                    Email = string.IsNullOrWhiteSpace(x.MailboxUserId) ? x.AdviserId : x.MailboxUserId
                 })
+                .DistinctBy(x => x.AdviserId, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
             if (remoteAdvisers.Count == 0)
-            {
-                return (new List<AdviserDirectoryItem>(),
-                    Result<GetAvailabilityResponse>.Fail(
-                        HttpStatusCode.BadRequest,
-                        "preferredAdviserIds is required for remote meetings.",
-                        Errors.Validation));
-            }
+                return (new List<AdviserDirectoryItem>(), null);
 
             return (remoteAdvisers, null);
         }
@@ -224,9 +244,9 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             {
                 AdviserId = c.AdviserId,
                 Name = string.IsNullOrWhiteSpace(c.AdviserName) ? c.AdviserId : c.AdviserName,
-                Email = c.AdviserId
+                Email = string.IsNullOrWhiteSpace(c.MailboxUserId) ? c.AdviserId : c.MailboxUserId
             })
-            .DistinctBy(x => x.Email, StringComparer.OrdinalIgnoreCase)
+            .DistinctBy(x => x.AdviserId, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         return (advisers, null);
@@ -468,8 +488,8 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         var blockedEndUtc = DateTime.SpecifyKind(meetingEndUtc.AddMinutes(travelFromMinutes), DateTimeKind.Utc);
 
         var single = advisers
-            .Where(a => !string.IsNullOrWhiteSpace(a.Email) &&
-                        string.Equals(a.Email, adviserId, StringComparison.OrdinalIgnoreCase))
+            .Where(a => !string.IsNullOrWhiteSpace(a.AdviserId) &&
+                        string.Equals(a.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         if (single.Count == 0)

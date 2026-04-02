@@ -32,6 +32,7 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
                 {
                     AdviserId = adviser.AdviserId,
                     DisplayName = adviser.DisplayName,
+                    MailboxUserId = adviser.MailboxUserId,
                     Region = adviser.Region,
                     HomePostcode = adviser.HomePostcode,
                     IsActive = adviser.IsActive,
@@ -46,6 +47,7 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
             }
 
             row.DisplayName = adviser.DisplayName;
+            row.MailboxUserId = adviser.MailboxUserId;
             row.Region = adviser.Region;
             row.HomePostcode = adviser.HomePostcode;
             row.IsActive = adviser.IsActive;
@@ -69,6 +71,18 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
         var rows = await query
             .OrderBy(x => x.LastSyncedUtc)
             .Take(take)
+            .ToListAsync(ct);
+
+        return rows.Select(Map).ToList();
+    }
+
+    public async Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct)
+    {
+        var rows = await _db.AdviserProfileProjections
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.DisplayName)
+            .ThenBy(x => x.AdviserId)
             .ToListAsync(ct);
 
         return rows.Select(Map).ToList();
@@ -99,6 +113,7 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
         {
             AdviserId = row.AdviserId,
             DisplayName = row.DisplayName,
+            MailboxUserId = row.MailboxUserId,
             Region = row.Region,
             HomePostcode = row.HomePostcode,
             IsActive = row.IsActive,

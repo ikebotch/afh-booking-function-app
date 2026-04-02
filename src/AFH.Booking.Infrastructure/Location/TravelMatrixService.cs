@@ -79,6 +79,7 @@ public sealed class TravelMatrixService : ITravelMatrixService
         result.Candidates = resp.Candidates.Select(c => new LocationCandidate
         {
             AdviserId = c.AdviserId,
+            MailboxUserId = c.MailboxUserId,
             GoldStar = c.GoldStar,
             TravelMinutes = c.TravelToClient.EtaMinutes ?? 0,
             DistanceMiles = c.TravelToClient.DistanceMiles ?? 0,

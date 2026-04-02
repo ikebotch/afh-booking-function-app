@@ -19,12 +19,7 @@ public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
         "/api/scalar"
     ];
 
-    private static readonly string[] InternalBearerRoutes =
-    [
-        "/api/v1/calendar/notifications",
-        "/api/v1/calendar/subscriptions",
-        "/api/v1/calendar/users/"
-    ];
+    private static readonly string[] InternalBearerRoutes = [];
 
     private readonly InternalApiAuthOptions _options;
     private readonly IHostEnvironment _hostEnvironment;

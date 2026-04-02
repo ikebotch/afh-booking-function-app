@@ -2,7 +2,6 @@ using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Auth;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Governance;
-using AFH.Booking.Application.Abstractions.Calendar.Subscription;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Location;
@@ -42,7 +41,6 @@ public static class ServiceCollectionExtensions
         services.Configure<DomainUserAuthOptions>(config.GetSection(DomainUserAuthOptions.SectionName));
         services.Configure<LocationServiceOptions>(config.GetSection(LocationServiceOptions.SectionName));
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));
-        services.Configure<CalendarProjectionOptions>(config.GetSection(CalendarProjectionOptions.SectionName));
         services.Configure<NotificationsOptions>(config.GetSection(NotificationsOptions.SectionName));
         services.Configure<BookingChangeAccessOptions>(config.GetSection(BookingChangeAccessOptions.SectionName));
         services.Configure<ApprovalRoutingOptions>(config.GetSection(ApprovalRoutingOptions.SectionName));
@@ -114,16 +112,6 @@ public static class ServiceCollectionExtensions
             http.Timeout = TimeSpan.FromSeconds(30);
         });
 
-        services.AddHttpClient<ICalendarSubscriptionGateway, CalendarSubscriptionGateway>((sp, http) =>
-        {
-            var opt = sp.GetRequiredService<IOptions<CalendarSubscriptionOptions>>().Value;
-            if (string.IsNullOrWhiteSpace(opt.BaseUrl))
-                throw new InvalidOperationException($"{CalendarSubscriptionOptions.SectionName}:BaseUrl is required.");
-
-            http.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
-            http.Timeout = TimeSpan.FromSeconds(30);
-        });
-
         // Leads integration
         services.AddHttpClient<LeadsAccessToken>();
         services.AddHttpClient<IClientDirectory, LeadsClientDirectory>((sp, http) =>
@@ -159,12 +147,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBookingTransactionRepository, BookingTransactionRepository>();
         services.AddScoped<IBookingSlotRepository, BookingSlotRepository>();
         services.AddScoped<IBookingHoldRepository, BookingHoldRepository>();
-        services.AddScoped<ICalendarEventSnapshotRepository, CalendarEventSnapshotRepository>();
-        services.AddScoped<IAdviserAvailabilityProjectionRepository, AdviserAvailabilityProjectionRepository>();
         services.AddScoped<IAdviserProfileProjectionRepository, AdviserProfileProjectionRepository>();
         services.AddScoped<IIntegrationSyncStateRepository, IntegrationSyncStateRepository>();
-        services.AddScoped<ICalendarSubscriptionRepository, CalendarSubscriptionRepository>();
-        services.AddScoped<ICalendarNotificationRepository, CalendarNotificationRepository>();
         services.AddScoped<ILifecycleEventRepository, LifecycleEventRepository>();
         services.AddScoped<ILifecycleStepRepository, LifecycleStepRepository>();
         services.AddScoped<INotificationDispatchRepository, NotificationDispatchRepository>();

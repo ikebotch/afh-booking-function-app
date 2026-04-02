@@ -20,12 +20,6 @@ public sealed class BookingDbContext : DbContext
     public DbSet<DuplicateClientCaseModel> DuplicateClientCases => Set<DuplicateClientCaseModel>();
     public DbSet<DownstreamUpdateModel> DownstreamUpdates => Set<DownstreamUpdateModel>();
     public DbSet<OperationalIssueModel> OperationalIssues => Set<OperationalIssueModel>();
-
-
-    public DbSet<CalendarSubscriptionModel> CalendarSubscriptions => Set<CalendarSubscriptionModel>();
-    public DbSet<CalendarNotificationReceiptModel> CalendarNotificationReceipts => Set<CalendarNotificationReceiptModel>();
-    public DbSet<CalendarEventSnapshotModel> CalendarEventSnapshots => Set<CalendarEventSnapshotModel>();
-    public DbSet<AdviserAvailabilityBlockModel> AdviserAvailabilityBlocks => Set<AdviserAvailabilityBlockModel>();
     public DbSet<AdviserProfileProjectionModel> AdviserProfileProjections => Set<AdviserProfileProjectionModel>();
     public DbSet<IntegrationSyncStateModel> IntegrationSyncStates => Set<IntegrationSyncStateModel>();
     public DbSet<IntegrationOperationAuditModel> IntegrationOperationAudits => Set<IntegrationOperationAuditModel>();

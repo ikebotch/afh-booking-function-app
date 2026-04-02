@@ -24,16 +24,4 @@ public class BookingOpenApiDocumentFactoryTests
         Assert.Equal("Users", usersTag);
         Assert.Equal("Internal/Admin", adminTag);
     }
-
-    [Fact]
-    public void CreateOpenApiJson_IncludesExplicitQueryParametersForProjectionEndpoints()
-    {
-        var json = BookingOpenApiDocumentFactory.CreateOpenApiJson(new Uri("https://localhost/api/openapi/v1.json"));
-        var document = JsonNode.Parse(json)!.AsObject();
-        var operation = document["paths"]!["/v1/calendar/users/{userId}/schedule"]!["get"]!.AsObject();
-        var parameters = operation["parameters"]!.AsArray();
-
-        Assert.Contains(parameters, parameter => parameter?["name"]?.GetValue<string>() == "startUtc" && parameter["in"]?.GetValue<string>() == "query");
-        Assert.Contains(parameters, parameter => parameter?["name"]?.GetValue<string>() == "endUtc" && parameter["in"]?.GetValue<string>() == "query");
-    }
 }

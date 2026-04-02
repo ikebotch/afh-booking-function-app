@@ -11,20 +11,17 @@ public sealed class BookingConflictService : IBookingConflictService
 {
     private const int DefaultCompanyBufferMinutes = 30;
 
-    private readonly IAdviserAvailabilityProjectionRepository _availabilityProjection;
     private readonly ICalendarGateway _calendar;
     private readonly IOperationalIssueRepository _issues;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
 
     public BookingConflictService(
-        IAdviserAvailabilityProjectionRepository availabilityProjection,
         ICalendarGateway calendar,
         IOperationalIssueRepository issues,
         IUnitOfWork uow,
         IClock clock)
     {
-        _availabilityProjection = availabilityProjection;
         _calendar = calendar;
         _issues = issues;
         _uow = uow;

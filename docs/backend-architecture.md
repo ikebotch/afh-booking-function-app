@@ -14,7 +14,7 @@
 - Domain user:
   - Booking: `GET /api/v1/me` requires a valid Entra bearer token and is used for frontend session bootstrap.
 - Internal:
-  - Booking: calendar notification intake, internal projected schedule, and internal subscription creation.
+  - Booking: booking orchestration, appointment lifecycle calls, and availability consumption.
   - Location: adviser search, batch search, coverage, and license endpoints.
   - Calendar: appointment, schedule, batch schedule, subscription, and subscription reconcile endpoints.
 - Admin:

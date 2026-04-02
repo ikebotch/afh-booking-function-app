@@ -21,8 +21,6 @@ public class TimeZoneAndRouteTests
     [Theory]
     [InlineData("/api/v1/calendar/health", true, false)]
     [InlineData("/api/openapi/v1.json", true, false)]
-    [InlineData("/api/v1/calendar/notifications", false, true)]
-    [InlineData("/api/v1/calendar/users/user-1/schedule", false, true)]
     [InlineData("/api/v1/bookings/hold", false, false)]
     public void InternalApiAuthMiddleware_ClassifiesRoutes(string path, bool isPublic, bool requiresInternalBearer)
     {

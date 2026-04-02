@@ -1,13 +1,10 @@
 using AFH.Booking.Application.Abstractions.Clients;
-using AFH.Booking.Application.Abstractions.Calendar.Subscription;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Auth;
 using AFH.Booking.Infrastructure.Http;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Net.Http.Json;
 using System.Text.Json;
 
 namespace AFH.Booking.Infrastructure.Clients;
@@ -21,9 +18,6 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
     private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IIntegrationSyncStateRepository _syncState;
     private readonly IClock _clock;
-    private readonly ICreateSubscriptionHandler _createSubscription;
-    private readonly ICalendarSubscriptionRepository _subscriptions;
-    private readonly ILogger<AdviserDirectorySyncService> _logger;
 
     public AdviserDirectorySyncService(
         HttpClient http,
@@ -31,10 +25,7 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         IInternalServiceAuthenticator authenticator,
         IAdviserProfileProjectionRepository profiles,
         IIntegrationSyncStateRepository syncState,
-        IClock clock,
-        ICreateSubscriptionHandler createSubscription,
-        ICalendarSubscriptionRepository subscriptions,
-        ILogger<AdviserDirectorySyncService> logger)
+        IClock clock)
     {
         _http = http;
         _options = options.Value;
@@ -42,9 +33,6 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         _profiles = profiles;
         _syncState = syncState;
         _clock = clock;
-        _createSubscription = createSubscription;
-        _subscriptions = subscriptions;
-        _logger = logger;
     }
 
     public async Task<AdviserDirectorySyncResult> SyncAsync(CancellationToken ct)
@@ -55,10 +43,6 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
             {
                 SyncedAtUtc = _clock.UtcNow,
                 SyncedCount = 0,
-                MailboxesDetected = 0,
-                SubscriptionsCreatedOrRenewed = 0,
-                SubscriptionsSkipped = 0,
-                SubscriptionFailures = 0,
                 Source = "disabled"
             };
         }
@@ -105,56 +89,11 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
 
         await _profiles.UpsertRangeAsync(records, ct);
 
-        var mailboxUserIds = payload
-            .Select(ResolveMailboxUserId)
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var nowUtc = DateTime.SpecifyKind(now, DateTimeKind.Utc);
-        var renewBeforeUtc = nowUtc.AddMinutes(Math.Max(15, _options.SubscriptionRenewalLeadMinutes));
-        var createdOrRenewed = 0;
-        var skipped = 0;
-        var failures = 0;
-
-        foreach (var mailboxUserId in mailboxUserIds)
-        {
-            var existing = await _subscriptions.GetLatestByUserIdAsync(mailboxUserId!, ct);
-            if (existing is not null && existing.ExpirationUtc > renewBeforeUtc)
-            {
-                skipped++;
-                continue;
-            }
-
-            var result = await _createSubscription.HandleAsync(new CreateCalendarSubscriptionRequest
-            {
-                UserId = mailboxUserId!
-            }, ct);
-
-            if (result.IsSuccess)
-            {
-                createdOrRenewed++;
-                continue;
-            }
-
-            failures++;
-            _logger.LogWarning(
-                "Failed to create/renew calendar subscription for adviser mailbox {MailboxUserId}. Status={StatusCode} Error={ErrorCode} Message={ErrorMessage}",
-                mailboxUserId,
-                (int)result.StatusCode,
-                result.ErrorCode,
-                result.ErrorMessage);
-        }
-
         await _syncState.UpsertValueAsync(SyncCursorKey, now.ToString("O"), now, ct);
         return new AdviserDirectorySyncResult
         {
             SyncedAtUtc = now,
             SyncedCount = records.Count,
-            MailboxesDetected = mailboxUserIds.Count,
-            SubscriptionsCreatedOrRenewed = createdOrRenewed,
-            SubscriptionsSkipped = skipped,
-            SubscriptionFailures = failures,
             Source = url
         };
     }
@@ -203,33 +142,5 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         public string? Postcode { get; set; }
         public int MaxTravelTimeMinutes { get; set; }
         public double RadiusMiles { get; set; }
-    }
-
-    private string? ResolveMailboxUserId(CoverageAdviserItem adviser)
-    {
-        var candidates = new[]
-        {
-            adviser.UserId,
-            adviser.Mailbox,
-            adviser.Email,
-            adviser.AdviserEmail,
-            adviser.PrincipalName,
-            adviser.Id
-        };
-
-        foreach (var raw in candidates)
-        {
-            var value = raw?.Trim();
-            if (string.IsNullOrWhiteSpace(value))
-                continue;
-
-            if (value.Contains('@'))
-                return value;
-
-            if (_options.AllowNonEmailMailboxIds)
-                return value;
-        }
-
-        return null;
     }
 }

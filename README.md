@@ -4,7 +4,7 @@
 - Booking orchestration and booking operational state.
 - Hold, confirm, cancel, rearrange, approval, and projection workflows.
 - Internal calls to the location service for in-person adviser search.
-- Internal calls to the calendar service for appointment and subscription work.
+- Internal calls to the calendar service for appointment and availability work.
 
 ## Local Setup
 1. Copy `src/AFH.Booking.Functions/local.settings.template.json` to `src/AFH.Booking.Functions/local.settings.json`.
@@ -56,7 +56,6 @@
   - remote booking with ACS meeting link
   - cancel booking
   - rearrange booking
-  - calendar notification intake
   - downstream/XPlan update publish and manual reconcile
 - Required env/config should include Booking DB, shared internal auth token, calendar/location/ACS base URLs and function keys, notification settings, and XPlan base URL/API key when that path is enabled.
 

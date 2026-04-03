@@ -39,7 +39,6 @@ public static class ServiceCollectionExtensions
         services.Configure<AcsOptions>(config.GetSection(AcsOptions.SectionName));
         services.Configure<XPlanOptions>(config.GetSection(XPlanOptions.SectionName));
         services.Configure<AzureAdOptions>(config.GetSection(AzureAdOptions.SectionName));
-        services.Configure<DomainUserAuthOptions>(config.GetSection(DomainUserAuthOptions.SectionName));
         services.Configure<LocationServiceOptions>(config.GetSection(LocationServiceOptions.SectionName));
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));
         services.Configure<NotificationsOptions>(config.GetSection(NotificationsOptions.SectionName));
@@ -56,20 +55,17 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();
         services.AddSingleton<ICurrentUserProfileResolver, DomainUserProfileResolver>();
 
-        var db = config.GetSection(BookingDbOptions.SectionName).Get<BookingDbOptions>() ?? new BookingDbOptions();
-        db.ConnectionString = string.IsNullOrWhiteSpace(db.ConnectionString)
-            ? config.GetConnectionString("BookingDb")
-            : db.ConnectionString;
+        var bookingDbConnectionString = ResolveBookingDbConnectionString(config);
 
-        if (string.IsNullOrWhiteSpace(db.ConnectionString))
+        if (string.IsNullOrWhiteSpace(bookingDbConnectionString))
             throw new InvalidOperationException(
                 $"{BookingDbOptions.SectionName}:ConnectionString is required (or ConnectionStrings:BookingDb).");
 
-        services.AddDbContext<BookingDbContext>(opt => { opt.UseSqlServer(db.ConnectionString); });
+        services.AddDbContext<BookingDbContext>(opt => { opt.UseSqlServer(bookingDbConnectionString); });
         services.AddDbContextFactory<BookingDbContext>(
             options =>
             {
-                options.UseSqlServer(db.ConnectionString);
+                options.UseSqlServer(bookingDbConnectionString);
             },
             ServiceLifetime.Scoped);
         services.AddAfhCommonErrorsEntityFramework<BookingDbContext>();
@@ -205,5 +201,16 @@ public static class ServiceCollectionExtensions
         });
 
         return services;
+    }
+
+    internal static string? ResolveBookingDbConnectionString(IConfiguration config)
+    {
+        var options = config.GetSection(BookingDbOptions.SectionName).Get<BookingDbOptions>() ?? new BookingDbOptions();
+        if (!string.IsNullOrWhiteSpace(options.ConnectionString))
+            return options.ConnectionString;
+
+        return config.GetConnectionString("BookingDb")
+            ?? config["Values:ConnectionStrings:BookingDb"]
+            ?? config["Values:BookingDb:ConnectionString"];
     }
 }

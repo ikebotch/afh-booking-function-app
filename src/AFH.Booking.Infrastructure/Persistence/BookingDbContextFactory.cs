@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿using AFH.Booking.Infrastructure.Composition;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
 using Microsoft.Extensions.Configuration;
 
@@ -22,11 +23,9 @@ public sealed class BookingDbContextFactory : IDesignTimeDbContextFactory<Bookin
             .Build();
 
         // Try the most common Azure Functions patterns
-        var connectionString =
-            config["Values:BookingDb:ConnectionString"] ??
-            config["Values:ConnectionStrings:BookingDb"] ??
-            config["ConnectionStrings:BookingDb"] ??
-            config["BookingDb:ConnectionString"];
+        var connectionString = ServiceCollectionExtensions.ResolveBookingDbConnectionString(config)
+            ?? config["ConnectionStrings:BookingDb"]
+            ?? config["BookingDb:ConnectionString"];
 
         if (string.IsNullOrWhiteSpace(connectionString))
         {

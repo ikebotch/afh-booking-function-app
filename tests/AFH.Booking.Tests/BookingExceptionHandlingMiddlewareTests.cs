@@ -1,4 +1,4 @@
-using AFH.Booking.Functions.Middleware;
+using AFH.Booking.Function.Middleware;
 using System.Net;
 using System.Text.Json;
 

@@ -1,6 +1,6 @@
 using AFH.Booking.Application.Abstractions.Auth;
-using AFH.Booking.Functions.Auth;
-using AFH.Booking.Functions.Http;
+using AFH.Booking.Function.Auth;
+using AFH.Booking.Function.Http;
 using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Middleware;
@@ -8,7 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace AFH.Booking.Functions.Middleware;
+namespace AFH.Booking.Function.Middleware;
 
 public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
 {

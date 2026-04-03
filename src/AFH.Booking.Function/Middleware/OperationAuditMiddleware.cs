@@ -8,7 +8,7 @@ using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Net;
 
-namespace AFH.Booking.Functions.Middleware;
+namespace AFH.Booking.Function.Middleware;
 
 public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
 {

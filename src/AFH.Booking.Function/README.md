@@ -1,2 +1,2 @@
-src> dotnet ef migrations add AddAuditsToBookingSlots --project AFH.Booking.Infrastructure --startup-project AFH.Booking.Functions --context BookingDbContext
+src> dotnet ef migrations add AddAuditsToBookingSlots --project AFH.Booking.Infrastructure --startup-project AFH.Booking.Function --context BookingDbContext
 src> dotnet ef database update AddAuditsToBookingSlots --project AFH.Booking.Infrastructure

@@ -4,7 +4,7 @@ using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Common;
 using System.Globalization;
 
-namespace AFH.Booking.Functions.Mapping;
+namespace AFH.Booking.Function.Mapping;
 
 public static class ContractMappingExtensions
 {

@@ -1,4 +1,4 @@
-namespace AFH.Booking.Functions.Http;
+namespace AFH.Booking.Function.Http;
 
 public static class HttpResponseExtensions
 {

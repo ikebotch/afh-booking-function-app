@@ -2,7 +2,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Azure.Functions.Worker.Middleware;
 
-namespace AFH.Booking.Functions.Middleware;
+namespace AFH.Booking.Function.Middleware;
 
 public sealed class CorrelationIdMiddleware : IFunctionsWorkerMiddleware
 {

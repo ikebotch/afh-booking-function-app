@@ -1,5 +1,5 @@
 using AFH.Booking.Application.Common;
-using AFH.Booking.Functions.Http;
+using AFH.Booking.Function.Http;
 using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text.Json;
 
-namespace AFH.Booking.Functions.Middleware;
+namespace AFH.Booking.Function.Middleware;
 
 public sealed class ExceptionHandlingMiddleware : IFunctionsWorkerMiddleware
 {

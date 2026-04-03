@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace AFH.Booking.Functions.Http;
+namespace AFH.Booking.Function.Http;
 
 public sealed class ApiResponse<T>
 {

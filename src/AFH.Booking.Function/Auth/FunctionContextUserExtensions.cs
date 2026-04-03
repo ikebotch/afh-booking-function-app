@@ -1,7 +1,7 @@
 using Microsoft.Azure.Functions.Worker;
 using System.Security.Claims;
 
-namespace AFH.Booking.Functions.Auth;
+namespace AFH.Booking.Function.Auth;
 
 public static class FunctionContextUserExtensions
 {

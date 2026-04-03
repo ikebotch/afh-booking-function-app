@@ -10,10 +10,10 @@ public sealed class BookingDbContextFactory : IDesignTimeDbContextFactory<Bookin
     {
         var basePath = Directory.GetCurrentDirectory();
 
-        // Find src/AFH.Booking.Functions/local.settings.json no matter where EF is run from
+        // Find src/AFH.Booking.Function/local.settings.json no matter where EF is run from
         var functionsLocalSettings = FindUpwards(
             basePath,
-            Path.Combine("AFH.Booking.Functions", "local.settings.json"));
+            Path.Combine("AFH.Booking.Function", "local.settings.json"));
 
         var config = new ConfigurationBuilder()
             .SetBasePath(basePath)

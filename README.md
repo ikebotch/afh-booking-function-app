@@ -7,7 +7,7 @@
 - Internal calls to the calendar service for appointment and subscription work.
 
 ## Local Setup
-1. Copy `src/AFH.Booking.Functions/local.settings.template.json` to `src/AFH.Booking.Functions/local.settings.json`.
+1. Copy `src/AFH.Booking.Function/local.settings.template.json` to `src/AFH.Booking.Function/local.settings.json`.
 2. Fill in the required values:
    `BookingDb:ConnectionString`, `Calendars:BaseUrl`, `Calendars:FunctionKey`, `Calendars:InternalToken`, `LocationService:BaseUrl`, `LocationService:FunctionKey`, `LocationService:InternalToken`, `InternalApiAuth:Token`.
 3. Fill in optional integrations only if you are using them locally:
@@ -31,7 +31,7 @@
 - `GET /api/v1/me` is the frontend bootstrap endpoint for signed-in domain users.
 - `/me` now returns `403` for signed-in users who do not map to a Booking domain role.
 - Frontends should use the `/me` response for UX shaping only; Booking remains the source of truth for authorization and policy checks.
-- Configure Entra validation and role mapping with `DomainUserAuth:*` in `src/AFH.Booking.Functions/local.settings.template.json`.
+- Configure Entra validation and role mapping with `DomainUserAuth:*` in `src/AFH.Booking.Function/local.settings.template.json`.
 
 ## Build And Test
 - `dotnet test AFH.BookingService.sln`

@@ -1,5 +1,5 @@
 using AFH.Booking.Application.Composition;
-using AFH.Booking.Functions.Middleware;
+using AFH.Booking.Function.Middleware;
 using AFH.Booking.Infrastructure.Composition;
 using Azure.Core.Serialization;
 using Microsoft.Extensions.Configuration;
@@ -21,7 +21,7 @@ var host = new HostBuilder()
         // Support running from either function project folder or solution root.
         var cwd = Directory.GetCurrentDirectory();
         var localSettingsInCwd = Path.Combine(cwd, "local.settings.json");
-        var localSettingsFromSolutionRoot = Path.Combine(cwd, "src", "AFH.Booking.Functions", "local.settings.json");
+        var localSettingsFromSolutionRoot = Path.Combine(cwd, "src", "AFH.Booking.Function", "local.settings.json");
 
         cfg.SetBasePath(cwd);
 

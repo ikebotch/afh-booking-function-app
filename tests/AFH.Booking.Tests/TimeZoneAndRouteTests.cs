@@ -1,6 +1,6 @@
 using AFH.Booking.Application.Common;
 using AFH.Booking.Domain.Options;
-using AFH.Booking.Functions.Middleware;
+using AFH.Booking.Function.Middleware;
 using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Tests;

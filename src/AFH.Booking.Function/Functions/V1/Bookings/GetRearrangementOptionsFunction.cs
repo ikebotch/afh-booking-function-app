@@ -1,0 +1,53 @@
+using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Booking.Function.Http;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+
+namespace AFH.Booking.Function.Functions.V1.Bookings;
+
+[BookingOpenApiTag("Bookings")]
+public sealed class GetRearrangementOptionsFunction
+{
+    private readonly IRearrangementOptionsHandler _handler;
+
+    public GetRearrangementOptionsFunction(IRearrangementOptionsHandler handler)
+    {
+        _handler = handler;
+    }
+
+    [Function("Bookings_GetRearrangementOptions")]
+    public async Task<HttpResponseData> Run(
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/{bookingId}/rearrangement/options")]
+        HttpRequestData req,
+        string bookingId,
+        CancellationToken ct)
+    {
+        var body = await req.ReadJsonAsync<RearrangementOptionsRequest>(ct);
+
+        var cmd = new GetRearrangementOptionsCommand
+        {
+            BookingId = bookingId,
+            PreferredStartUtc = body?.PreferredStartUtc,
+            Duration = body?.Duration,
+            IsRemote = body?.IsRemote,
+            MeetingType = body?.MeetingType,
+            Limit = body?.Limit,
+            Cursor = body?.Cursor
+        };
+
+        var result = await _handler.HandleAsync(cmd, ct);
+
+        if (!result.IsSuccess)
+        {
+            return await req.ProblemAsync(
+                result.StatusCode,
+                result.ErrorMessage ?? "Request failed.",
+                ct,
+                result.ErrorCode);
+        }
+
+        return await req.OkJsonAsync(result.Value!, ct);
+    }
+}

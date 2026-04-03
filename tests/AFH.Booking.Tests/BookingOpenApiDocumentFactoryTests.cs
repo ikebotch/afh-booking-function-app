@@ -1,4 +1,4 @@
-using AFH.Booking.Functions.V1.Docs;
+using AFH.Booking.Function.Functions.V1.Docs;
 using System.Text.Json.Nodes;
 
 namespace AFH.Booking.Tests;

@@ -1,5 +1,5 @@
 using AFH.Booking.Domain.Options;
-using AFH.Booking.Functions.Http;
+using AFH.Booking.Function.Http;
 using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Middleware;
@@ -8,7 +8,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace AFH.Booking.Functions.Middleware;
+namespace AFH.Booking.Function.Middleware;
 
 public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
 {

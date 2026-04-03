@@ -1,12 +1,6 @@
-namespace AFH.Booking.Function.Security;
+using AFH.BackendPlatform;
 
-public enum EndpointAccessPolicy
-{
-    Public,
-    UserAuthenticated,
-    InternalOnly,
-    WebhookVerified
-}
+namespace AFH.Booking.Function.Security;
 
 public static class EndpointAccessPolicies
 {

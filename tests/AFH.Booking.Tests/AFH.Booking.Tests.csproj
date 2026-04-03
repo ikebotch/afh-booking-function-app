@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\AFH.BackendPlatform\AFH.BackendPlatform.csproj" />
     <ProjectReference Include="..\..\src\AFH.Booking.Application\AFH.Booking.Application.csproj" />
     <ProjectReference Include="..\..\src\AFH.Booking.Contract\AFH.Booking.Contract.csproj" />
     <ProjectReference Include="..\..\src\AFH.Booking.Domain\AFH.Booking.Domain.csproj" />

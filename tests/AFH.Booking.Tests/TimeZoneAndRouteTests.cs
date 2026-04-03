@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Common;
+using AFH.BackendPlatform;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Function.Security;
 using Microsoft.Extensions.Options;

@@ -1,3 +1,4 @@
+using AFH.BackendPlatform;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Function.Http;
 using AFH.Booking.Function.Security;

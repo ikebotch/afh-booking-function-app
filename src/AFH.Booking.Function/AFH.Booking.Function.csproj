@@ -32,6 +32,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<ProjectReference Include="..\AFH.BackendPlatform\AFH.BackendPlatform.csproj" />
 		<ProjectReference Include="..\AFH.Booking.Application\AFH.Booking.Application.csproj" />
 		<ProjectReference Include="..\AFH.Booking.Contract\AFH.Booking.Contract.csproj" />
 		<ProjectReference Include="..\AFH.Booking.Infrastructure\AFH.Booking.Infrastructure.csproj" />

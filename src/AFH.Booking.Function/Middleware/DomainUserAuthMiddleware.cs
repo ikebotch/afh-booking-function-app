@@ -1,3 +1,4 @@
+using AFH.BackendPlatform;
 using AFH.Booking.Application.Abstractions.Auth;
 using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Http;

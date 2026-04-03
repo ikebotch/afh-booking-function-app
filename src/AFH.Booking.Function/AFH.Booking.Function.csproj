@@ -33,6 +33,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors\AFH.Common.Errors.csproj" />
+		<ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.ApplicationInsights\AFH.Common.Errors.ApplicationInsights.csproj" />
 		<ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.AzureFunctions\AFH.Common.Errors.AzureFunctions.csproj" />
 		<ProjectReference Include="..\AFH.BackendPlatform\AFH.BackendPlatform.csproj" />
 		<ProjectReference Include="..\AFH.Booking.Application\AFH.Booking.Application.csproj" />

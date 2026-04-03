@@ -2,6 +2,7 @@ using AFH.Booking.Application.Composition;
 using AFH.Booking.Function.Middleware;
 using AFH.Booking.Infrastructure.Composition;
 using AFH.Common.Errors.Abstractions;
+using AFH.Common.Errors.ApplicationInsights.DependencyInjection;
 using AFH.Common.Errors.AzureFunctions.DependencyInjection;
 using Azure.Core.Serialization;
 using Microsoft.Extensions.Configuration;
@@ -65,6 +66,7 @@ var host = new HostBuilder()
     .ConfigureServices((ctx, services) =>
     {
         services.AddApplicationInsightsTelemetryWorkerService();
+        services.AddAfhCommonErrorsApplicationInsights();
         services.AddAfhCommonErrorsAzureFunctions();
         services.AddSingleton<BookingExceptionMapper>();
         services.AddSingleton<IExceptionMapper>(sp => sp.GetRequiredService<BookingExceptionMapper>());

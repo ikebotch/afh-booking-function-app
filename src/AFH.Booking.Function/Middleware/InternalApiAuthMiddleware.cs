@@ -1,5 +1,6 @@
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Function.Http;
+using AFH.Booking.Function.Security;
 using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Middleware;
@@ -12,19 +13,6 @@ namespace AFH.Booking.Function.Middleware;
 
 public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
 {
-    private static readonly string[] PublicRoutePrefixes =
-    [
-        "/api/v1/calendar/health",
-        "/api/openapi/",
-        "/api/scalar"
-    ];
-
-    private static readonly string[] NonInternalBearerRoutePrefixes =
-    [
-        "/api/v1/me",
-        "/api/v1/self-service/"
-    ];
-
     private readonly InternalApiAuthOptions _options;
     private readonly IHostEnvironment _hostEnvironment;
     private readonly ILogger<InternalApiAuthMiddleware> _logger;
@@ -48,8 +36,8 @@ public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        var path = request.Url.AbsolutePath;
-        if (IsPublic(path) || !RequiresInternalBearer(path))
+        var policy = EndpointAccessPolicies.GetPolicy(context.FunctionDefinition.Name);
+        if (policy is not EndpointAccessPolicy.InternalOnly)
         {
             await next(context);
             return;
@@ -93,12 +81,6 @@ public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
 
         await next(context);
     }
-
-    public static bool IsPublic(string path) =>
-        PublicRoutePrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-
-    public static bool RequiresInternalBearer(string path) =>
-        !NonInternalBearerRoutePrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     private static async Task RejectAsync(
         FunctionContext context,

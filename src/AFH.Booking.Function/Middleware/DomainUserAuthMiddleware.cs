@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Auth;
 using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Http;
+using AFH.Booking.Function.Security;
 using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Middleware;
@@ -12,11 +13,6 @@ namespace AFH.Booking.Function.Middleware;
 
 public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
 {
-    private static readonly string[] ProtectedRoutePrefixes =
-    [
-        "/api/v1/me"
-    ];
-
     private readonly ILogger<DomainUserAuthMiddleware> _logger;
 
     public DomainUserAuthMiddleware(
@@ -34,8 +30,8 @@ public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        var path = request.Url.AbsolutePath;
-        if (!ProtectedRoutePrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        var policy = EndpointAccessPolicies.GetPolicy(context.FunctionDefinition.Name);
+        if (policy is not EndpointAccessPolicy.UserAuthenticated)
         {
             await next(context);
             return;

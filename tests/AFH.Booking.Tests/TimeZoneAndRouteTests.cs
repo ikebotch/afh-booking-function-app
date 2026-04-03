@@ -1,6 +1,6 @@
 using AFH.Booking.Application.Common;
 using AFH.Booking.Domain.Options;
-using AFH.Booking.Function.Middleware;
+using AFH.Booking.Function.Security;
 using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Tests;
@@ -19,17 +19,15 @@ public class TimeZoneAndRouteTests
     }
 
     [Theory]
-    [InlineData("/api/v1/calendar/health", true, false)]
-    [InlineData("/api/openapi/v1.json", true, false)]
-    [InlineData("/api/scalar", true, false)]
-    [InlineData("/api/v1/me", false, false)]
-    [InlineData("/api/v1/self-service/bookings/123/cancel", false, false)]
-    [InlineData("/api/v1/bookings/hold", false, true)]
-    [InlineData("/api/v1/admin/advisers/projection/feed", false, true)]
-    [InlineData("/api/v2/clients/abc", false, true)]
-    public void InternalApiAuthMiddleware_ClassifiesRoutes(string path, bool isPublic, bool requiresInternalBearer)
+    [InlineData("CalendarHealthV1", EndpointAccessPolicy.Public)]
+    [InlineData("Booking_OpenApiV1", EndpointAccessPolicy.Public)]
+    [InlineData("Bookings_SelfServiceCancel", EndpointAccessPolicy.Public)]
+    [InlineData("Users_GetCurrentUser", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Bookings_CreateHold", EndpointAccessPolicy.InternalOnly)]
+    [InlineData("Admin_GetAdviserProjectionFeed", EndpointAccessPolicy.InternalOnly)]
+    [InlineData("Client_GetByTransaction_V2", EndpointAccessPolicy.InternalOnly)]
+    public void EndpointAccessPolicies_ClassifiesFunctions(string functionName, EndpointAccessPolicy expected)
     {
-        Assert.Equal(isPublic, InternalApiAuthMiddleware.IsPublic(path));
-        Assert.Equal(requiresInternalBearer, InternalApiAuthMiddleware.RequiresInternalBearer(path));
+        Assert.Equal(expected, EndpointAccessPolicies.GetPolicy(functionName));
     }
 }

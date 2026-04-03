@@ -25,6 +25,21 @@ public sealed class ArchitectureGuardTests
     }
 
     [Fact]
+    public void Function_And_Infrastructure_RespectSharedErrorSdkBoundaries()
+    {
+        AssertReferences("AFH.Booking.Function", "AFH.Common.Errors");
+        AssertReferences("AFH.Booking.Function", "AFH.Common.Errors.AzureFunctions");
+        AssertReferences("AFH.Booking.Function", "AFH.Common.Errors.ApplicationInsights");
+        AssertReferences("AFH.Booking.Function", "AFH.Common.Errors.Email");
+        AssertDoesNotReference("AFH.Booking.Function", "AFH.Common.Errors.EntityFramework");
+
+        AssertReferences("AFH.Booking.Infrastructure", "AFH.Common.Errors.EntityFramework");
+        AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Common.Errors.AzureFunctions");
+        AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Common.Errors.ApplicationInsights");
+        AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Common.Errors.Email");
+    }
+
+    [Fact]
     public void FunctionAssembly_KeepsExceptionMapperLocal()
     {
         var functionAssembly = Assembly.Load("AFH.Booking.Function");
@@ -60,6 +75,23 @@ public sealed class ArchitectureGuardTests
     }
 
     [Fact]
+    public void EndpointAccessPolicies_KnownHttpFunctions_ExactlyMatchDiscoveredHttpFunctions()
+    {
+        var functionAssembly = Assembly.Load("AFH.Booking.Function");
+        var endpointPoliciesType = functionAssembly.GetType("AFH.Booking.Function.Security.EndpointAccessPolicies");
+        var knownHttpFunctionsProperty = endpointPoliciesType?.GetProperty("KnownHttpFunctions", BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(knownHttpFunctionsProperty);
+
+        var knownHttpFunctions = ((IReadOnlyCollection<string>?)knownHttpFunctionsProperty!.GetValue(null))?
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.NotNull(knownHttpFunctions);
+        Assert.Equal(GetHttpFunctionNames(functionAssembly), knownHttpFunctions);
+    }
+
+    [Fact]
     public void Program_RemainsAThinBootstrapShell()
     {
         var programText = File.ReadAllText(GetProgramPath("AFH.Booking.Function"));
@@ -69,6 +101,7 @@ public sealed class ArchitectureGuardTests
         Assert.Contains("ConfigureLogging(logging);", programText);
         Assert.Contains("AddSharedErrorHandling(services, ctx.Configuration", programText);
         Assert.Contains("ConfigureWorkerSerialization(services", programText);
+        Assert.DoesNotContain("BuildServiceProvider(", programText);
     }
 
     private static string[] GetHttpFunctionNames(Assembly functionAssembly) =>
@@ -84,6 +117,12 @@ public sealed class ArchitectureGuardTests
     {
         var references = Assembly.Load(assemblyName).GetReferencedAssemblies().Select(reference => reference.Name).ToArray();
         Assert.DoesNotContain(forbiddenAssemblyName, references);
+    }
+
+    private static void AssertReferences(string assemblyName, string expectedAssemblyName)
+    {
+        var references = Assembly.Load(assemblyName).GetReferencedAssemblies().Select(reference => reference.Name).ToArray();
+        Assert.Contains(expectedAssemblyName, references);
     }
 
     private static void AssertDoesNotReferencePrefix(string assemblyName, string forbiddenPrefix)

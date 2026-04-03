@@ -21,7 +21,12 @@ public class TimeZoneAndRouteTests
     [Theory]
     [InlineData("/api/v1/calendar/health", true, false)]
     [InlineData("/api/openapi/v1.json", true, false)]
-    [InlineData("/api/v1/bookings/hold", false, false)]
+    [InlineData("/api/scalar", true, false)]
+    [InlineData("/api/v1/me", false, false)]
+    [InlineData("/api/v1/self-service/bookings/123/cancel", false, false)]
+    [InlineData("/api/v1/bookings/hold", false, true)]
+    [InlineData("/api/v1/admin/advisers/projection/feed", false, true)]
+    [InlineData("/api/v2/clients/abc", false, true)]
     public void InternalApiAuthMiddleware_ClassifiesRoutes(string path, bool isPublic, bool requiresInternalBearer)
     {
         Assert.Equal(isPublic, InternalApiAuthMiddleware.IsPublic(path));

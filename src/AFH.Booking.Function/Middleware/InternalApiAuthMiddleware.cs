@@ -19,7 +19,11 @@ public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
         "/api/scalar"
     ];
 
-    private static readonly string[] InternalBearerRoutes = [];
+    private static readonly string[] NonInternalBearerRoutePrefixes =
+    [
+        "/api/v1/me",
+        "/api/v1/self-service/"
+    ];
 
     private readonly InternalApiAuthOptions _options;
     private readonly IHostEnvironment _hostEnvironment;
@@ -94,7 +98,7 @@ public sealed class InternalApiAuthMiddleware : IFunctionsWorkerMiddleware
         PublicRoutePrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     public static bool RequiresInternalBearer(string path) =>
-        InternalBearerRoutes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        !NonInternalBearerRoutePrefixes.Any(prefix => path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 
     private static async Task RejectAsync(
         FunctionContext context,

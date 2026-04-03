@@ -4,29 +4,55 @@ namespace AFH.Booking.Function.Security;
 
 public static class EndpointAccessPolicies
 {
-    private static readonly HashSet<string> PublicFunctions =
-    [
-        "Booking_OpenApiV1",
-        "Booking_ScalarUi",
-        "CalendarHealthV1",
-        "Bookings_SelfServiceCancel",
-        "Bookings_SelfServiceRearrange",
-        "Bookings_SelfServiceRearrangementOptions"
-    ];
+    private static readonly IReadOnlyDictionary<string, EndpointAccessPolicy> Policies =
+        new Dictionary<string, EndpointAccessPolicy>(StringComparer.Ordinal)
+        {
+            ["Admin_GetAdviserCoverage"] = EndpointAccessPolicy.InternalOnly,
+            ["Admin_GetAdviserProjectionById"] = EndpointAccessPolicy.InternalOnly,
+            ["Admin_GetAdviserProjectionFeed"] = EndpointAccessPolicy.InternalOnly,
+            ["Admin_ReconcileDownstreamUpdates"] = EndpointAccessPolicy.InternalOnly,
+            ["Admin_SyncAdviserDirectoryProjection"] = EndpointAccessPolicy.InternalOnly,
+            ["Approvals_ListPending"] = EndpointAccessPolicy.InternalOnly,
+            ["Approvals_Review"] = EndpointAccessPolicy.InternalOnly,
+            ["Booking_OpenApiV1"] = EndpointAccessPolicy.Public,
+            ["Booking_ScalarUi"] = EndpointAccessPolicy.Public,
+            ["Bookings_CancelBooking"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_ConfirmHold"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_CreateApprovalRequest"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_CreateHold"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_GetBooking"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_GetRearrangementOptions"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_LeadTechCancel"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_LeadTechRearrange"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_LeadTechRearrangementOptions"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_Rearrange"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_RecordEmailBounce"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_ReleaseHold"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_RemediateShowAs"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_SendNotification"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_SelfServiceCancel"] = EndpointAccessPolicy.Public,
+            ["Bookings_SelfServiceRearrange"] = EndpointAccessPolicy.Public,
+            ["Bookings_SelfServiceRearrangementOptions"] = EndpointAccessPolicy.Public,
+            ["CalendarHealthV1"] = EndpointAccessPolicy.Public,
+            ["Client_GetByTransaction"] = EndpointAccessPolicy.InternalOnly,
+            ["Client_GetByTransaction_V2"] = EndpointAccessPolicy.InternalOnly,
+            ["Clients_CreateDuplicateCase"] = EndpointAccessPolicy.InternalOnly,
+            ["Clients_ListDuplicateCases"] = EndpointAccessPolicy.InternalOnly,
+            ["Clients_ResolveDuplicateCase"] = EndpointAccessPolicy.InternalOnly,
+            ["Transactions_Availability"] = EndpointAccessPolicy.InternalOnly,
+            ["Transactions_Availability_V2"] = EndpointAccessPolicy.InternalOnly,
+            ["Users_GetCurrentUser"] = EndpointAccessPolicy.UserAuthenticated
+        };
 
-    private static readonly HashSet<string> UserAuthenticatedFunctions =
-    [
-        "Users_GetCurrentUser"
-    ];
+    internal static IReadOnlyCollection<string> KnownHttpFunctions => Policies.Keys.ToArray();
 
     public static EndpointAccessPolicy GetPolicy(string functionName)
     {
-        if (PublicFunctions.Contains(functionName))
-            return EndpointAccessPolicy.Public;
+        ArgumentException.ThrowIfNullOrWhiteSpace(functionName);
 
-        if (UserAuthenticatedFunctions.Contains(functionName))
-            return EndpointAccessPolicy.UserAuthenticated;
+        if (Policies.TryGetValue(functionName, out var policy))
+            return policy;
 
-        return EndpointAccessPolicy.InternalOnly;
+        throw new InvalidOperationException($"No endpoint access policy is configured for HTTP function '{functionName}'.");
     }
 }

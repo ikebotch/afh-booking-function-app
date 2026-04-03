@@ -1,3 +1,5 @@
+using AFH.Common.Errors.Abstractions;
+using AFH.Common.Errors.Builders;
 using AFH.Common.Errors.AzureFunctions.Builders;
 using AFH.Common.Errors.AzureFunctions.Extensions;
 using AFH.Common.Errors.Models;
@@ -13,6 +15,7 @@ namespace AFH.Booking.Function.Middleware;
 
 public sealed class ExceptionHandlingMiddleware : IFunctionsWorkerMiddleware
 {
+    private readonly ErrorRecordBuilder _errorRecordBuilder = new();
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
     private readonly BookingExceptionMapper _exceptionMapper;
     private readonly AzureFunctionErrorResponseBuilder _errorResponseBuilder;
@@ -71,6 +74,7 @@ public sealed class ExceptionHandlingMiddleware : IFunctionsWorkerMiddleware
             correlationId);
 
         await TryWriteFailureLogAsync(context, request, correlationId, mapping, ex);
+        await TryWriteErrorRecordAsync(context, mapping);
 
         context.GetInvocationResult().Value = await _errorResponseBuilder.BuildAsync(
             request,
@@ -127,6 +131,28 @@ public sealed class ExceptionHandlingMiddleware : IFunctionsWorkerMiddleware
                 "Failed to persist handled exception log. Function={FunctionName} CorrelationId={CorrelationId}",
                 context.FunctionDefinition.Name,
             correlationId);
+        }
+    }
+
+    private async Task TryWriteErrorRecordAsync(
+        FunctionContext context,
+        BookingExceptionMapper.BookingHandledException mapping)
+    {
+        try
+        {
+            var writer = context.InstanceServices.GetService<IErrorPersistenceWriter>();
+            if (writer is null)
+                return;
+
+            var record = _errorRecordBuilder.Build(mapping.MappingResult);
+            await writer.WriteAsync(record, CancellationToken.None);
+        }
+        catch (Exception persistenceEx)
+        {
+            _logger.LogWarning(
+                persistenceEx,
+                "Failed to persist handled exception error record. Function={FunctionName}",
+                context.FunctionDefinition.Name);
         }
     }
 

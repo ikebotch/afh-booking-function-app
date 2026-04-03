@@ -1,4 +1,5 @@
 ﻿using AFH.Booking.Domain.Transactions;
+using AFH.Common.Errors.EntityFramework.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,6 +28,7 @@ public sealed class BookingDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);
+        modelBuilder.AddErrorRecordEntity();
 
         modelBuilder.Entity<ApplicationLogModel>(entity =>
         {

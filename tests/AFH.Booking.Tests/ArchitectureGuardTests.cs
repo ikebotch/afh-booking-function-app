@@ -30,13 +30,13 @@ public sealed class ArchitectureGuardTests
         AssertReferences("AFH.Booking.Function", "AFH.Common.Errors");
         AssertReferences("AFH.Booking.Function", "AFH.Common.Errors.AzureFunctions");
         AssertReferences("AFH.Booking.Function", "AFH.Common.Errors.ApplicationInsights");
-        AssertReferences("AFH.Booking.Function", "AFH.Common.Errors.Email");
+        AssertDoesNotReference("AFH.Booking.Function", "AFH.Common.Errors.Email");
         AssertDoesNotReference("AFH.Booking.Function", "AFH.Common.Errors.EntityFramework");
 
         AssertReferences("AFH.Booking.Infrastructure", "AFH.Common.Errors.EntityFramework");
+        AssertReferences("AFH.Booking.Infrastructure", "AFH.Common.Errors.Email");
         AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Common.Errors.AzureFunctions");
         AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Common.Errors.ApplicationInsights");
-        AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Common.Errors.Email");
     }
 
     [Fact]

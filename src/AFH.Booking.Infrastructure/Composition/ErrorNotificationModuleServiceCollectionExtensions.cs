@@ -5,11 +5,11 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
-namespace AFH.Booking.Function.Notifications;
+namespace AFH.Booking.Infrastructure.Composition;
 
-internal static class ErrorNotificationModuleServiceCollectionExtensions
+public static class ErrorNotificationModuleServiceCollectionExtensions
 {
-    internal static IServiceCollection AddBookingErrorNotificationModule(
+    public static IServiceCollection AddBookingErrorNotificationModule(
         this IServiceCollection services,
         IConfiguration configuration,
         string defaultSubjectPrefix,

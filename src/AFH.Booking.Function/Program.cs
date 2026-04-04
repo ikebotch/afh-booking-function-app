@@ -2,7 +2,6 @@ using AFH.Booking.Application.Composition;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Function.Configuration;
 using AFH.Booking.Function.Middleware;
-using AFH.Booking.Function.Notifications;
 using AFH.Booking.Infrastructure.Composition;
 using AFH.Common.Errors.Abstractions;
 using AFH.Common.Errors.ApplicationInsights.DependencyInjection;

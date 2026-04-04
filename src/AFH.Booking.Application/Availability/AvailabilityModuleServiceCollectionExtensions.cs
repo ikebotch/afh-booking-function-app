@@ -1,6 +1,5 @@
 using AFH.Booking.Application.Abstractions;
 using AFH.Booking.Application.Abstractions.Bookings;
-using AFH.Booking.Application.Abstractions.Bookings.Handlers;
 using AFH.Booking.Application.Abstractions.Calendar;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Bookings.Scoring;
@@ -17,7 +16,6 @@ internal static class AvailabilityModuleServiceCollectionExtensions
         services.AddScoped<AvailabilityHandler>();
         services.AddScoped<IAvailabilityHandler, AvailabilityHandler>();
         services.AddScoped<ICalendarViewQueryHandler, CalendarViewQueryHandler>();
-        services.AddScoped<IReleaseHoldHandler, ReleaseHoldHandler>();
 
         return services;
     }

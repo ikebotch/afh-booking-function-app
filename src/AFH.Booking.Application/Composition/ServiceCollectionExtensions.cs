@@ -20,8 +20,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ITimeZoneProvider, DefaultTimeZoneProvider>();
 
         // Booking handlers
-        services.AddScoped<ICreateBookingHandler, CreateBookingHandler>();
-        services.AddScoped<IConfirmBookingHandler, ConfirmBookingHandler>();
         services.AddScoped<ICancelBookingHandler, CancelBookingHandler>();
         services.AddScoped<IBookingDetailsHandler, BookingDetailsHandler>();
         services.AddScoped<IRearrangementOptionsHandler, RearrangementOptionsHandler>();
@@ -30,6 +28,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IRearrangementOrchestrator, RearrangementOrchestrator>();
         services.AddScoped<IBookingConflictService, BookingConflictService>();
         services.AddScoped<ILifecycleAuditService, LifecycleAuditService>();
+        services.AddBookingHoldsModule();
         services.AddBookingAvailabilityModule();
 
         return services;

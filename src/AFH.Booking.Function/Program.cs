@@ -2,13 +2,11 @@ using AFH.Booking.Application.Composition;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Function.Configuration;
 using AFH.Booking.Function.Middleware;
+using AFH.Booking.Function.Notifications;
 using AFH.Booking.Infrastructure.Composition;
 using AFH.Common.Errors.Abstractions;
 using AFH.Common.Errors.ApplicationInsights.DependencyInjection;
 using AFH.Common.Errors.AzureFunctions.DependencyInjection;
-using AFH.Common.Errors.Email.DependencyInjection;
-using AFH.Common.Errors.Email.Models;
-using AFH.Common.Errors.Email.Options;
 using Azure.Core.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -110,9 +108,7 @@ static void AddSharedErrorHandling(
     services.AddApplicationInsightsTelemetryWorkerService();
     services.AddAfhCommonErrorsApplicationInsights();
     services.AddAfhCommonErrorsAzureFunctions();
-    services.AddAfhCommonErrorsEmail(
-        BuildErrorEmailOptions(configuration, defaultSubjectPrefix),
-        sp => CreateErrorEmailSender(sp, serviceName));
+    services.AddBookingErrorNotificationModule(configuration, defaultSubjectPrefix, serviceName);
     services.AddSingleton<BookingExceptionMapper>();
     services.AddSingleton<IExceptionMapper>(sp => sp.GetRequiredService<BookingExceptionMapper>());
 }
@@ -143,61 +139,4 @@ static void ConfigureWorkerSerialization(IServiceCollection services, bool caseI
                 PropertyNameCaseInsensitive = caseInsensitivePropertyNames
             });
     });
-}
-
-static ErrorEmailOptions BuildErrorEmailOptions(IConfiguration configuration, string defaultSubjectPrefix)
-{
-    var settings = configuration.GetSection("ErrorEmail").Get<ErrorEmailConfiguration>() ?? new ErrorEmailConfiguration();
-
-    return new ErrorEmailOptions
-    {
-        FromAddress = settings.FromAddress,
-        FromDisplayName = settings.FromDisplayName,
-        ToAddresses = SplitAddresses(settings.ToAddresses),
-        CcAddresses = SplitAddresses(settings.CcAddresses),
-        BccAddresses = SplitAddresses(settings.BccAddresses),
-        SubjectPrefix = string.IsNullOrWhiteSpace(settings.SubjectPrefix) ? defaultSubjectPrefix : settings.SubjectPrefix!,
-        IncludeDetails = settings.IncludeDetails ?? true
-    };
-}
-
-static IReadOnlyCollection<string> SplitAddresses(string? value)
-{
-    if (string.IsNullOrWhiteSpace(value))
-        return [];
-
-    return value
-        .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .ToArray();
-}
-
-static Func<ErrorEmailTemplateModel, string, CancellationToken, Task> CreateErrorEmailSender(IServiceProvider serviceProvider, string serviceName)
-{
-    var logger = serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AFH.Common.Errors.Email");
-
-    return (model, _, _) =>
-    {
-        if (model.ToAddresses.Count > 0)
-        {
-            logger.LogDebug(
-                "Prepared handled error email notification for Service={Service} Subject={Subject} RecipientCount={RecipientCount}, but no service-local transport is configured.",
-                serviceName,
-                model.Subject,
-                model.ToAddresses.Count);
-        }
-
-        return Task.CompletedTask;
-    };
-}
-
-internal sealed class ErrorEmailConfiguration
-{
-    public string? FromAddress { get; init; }
-    public string? FromDisplayName { get; init; }
-    public string? ToAddresses { get; init; }
-    public string? CcAddresses { get; init; }
-    public string? BccAddresses { get; init; }
-    public string? SubjectPrefix { get; init; }
-    public bool? IncludeDetails { get; init; }
 }

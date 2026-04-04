@@ -1,6 +1,7 @@
 using AFH.Common.Errors.Email.DependencyInjection;
 using AFH.Common.Errors.Email.Models;
 using AFH.Common.Errors.Email.Options;
+using AFH.Booking.Infrastructure.Options;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -24,7 +25,8 @@ public static class ErrorNotificationModuleServiceCollectionExtensions
 
     private static ErrorEmailOptions BuildErrorEmailOptions(IConfiguration configuration, string defaultSubjectPrefix)
     {
-        var settings = configuration.GetSection("ErrorEmail").Get<ErrorEmailConfiguration>() ?? new ErrorEmailConfiguration();
+        var settings = configuration.GetSection(ErrorEmailOptionsConfiguration.SectionName).Get<ErrorEmailOptionsConfiguration>()
+            ?? new ErrorEmailOptionsConfiguration();
 
         return new ErrorEmailOptions
         {
@@ -70,14 +72,4 @@ public static class ErrorNotificationModuleServiceCollectionExtensions
         };
     }
 
-    internal sealed class ErrorEmailConfiguration
-    {
-        public string? FromAddress { get; init; }
-        public string? FromDisplayName { get; init; }
-        public string? ToAddresses { get; init; }
-        public string? CcAddresses { get; init; }
-        public string? BccAddresses { get; init; }
-        public string? SubjectPrefix { get; init; }
-        public bool? IncludeDetails { get; init; }
-    }
 }

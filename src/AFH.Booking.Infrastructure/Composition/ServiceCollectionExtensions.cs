@@ -18,6 +18,7 @@ using AFH.Booking.Infrastructure.Logging;
 using AFH.Booking.Infrastructure.Meetings;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
+using AFH.Common.Errors.ApplicationInsights.DependencyInjection;
 using AFH.Common.Errors.EntityFramework.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -68,9 +69,11 @@ public static class ServiceCollectionExtensions
                 options.UseSqlServer(bookingDbConnectionString);
             },
             ServiceLifetime.Scoped);
+        services.AddAfhCommonErrorsApplicationInsights();
         services.AddAfhCommonErrorsEntityFramework<BookingDbContext>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<DatabaseApplicationLogSink>();
+        services.AddScoped<BookingHandledErrorTelemetryEmitter>();
         services.AddScoped<ApplicationInsightsLogSink>(sp => new ApplicationInsightsLogSink(
             sp.GetService<Microsoft.ApplicationInsights.TelemetryClient>(),
             sp.GetRequiredService<IConfiguration>(),

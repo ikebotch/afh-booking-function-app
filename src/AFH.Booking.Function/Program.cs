@@ -4,7 +4,6 @@ using AFH.Booking.Function.Configuration;
 using AFH.Booking.Function.Middleware;
 using AFH.Booking.Infrastructure.Composition;
 using AFH.Common.Errors.Abstractions;
-using AFH.Common.Errors.ApplicationInsights.DependencyInjection;
 using AFH.Common.Errors.AzureFunctions.DependencyInjection;
 using Azure.Core.Serialization;
 using Microsoft.Extensions.Configuration;
@@ -105,7 +104,6 @@ static void AddSharedErrorHandling(
     string serviceName)
 {
     services.AddApplicationInsightsTelemetryWorkerService();
-    services.AddAfhCommonErrorsApplicationInsights();
     services.AddAfhCommonErrorsAzureFunctions();
     services.AddBookingErrorNotificationModule(configuration, defaultSubjectPrefix, serviceName);
     services.AddSingleton<BookingExceptionMapper>();

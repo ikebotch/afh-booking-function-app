@@ -12,6 +12,7 @@
     <ProjectReference Include="..\AFH.Booking.Domain\AFH.Booking.Domain.csproj" />
     <ProjectReference Include="..\AFH.Booking.Contract\AFH.Booking.Contract.csproj" />
     <ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.Email\AFH.Common.Errors.Email.csproj" />
+    <ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.ApplicationInsights\AFH.Common.Errors.ApplicationInsights.csproj" />
     <ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.EntityFramework\AFH.Common.Errors.EntityFramework.csproj" />
   </ItemGroup>
 

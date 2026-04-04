@@ -162,6 +162,7 @@ internal sealed class TestHttpRequestData : HttpRequestData
     public static TestHttpRequestData Create()
     {
         var context = new TestFunctionContext();
+        context.Items[CorrelationIdMiddleware.ItemKey] = "ctx-correlation";
         context.Items["CorrelationId"] = "ctx-correlation";
         return new TestHttpRequestData(context);
     }

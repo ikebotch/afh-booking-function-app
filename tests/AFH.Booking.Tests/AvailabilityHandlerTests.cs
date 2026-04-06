@@ -103,7 +103,7 @@ public sealed class AvailabilityHandlerTests
     }
 
     [Fact]
-    public async Task HandleAsync_InPerson_FanOutScalesPerSlotAndPerFreeAdviser()
+    public async Task HandleAsync_InPerson_ReusesTravelAndBatchesCalendarChecksPerSlot()
     {
         var txRepo = new StubTransactionRepository();
         var slotRepo = new StubSlotRepository();
@@ -172,9 +172,9 @@ public sealed class AvailabilityHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.NotNull(txRepo.AddedTransaction);
-        Assert.Equal(4, travelMatrix.CallCount);
-        Assert.Equal(9, calendarView.CallCount);
-        Assert.Equal([2, 1, 1, 2, 1, 1, 2, 1, 1], calendarView.BatchSizes);
+        Assert.Equal(1, travelMatrix.CallCount);
+        Assert.Equal(3, calendarView.CallCount);
+        Assert.Equal([2, 2, 2], calendarView.BatchSizes);
         Assert.Equal(6, slotRepo.AddedSlots.Count);
     }
 

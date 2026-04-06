@@ -8,6 +8,7 @@ using AFH.Booking.Application.Calendar.Queries;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Contracts.V1.Common;
+using AFH.Booking.Contracts.V1.Dtos;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Score;
 using AFH.Booking.Domain.Calendar;
@@ -89,7 +90,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         if (adviserPoolResult.Error is not null)
             return adviserPoolResult.Error;
 
-        var advisers = adviserPoolResult.Value;
+        var advisers = adviserPoolResult.Value.Advisers;
         if (advisers.Count == 0)
             return EmptyResult(nextCursor);
 
@@ -99,6 +100,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             slotStartsUtc,
             tx,
             prospect,
+            adviserPoolResult.Value.TravelByAdviserId,
             utcNow,
             ct);
 
@@ -185,7 +187,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         return (prospect, null);
     }
 
-    private async Task<(List<AdviserDirectoryItem> Value, Result<GetAvailabilityResponse>? Error)> BuildAdviserPoolAsync(
+    private async Task<(AdviserPoolResult Value, Result<GetAvailabilityResponse>? Error)> BuildAdviserPoolAsync(
         GetAvailabilityQuery q,
         Domain.Client.ClientDirectoryItem? prospect,
         CancellationToken ct)
@@ -227,14 +229,14 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                 .ToList();
 
             if (remoteAdvisers.Count == 0)
-                return (new List<AdviserDirectoryItem>(), null);
+                return (new AdviserPoolResult([], new Dictionary<string, LocationCandidate>(StringComparer.OrdinalIgnoreCase)), null);
 
-            return (remoteAdvisers, null);
+            return (new AdviserPoolResult(remoteAdvisers, new Dictionary<string, LocationCandidate>(StringComparer.OrdinalIgnoreCase)), null);
         }
 
         var travel = await GetTravelIfRequired(q, prospect, q.PreferredAdviserIds, ct);
         if (travel is null || travel.Candidates.Count == 0)
-            return (new List<AdviserDirectoryItem>(), null);
+            return (new AdviserPoolResult([], new Dictionary<string, LocationCandidate>(StringComparer.OrdinalIgnoreCase)), null);
 
         var advisers = travel.Candidates
             .Where(c => !string.IsNullOrWhiteSpace(c.AdviserId))
@@ -249,7 +251,12 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             .DistinctBy(x => x.AdviserId, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return (advisers, null);
+        var travelByAdviserId = travel.Candidates
+            .Where(x => !string.IsNullOrWhiteSpace(x.AdviserId))
+            .GroupBy(x => x.AdviserId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        return (new AdviserPoolResult(advisers, travelByAdviserId), null);
     }
 
     private (BookingTransaction? Value, Result<GetAvailabilityResponse>? Error) CreateTransaction(
@@ -288,6 +295,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         IReadOnlyList<DateTime> slotStarts,
         BookingTransaction tx,
         Domain.Client.ClientDirectoryItem? prospect,
+        IReadOnlyDictionary<string, LocationCandidate> travelByAdviserId,
         DateTime utcNow,
         CancellationToken ct)
     {
@@ -297,22 +305,30 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         {
             var end = start.AddMinutes(q.Duration);
 
-            var freeAdvisers = await GetFreeAdvisers(advisers, start, end, ct);
-            if (freeAdvisers.Count == 0)
-                continue;
-
-            var travel = await GetTravelIfRequired(q, prospect, freeAdvisers, ct);
+            var travel = q.IsRemote
+                ? null
+                : CreateTravelResultForAdvisers(advisers, travelByAdviserId);
+            var availabilityByAdviserId = await GetAvailabilityByAdviserIdAsync(
+                advisers,
+                start,
+                end,
+                travel?.Candidates,
+                ct);
 
             foreach (var adviser in advisers)
             {
                 var adviserId = adviser.Email;
                 if (string.IsNullOrWhiteSpace(adviserId))
                     continue;
-                if (!freeAdvisers.Contains(adviserId))
-                    continue;
 
                 var travelCandidate = travel?.Candidates
                     .FirstOrDefault(x => string.Equals(x.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase));
+
+                if (!availabilityByAdviserId.TryGetValue(adviserId, out var availability) ||
+                    !IsWindowFree(availability, start, end))
+                {
+                    continue;
+                }
 
                 if (!q.IsRemote)
                 {
@@ -323,14 +339,10 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                     if (t <= 0)
                         continue;
 
-                    var fitsTravel = await HasRoomForTravelAsync(
-                        advisers: advisers,
-                        adviserId: adviserId,
-                        meetingStartUtc: start,
-                        meetingEndUtc: end,
-                        travelToMinutes: t,
-                        travelFromMinutes: t,
-                        ct: ct);
+                    var fitsTravel = IsWindowFree(
+                        availability,
+                        start.AddMinutes(-t),
+                        end.AddMinutes(t));
 
                     if (!fitsTravel)
                         continue;
@@ -367,29 +379,34 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         return result;
     }
 
-    private async Task<HashSet<string>> GetFreeAdvisers(
+    private async Task<Dictionary<string, CalendarViewDto>> GetAvailabilityByAdviserIdAsync(
         IReadOnlyList<AdviserDirectoryItem> advisers,
         DateTime start,
         DateTime end,
+        IReadOnlyList<LocationCandidate>? travelCandidates,
         CancellationToken ct)
     {
+        var travelWindowPadding = travelCandidates?
+            .Select(x => Math.Max(0, x.TravelMinutes ?? 0))
+            .DefaultIfEmpty(0)
+            .Max() ?? 0;
+
         var calResult = await _calendarView.HandleAsync(new CalendarViewQuery
         {
             AdviserList = advisers,
-            StartUtc = start,
-            EndUtc = end,
+            StartUtc = start.AddMinutes(-travelWindowPadding),
+            EndUtc = end.AddMinutes(travelWindowPadding),
             Timezone = _timeZoneProvider.DefaultTimeZoneId
         }, ct);
 
         if (!calResult.IsSuccess)
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            return new Dictionary<string, CalendarViewDto>(StringComparer.OrdinalIgnoreCase);
 
         return calResult.Value?
-            .Where(c => !c.IsBusy && !string.IsNullOrWhiteSpace(c.AdviserId))
-            .Select(c => c.AdviserId)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase)
-            ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            .Where(c => !string.IsNullOrWhiteSpace(c.AdviserId))
+            .GroupBy(c => c.AdviserId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase)
+            ?? new Dictionary<string, CalendarViewDto>(StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task<TravelMatrixResult?> GetTravelIfRequired(
@@ -461,53 +478,37 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         });
     }
 
-    private async Task<bool> HasRoomForTravelAsync(
+    private static TravelMatrixResult CreateTravelResultForAdvisers(
         IReadOnlyList<AdviserDirectoryItem> advisers,
-        string adviserId,
-        DateTime meetingStartUtc,
-        DateTime meetingEndUtc,
-        int travelToMinutes,
-        int travelFromMinutes,
-        CancellationToken ct)
+        IReadOnlyDictionary<string, LocationCandidate> travelByAdviserId)
     {
-        if (string.IsNullOrWhiteSpace(adviserId))
-            return false;
-
-        meetingStartUtc = DateTime.SpecifyKind(meetingStartUtc, DateTimeKind.Utc);
-        meetingEndUtc = DateTime.SpecifyKind(meetingEndUtc, DateTimeKind.Utc);
-
-        if (meetingEndUtc <= meetingStartUtc)
-            return false;
-
-        if (travelToMinutes < 0)
-            travelToMinutes = 0;
-        if (travelFromMinutes < 0)
-            travelFromMinutes = 0;
-
-        var blockedStartUtc = DateTime.SpecifyKind(meetingStartUtc.AddMinutes(-travelToMinutes), DateTimeKind.Utc);
-        var blockedEndUtc = DateTime.SpecifyKind(meetingEndUtc.AddMinutes(travelFromMinutes), DateTimeKind.Utc);
-
-        var single = advisers
-            .Where(a => !string.IsNullOrWhiteSpace(a.AdviserId) &&
-                        string.Equals(a.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-
-        if (single.Count == 0)
-            return false;
-
-        var calResult = await _calendarView.HandleAsync(new CalendarViewQuery
+        return new TravelMatrixResult
         {
-            AdviserList = single,
-            StartUtc = blockedStartUtc,
-            EndUtc = blockedEndUtc,
-            Timezone = _timeZoneProvider.DefaultTimeZoneId
-        }, ct);
+            Candidates = advisers
+                .Where(x => !string.IsNullOrWhiteSpace(x.AdviserId))
+                .Select(x => travelByAdviserId.TryGetValue(x.AdviserId, out var candidate) ? candidate : null)
+                .Where(x => x is not null)
+                .Cast<LocationCandidate>()
+                .ToList()
+        };
+    }
 
-        if (!calResult.IsSuccess || calResult.Value is null)
+    private static bool IsWindowFree(CalendarViewDto availability, DateTime windowStartUtc, DateTime windowEndUtc)
+    {
+        if (availability.MailboxUnavailable)
             return false;
 
-        var row = calResult.Value.FirstOrDefault();
-        return row is not null && row.IsBusy == false;
+        windowStartUtc = DateTime.SpecifyKind(windowStartUtc, DateTimeKind.Utc);
+        windowEndUtc = DateTime.SpecifyKind(windowEndUtc, DateTimeKind.Utc);
+
+        if (windowEndUtc <= windowStartUtc)
+            return false;
+
+        if (availability.Conflicts.Count == 0)
+            return !availability.IsBusy;
+
+        return availability.Conflicts.All(conflict =>
+            conflict.EndUtc <= windowStartUtc || conflict.StartUtc >= windowEndUtc);
     }
 
     private static (IReadOnlyList<DateTime> Starts, string? NextCursor) BuildSlotStartTimesUtcPage(GetAvailabilityQuery q)
@@ -550,4 +551,8 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
 
         return (result, null);
     }
+
+    private sealed record AdviserPoolResult(
+        IReadOnlyList<AdviserDirectoryItem> Advisers,
+        IReadOnlyDictionary<string, LocationCandidate> TravelByAdviserId);
 }

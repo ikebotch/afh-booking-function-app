@@ -134,6 +134,40 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         return model is null ? null : model.ToDomain();
     }
 
+    public async Task<ActiveHoldLookupResult> GetActiveForCreateHoldAsync(
+        string transactionId,
+        string slotId,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(transactionId))
+            throw new ArgumentException("transactionId is required.", nameof(transactionId));
+
+        if (string.IsNullOrWhiteSpace(slotId))
+            throw new ArgumentException("slotId is required.", nameof(slotId));
+
+        utcNow = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
+
+        var models = await _db.Holds
+            .AsNoTracking()
+            .Include(x => x.Slot)
+            .Where(x => x.HoldExpiresUtc > utcNow)
+            .Where(x => x.Status == HoldStatus.Active)
+            .Where(x => x.Slot.TransactionId == transactionId || x.SlotId == slotId)
+            .OrderByDescending(x => x.CreatedUtc)
+            .ToListAsync(ct);
+
+        var transactionHold = models
+            .FirstOrDefault(x => string.Equals(x.Slot.TransactionId, transactionId, StringComparison.OrdinalIgnoreCase))
+            ?.ToDomain();
+
+        var slotHold = models
+            .FirstOrDefault(x => string.Equals(x.SlotId, slotId, StringComparison.OrdinalIgnoreCase))
+            ?.ToDomain();
+
+        return new ActiveHoldLookupResult(transactionHold, slotHold);
+    }
+
     public async Task UpdateAsync(BookingHold hold, CancellationToken ct)
     {
         if (hold is null) throw new ArgumentNullException(nameof(hold));

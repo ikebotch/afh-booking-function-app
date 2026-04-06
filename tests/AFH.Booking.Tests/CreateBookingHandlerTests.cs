@@ -24,7 +24,7 @@ public sealed class CreateBookingHandlerTests
         var oldHold = BookingHold.Rehydrate(
             id: "hold-old",
             slotId: oldSlot.Id,
-            userid: oldSlot.AdviserId,
+            userid: "adviser.one@tenant.com",
             status: BookingHoldStatus.Active,
             createdUtc: now.AddMinutes(-2),
             expiresUtc: now.AddMinutes(2),
@@ -37,13 +37,14 @@ public sealed class CreateBookingHandlerTests
         var recorder = new EventRecorder();
         var holdRepo = new TrackingHoldRepository(oldHold, recorder);
         var calendar = new TrackingCalendarGateway(recorder);
+        var profiles = new StubProfiles("adv-1", "adviser.one@tenant.com");
         var sut = new CreateBookingHandler(
             new StubTransactionRepository(transaction),
             new StubSlotRepository(newSlot),
             holdRepo,
             new StubUnitOfWork(),
             calendar,
-            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            profiles,
             new StubClientDirectory(),
             new StubClock(now),
             NullLogger<CreateBookingHandler>.Instance);
@@ -67,6 +68,8 @@ public sealed class CreateBookingHandlerTests
         Assert.Equal("adviser.one@tenant.com", calendar.LastCreatedUserId);
         Assert.Equal("ForceRefresh", calendar.LastFreshnessMode);
         Assert.DoesNotContain("<html", calendar.LastCreatedBody ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, holdRepo.ActiveLookupCallCount);
+        Assert.Equal(1, profiles.ResolveCallCount);
     }
 
     [Fact]
@@ -79,13 +82,14 @@ public sealed class CreateBookingHandlerTests
         var recorder = new EventRecorder();
         var holdRepo = new TrackingHoldRepository(existingActiveHold: null, recorder);
         var calendar = new TrackingCalendarGateway(recorder);
+        var profiles = new StubProfiles("adv-1", "adviser.one@tenant.com");
         var sut = new CreateBookingHandler(
             new StubTransactionRepository(transaction),
             new StubSlotRepository(slot),
             holdRepo,
             new StubUnitOfWork(),
             calendar,
-            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            profiles,
             new StubClientDirectory(),
             new StubClock(now),
             NullLogger<CreateBookingHandler>.Instance);
@@ -101,6 +105,8 @@ public sealed class CreateBookingHandlerTests
         Assert.Equal(slot.StartUtc.AddMinutes(-45), calendar.LastAvailabilityStartUtc);
         Assert.Equal(slot.EndUtc.AddMinutes(30), calendar.LastAvailabilityEndUtc);
         Assert.Equal("ForceRefresh", calendar.LastFreshnessMode);
+        Assert.Equal(1, holdRepo.ActiveLookupCallCount);
+        Assert.Equal(1, profiles.ResolveCallCount);
     }
 
     [Fact]
@@ -113,7 +119,7 @@ public sealed class CreateBookingHandlerTests
         var oldHold = BookingHold.Rehydrate(
             id: "hold-old",
             slotId: oldSlot.Id,
-            userid: oldSlot.AdviserId,
+            userid: "adviser.one@tenant.com",
             status: BookingHoldStatus.Active,
             createdUtc: now.AddMinutes(-2),
             expiresUtc: now.AddMinutes(2),
@@ -163,6 +169,7 @@ public sealed class CreateBookingHandlerTests
         Assert.Equal(BookingHoldStatus.Cancelled, oldHold.Status);
         Assert.Null(holdRepo.AddedHold);
         Assert.False(calendar.CreatedBookingEvent);
+        Assert.Equal(1, holdRepo.ActiveLookupCallCount);
     }
 
     private static BookingTransaction CreateTransaction(DateTime now) =>
@@ -222,6 +229,7 @@ public sealed class CreateBookingHandlerTests
         }
 
         public BookingHold? AddedHold { get; private set; }
+        public int ActiveLookupCallCount { get; private set; }
 
         public Task AddAsync(BookingHold hold, CancellationToken ct)
         {
@@ -258,6 +266,23 @@ public sealed class CreateBookingHandlerTests
             }
 
             return Task.FromResult<BookingHold?>(null);
+        }
+
+        public Task<ActiveHoldLookupResult> GetActiveForCreateHoldAsync(string transactionId, string slotId, DateTime utcNow, CancellationToken ct)
+        {
+            ActiveLookupCallCount++;
+            var transactionHold = _existingActiveHold is not null &&
+                                  _existingActiveHold.Status == BookingHoldStatus.Active &&
+                                  _existingActiveHold.ExpiresUtc > utcNow
+                ? _existingActiveHold
+                : null;
+
+            var slotHold = transactionHold is not null &&
+                           string.Equals(transactionHold.SlotId, slotId, StringComparison.OrdinalIgnoreCase)
+                ? transactionHold
+                : null;
+
+            return Task.FromResult(new ActiveHoldLookupResult(transactionHold, slotHold));
         }
 
         public Task UpdateAsync(BookingHold hold, CancellationToken ct)
@@ -318,10 +343,16 @@ public sealed class CreateBookingHandlerTests
             };
         }
 
+        public int ResolveCallCount { get; private set; }
+
         public Task UpsertRangeAsync(IReadOnlyList<AdviserProfileProjectionRecord> advisers, CancellationToken ct) => Task.CompletedTask;
         public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>(_record is null ? [] : [_record]);
         public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>(_record is null ? [] : [_record]);
-        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct) => Task.FromResult(_record is not null && string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
+        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct)
+        {
+            ResolveCallCount++;
+            return Task.FromResult(_record is not null && string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
+        }
     }
 
     private sealed class StubClock : IClock

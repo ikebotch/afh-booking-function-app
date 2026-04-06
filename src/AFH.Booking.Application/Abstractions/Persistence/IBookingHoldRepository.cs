@@ -12,6 +12,7 @@ public interface IBookingHoldRepository
     Task<BookingHold?> GetByCalendarEventIdAsync(string providerEventId, CancellationToken ct);
     Task<BookingHold?> GetActiveBySlotIdAsync(string slotId, DateTime utcNow, CancellationToken ct);
     Task<BookingHold?> GetActiveByTransactionIdAsync(string transactionId, DateTime utcNow, CancellationToken ct);
+    Task<ActiveHoldLookupResult> GetActiveForCreateHoldAsync(string transactionId, string slotId, DateTime utcNow, CancellationToken ct);
 
     Task UpdateAsync(BookingHold hold, CancellationToken ct);
 
@@ -20,3 +21,7 @@ public interface IBookingHoldRepository
 
     Task<IReadOnlyList<BookingHold>> GetExpiredActiveAsync(DateTime utcNow, int take, CancellationToken ct);
 }
+
+public sealed record ActiveHoldLookupResult(
+    BookingHold? TransactionHold,
+    BookingHold? SlotHold);

@@ -65,20 +65,21 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
             return FailFrom<CreateBookingResponse>(loadResult);
 
         var (slot, tx) = loadResult.Value;
+        var activeHolds = await _holdRepo.GetActiveForCreateHoldAsync(slot.TransactionId, slot.Id, utcNow, ct);
+        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
 
-        var releaseExisting = await ReplaceExistingHoldIfNeededAsync(slot, tx, utcNow, ct);
+        var releaseExisting = await ReplaceExistingHoldIfNeededAsync(slot, tx, activeHolds.TransactionHold, utcNow, ct);
         if (!releaseExisting.IsSuccess)
             return FailFrom<CreateBookingResponse>(releaseExisting);
 
-        var holdCheck = await EnsureNoActiveHoldAsync(slot, tx, utcNow, ct);
+        var holdCheck = EnsureNoActiveHold(activeHolds.TransactionHold, activeHolds.SlotHold);
         if (!holdCheck.IsSuccess)
             return FailFrom<CreateBookingResponse>(holdCheck);
 
-        var availabilityCheck = await EnsureFreshAvailabilityAsync(slot, tx, ct);
+        var availabilityCheck = await EnsureFreshAvailabilityAsync(slot, tx, calendarUserId, ct);
         if (!availabilityCheck.IsSuccess)
             return FailFrom<CreateBookingResponse>(availabilityCheck);
 
-        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
         var holdCreate = CreateHold(slot, calendarUserId, utcNow);
         if (!holdCreate.IsSuccess)
             return FailFrom<CreateBookingResponse>(holdCreate);
@@ -89,7 +90,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
 
         await _uow.SaveChangesAsync(ct);
 
-        var calendarResult = await TryCreateCalendarHoldEventAsync(slot, tx, hold, ct);
+        var calendarResult = await TryCreateCalendarHoldEventAsync(slot, tx, hold, calendarUserId, ct);
         if (!calendarResult.IsSuccess)
             return FailFrom<CreateBookingResponse>(calendarResult);
 
@@ -157,10 +158,10 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
     private async Task<Result<Unit>> ReplaceExistingHoldIfNeededAsync(
         BookingSlot slot,
         BookingTransaction tx,
+        BookingHold? existing,
         DateTime utcNow,
         CancellationToken ct)
     {
-        var existing = await _holdRepo.GetActiveByTransactionIdAsync(slot.TransactionId, utcNow, ct);
         if (existing is null)
             return Result<Unit>.Ok(Unit.Value);
 
@@ -168,7 +169,9 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         {
             try
             {
-                var existingCalendarUserId = await _profiles.ResolveCalendarUserIdAsync(existing.UserId, ct);
+                var existingCalendarUserId = existing.UserId.Contains('@')
+                    ? existing.UserId
+                    : await _profiles.ResolveCalendarUserIdAsync(existing.UserId, ct);
                 await _calendar.CancelBookingEventAsync(
                     existingCalendarUserId,
                     existing.CalendarProviderEventId,
@@ -204,10 +207,10 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         return Result<Unit>.Ok(Unit.Value);
     }
 
-    private async Task<Result<Unit>> EnsureNoActiveHoldAsync(BookingSlot slot, BookingTransaction tx, DateTime utcNow, CancellationToken ct)
+    private static Result<Unit> EnsureNoActiveHold(BookingHold? transactionHold, BookingHold? slotHold)
     {
-        var existing = await _holdRepo.GetActiveBySlotIdAsync(slot.Id, utcNow, ct);
-        if (existing is not null)
+        if (slotHold is not null &&
+            (transactionHold is null || !string.Equals(transactionHold.Id, slotHold.Id, StringComparison.OrdinalIgnoreCase)))
         {
             return Result<Unit>.Fail(
                 HttpStatusCode.Conflict,
@@ -221,11 +224,11 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
     private async Task<Result<Unit>> EnsureFreshAvailabilityAsync(
         BookingSlot slot,
         BookingTransaction tx,
+        string calendarUserId,
         CancellationToken ct)
     {
         var windows = BuildHoldWindows(slot, tx);
 
-        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
         var availability = await _calendar.CheckAvailabilityAsync(
             calendarUserId,
             windows.HoldStartUtc,
@@ -297,10 +300,10 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         BookingSlot slot,
         BookingTransaction tx,
         BookingHold hold,
+        string calendarUserId,
         CancellationToken ct)
     {
         var windows = BuildHoldWindows(slot, tx);
-        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
 
         _logger.LogInformation(
             "Creating calendar hold event for HoldId={HoldId} SlotId={SlotId} AdviserId={AdviserId} SlotStartUtc={SlotStartUtc} SlotEndUtc={SlotEndUtc} HoldStartUtc={HoldStartUtc} HoldEndUtc={HoldEndUtc} TravelBufferMins={TravelBufferMins} CompanyBufferMins={CompanyBufferMins}",

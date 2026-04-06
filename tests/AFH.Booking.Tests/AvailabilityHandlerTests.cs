@@ -102,6 +102,82 @@ public sealed class AvailabilityHandlerTests
         Assert.Empty(result.Value!.Advisers);
     }
 
+    [Fact]
+    public async Task HandleAsync_InPerson_FanOutScalesPerSlotAndPerFreeAdviser()
+    {
+        var txRepo = new StubTransactionRepository();
+        var slotRepo = new StubSlotRepository();
+        var calendarView = new StubCalendarViewQueryHandler();
+        var travelMatrix = new StubTravelMatrixService(
+        [
+            new AFH.Booking.Domain.Location.LocationCandidate
+            {
+                AdviserId = "adv-1",
+                TravelMinutes = 15,
+                DistanceMiles = 10,
+                GoldStar = true
+            },
+            new AFH.Booking.Domain.Location.LocationCandidate
+            {
+                AdviserId = "adv-2",
+                TravelMinutes = 20,
+                DistanceMiles = 12,
+                GoldStar = false
+            }
+        ]);
+
+        var sut = new AvailabilityHandler(
+            new StubSlotScorer(),
+            calendarView,
+            travelMatrix,
+            new StubClientDirectory(new AFH.Booking.Domain.Client.ClientDirectoryItem
+            {
+                StreetName1 = "1 High Street",
+                Town = "London",
+                PostalCode = "SW1A 1AA"
+            }),
+            new StubProfiles(
+            [
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-1",
+                    DisplayName = "Adviser One",
+                    MailboxUserId = "adviser.one@tenant.com",
+                    IsActive = true
+                },
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-2",
+                    DisplayName = "Adviser Two",
+                    MailboxUserId = "adviser.two@tenant.com",
+                    IsActive = true
+                }
+            ]),
+            txRepo,
+            slotRepo,
+            new StubUnitOfWork(),
+            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
+            new StubTimeZoneProvider(),
+            NullLogger<AvailabilityHandler>.Instance);
+
+        var result = await sut.HandleAsync(new GetAvailabilityQuery
+        {
+            ClientId = "client-1",
+            IsRemote = false,
+            PreferredStart = new DateTime(2026, 04, 02, 0, 0, 0, DateTimeKind.Utc),
+            Duration = 60,
+            Limit = 10,
+            Take = 3
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(txRepo.AddedTransaction);
+        Assert.Equal(4, travelMatrix.CallCount);
+        Assert.Equal(9, calendarView.CallCount);
+        Assert.Equal([2, 1, 1, 2, 1, 1, 2, 1, 1], calendarView.BatchSizes);
+        Assert.Equal(6, slotRepo.AddedSlots.Count);
+    }
+
     private sealed class StubSlotScorer : ISlotScorer
     {
         public SlotScoreResult Score(SlotScoringContext ctx) => new() { Score = 5, Breakdown = new Dictionary<string, int> { ["base"] = 5 } };
@@ -117,9 +193,13 @@ public sealed class AvailabilityHandlerTests
         }
 
         public string? LastMailboxUserId { get; private set; }
+        public int CallCount { get; private set; }
+        public List<int> BatchSizes { get; } = [];
 
         public Task<Result<List<CalendarViewDto>>> HandleAsync(CalendarViewQuery q, CancellationToken ct)
         {
+            CallCount++;
+            BatchSizes.Add(q.AdviserList.Count);
             LastMailboxUserId = q.AdviserList.FirstOrDefault()?.Email;
             var items = q.AdviserList.Select(x => new CalendarViewDto
             {
@@ -136,12 +216,36 @@ public sealed class AvailabilityHandlerTests
 
     private sealed class StubTravelMatrixService : ITravelMatrixService
     {
-        public Task<AFH.Booking.Domain.Location.Travel.TravelMatrixResult> GetAsync(AFH.Booking.Domain.Location.Travel.TravelMatrixRequest request, CancellationToken ct) => Task.FromResult(new AFH.Booking.Domain.Location.Travel.TravelMatrixResult());
+        private readonly IReadOnlyList<AFH.Booking.Domain.Location.LocationCandidate> _candidates;
+
+        public StubTravelMatrixService(IReadOnlyList<AFH.Booking.Domain.Location.LocationCandidate>? candidates = null)
+        {
+            _candidates = candidates ?? [];
+        }
+
+        public int CallCount { get; private set; }
+
+        public Task<AFH.Booking.Domain.Location.Travel.TravelMatrixResult> GetAsync(AFH.Booking.Domain.Location.Travel.TravelMatrixRequest request, CancellationToken ct)
+        {
+            CallCount++;
+            return Task.FromResult(new AFH.Booking.Domain.Location.Travel.TravelMatrixResult
+            {
+                Candidates = _candidates.ToList()
+            });
+        }
     }
 
     private sealed class StubClientDirectory : IClientDirectory
     {
-        public Task<AFH.Booking.Domain.Client.ClientDirectoryItem?> GetAsync(string transactionRef, CancellationToken ct) => Task.FromResult<AFH.Booking.Domain.Client.ClientDirectoryItem?>(null);
+        private readonly AFH.Booking.Domain.Client.ClientDirectoryItem? _item;
+
+        public StubClientDirectory(AFH.Booking.Domain.Client.ClientDirectoryItem? item = null)
+        {
+            _item = item;
+        }
+
+        public Task<AFH.Booking.Domain.Client.ClientDirectoryItem?> GetAsync(string transactionRef, CancellationToken ct)
+            => Task.FromResult(_item);
     }
 
     private sealed class StubProfiles : IAdviserProfileProjectionRepository

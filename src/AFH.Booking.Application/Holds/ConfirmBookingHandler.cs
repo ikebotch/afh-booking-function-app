@@ -73,11 +73,16 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         if (slot is null)
             return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, $"Slot '{hold.SlotId}' not found.", Errors.HoldSlotMissing);
 
-        var tx = await _tx.GetForUpdateAsync(slot.TransactionId, ct);
+        var txTask = _tx.GetForUpdateAsync(slot.TransactionId, ct);
+        var calendarUserIdTask = _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
+
+        var tx = await txTask;
         if (tx is null)
             return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' not found.", Errors.HoldTransactionMissing);
 
-        var conflicts = await _conflicts.EvaluateConfirmationConflictsAsync(hold, slot, tx, ct);
+        var calendarUserId = await calendarUserIdTask;
+
+        var conflicts = await _conflicts.EvaluateConfirmationConflictsAsync(hold, slot, tx, calendarUserId, ct);
         if (conflicts.IsBlocked)
         {
             return Result<ConfirmBookingResponse>.Fail(
@@ -95,14 +100,14 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
             await _tx.UpdateAsync(tx, ct);
         }
 
-        string? joinUrl = null;
+        Task<string?>? joinUrlTask = null;
         if (tx.IsRemote)
-            joinUrl = await _meetingLinks.CreateJoinLinkAsync(hold.Id, ct);
+            joinUrlTask = _meetingLinks.CreateJoinLinkAsync(hold.Id, ct);
 
         if (!string.IsNullOrWhiteSpace(hold.CalendarProviderEventId))
         {
             var windows = BuildHoldWindows(slot, tx);
-            var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
+            var joinUrl = joinUrlTask is null ? null : await joinUrlTask;
 
             var calendarTemplate = ConfirmedBookingTemplate.BuildConfirmedTemplate(
                 slot: slot,
@@ -122,9 +127,10 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
             await _calendar.UpdateBookingEventAsync(calendarEvent, ct);
         }
 
+        var finalJoinUrl = joinUrlTask is null ? null : await joinUrlTask;
         await _uow.SaveChangesAsync(ct);
 
-        return OkResponse(hold, joinUrl);
+        return OkResponse(hold, finalJoinUrl);
     }
 
     private static Result<ConfirmBookingResponse> OkResponse(BookingHold hold, string? joinUrl = null)

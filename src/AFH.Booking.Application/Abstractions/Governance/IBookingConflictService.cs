@@ -9,5 +9,6 @@ public interface IBookingConflictService
         BookingHold hold,
         BookingSlot slot,
         BookingTransaction transaction,
+        string calendarUserId,
         CancellationToken ct);
 }

@@ -132,6 +132,12 @@ public class ConfirmBookingHandlerTests
             expiresUtc: now.AddDays(1));
 
         var calendar = new StubCalendarGateway();
+        var profiles = new StubProfiles("adv-1", "adviser.one@tenant.com");
+        var conflicts = new StubConflictService(new BookingConflictCheckResult(
+            true,
+            Errors.BookingConflictDoubleBooked,
+            "Adviser already has a conflicting event.",
+            [new BookingConflictDetail(Errors.BookingConflictDoubleBooked, "conflict")]));
         var sut = new ConfirmBookingHandler(
             new StubHoldRepository(hold),
             new StubSlotRepository(slot),
@@ -139,19 +145,17 @@ public class ConfirmBookingHandlerTests
             new StubUnitOfWork(),
             new StubClock(now),
             calendar,
-            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            profiles,
             new StubMeetingLinkFactory(),
-            new StubConflictService(new BookingConflictCheckResult(
-                true,
-                Errors.BookingConflictDoubleBooked,
-                "Adviser already has a conflicting event.",
-                [new BookingConflictDetail(Errors.BookingConflictDoubleBooked, "conflict")])));
+            conflicts);
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(Errors.BookingConflictDoubleBooked, result.ErrorCode);
         Assert.False(calendar.UpdateCalled);
+        Assert.Equal(1, profiles.ResolveCallCount);
+        Assert.Equal("adviser.one@tenant.com", conflicts.LastCalendarUserId);
     }
 
     [Fact]
@@ -202,6 +206,8 @@ public class ConfirmBookingHandlerTests
             expiresUtc: now.AddDays(1));
 
         var calendar = new StubCalendarGateway();
+        var profiles = new StubProfiles("adv-1", "adviser.one@tenant.com");
+        var meetingLinks = new StubMeetingLinkFactory();
         var sut = new ConfirmBookingHandler(
             new StubHoldRepository(hold),
             new StubSlotRepository(slot),
@@ -209,8 +215,8 @@ public class ConfirmBookingHandlerTests
             new StubUnitOfWork(),
             new StubClock(now),
             calendar,
-            new StubProfiles("adv-1", "adviser.one@tenant.com"),
-            new StubMeetingLinkFactory(),
+            profiles,
+            meetingLinks,
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())));
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
@@ -220,6 +226,8 @@ public class ConfirmBookingHandlerTests
         Assert.Equal("adviser.one@tenant.com", calendar.LastUpdatedUserId);
         Assert.DoesNotContain("<html", calendar.LastUpdatedBody ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("https://meeting.example", calendar.LastUpdatedBody ?? string.Empty);
+        Assert.Equal(1, profiles.ResolveCallCount);
+        Assert.Equal(1, meetingLinks.CallCount);
     }
 
     private static ConfirmBookingHandler NewHandler(BookingHold hold)
@@ -297,10 +305,16 @@ public class ConfirmBookingHandlerTests
             };
         }
 
+        public int ResolveCallCount { get; private set; }
+
         public Task UpsertRangeAsync(IReadOnlyList<AdviserProfileProjectionRecord> advisers, CancellationToken ct) => Task.CompletedTask;
         public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>([_record]);
         public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>([_record]);
-        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct) => Task.FromResult(string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
+        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct)
+        {
+            ResolveCallCount++;
+            return Task.FromResult(string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
+        }
     }
 
     private sealed class StubClock : IClock
@@ -329,7 +343,13 @@ public class ConfirmBookingHandlerTests
 
     private sealed class StubMeetingLinkFactory : IMeetingLinkFactory
     {
-        public Task<string?> CreateJoinLinkAsync(string bookingId, CancellationToken ct) => Task.FromResult<string?>("https://meeting.example");
+        public int CallCount { get; private set; }
+
+        public Task<string?> CreateJoinLinkAsync(string bookingId, CancellationToken ct)
+        {
+            CallCount++;
+            return Task.FromResult<string?>("https://meeting.example");
+        }
     }
 
     private sealed class StubConflictService : IBookingConflictService
@@ -338,7 +358,12 @@ public class ConfirmBookingHandlerTests
 
         public StubConflictService(BookingConflictCheckResult result) => _result = result;
 
-        public Task<BookingConflictCheckResult> EvaluateConfirmationConflictsAsync(BookingHold hold, BookingSlot slot, BookingTransaction transaction, CancellationToken ct)
-            => Task.FromResult(_result);
+        public string? LastCalendarUserId { get; private set; }
+
+        public Task<BookingConflictCheckResult> EvaluateConfirmationConflictsAsync(BookingHold hold, BookingSlot slot, BookingTransaction transaction, string calendarUserId, CancellationToken ct)
+        {
+            LastCalendarUserId = calendarUserId;
+            return Task.FromResult(_result);
+        }
     }
 }

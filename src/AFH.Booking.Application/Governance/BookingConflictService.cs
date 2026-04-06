@@ -12,20 +12,17 @@ public sealed class BookingConflictService : IBookingConflictService
     private const int DefaultCompanyBufferMinutes = 30;
 
     private readonly ICalendarGateway _calendar;
-    private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IOperationalIssueRepository _issues;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
 
     public BookingConflictService(
         ICalendarGateway calendar,
-        IAdviserProfileProjectionRepository profiles,
         IOperationalIssueRepository issues,
         IUnitOfWork uow,
         IClock clock)
     {
         _calendar = calendar;
-        _profiles = profiles;
         _issues = issues;
         _uow = uow;
         _clock = clock;
@@ -35,11 +32,11 @@ public sealed class BookingConflictService : IBookingConflictService
         BookingHold hold,
         BookingSlot slot,
         BookingTransaction transaction,
+        string calendarUserId,
         CancellationToken ct)
     {
         var bufferStartUtc = slot.StartUtc.AddMinutes(-(transaction.IsRemote ? 0 : GetBufferMinutes(slot)));
         var bufferEndUtc = slot.EndUtc.AddMinutes(transaction.IsRemote ? 0 : Math.Max(0, slot.CompanyBufferMinutes ?? DefaultCompanyBufferMinutes));
-        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
 
         var liveAvailability = await _calendar.CheckAvailabilityAsync(
             calendarUserId,

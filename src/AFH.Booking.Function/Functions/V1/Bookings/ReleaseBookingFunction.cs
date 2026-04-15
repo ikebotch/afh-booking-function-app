@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Function.Http;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
@@ -18,6 +19,10 @@ public sealed class ReleaseHoldFunction
     }
 
     [Function("Bookings_ReleaseHold")]
+    [BookingOpenApiOperation(
+        "Bookings",
+        "Release hold",
+        ResponseType = typeof(ReleaseHoldResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post",
             Route = "v1/bookings/holds/{holdId}/release")]

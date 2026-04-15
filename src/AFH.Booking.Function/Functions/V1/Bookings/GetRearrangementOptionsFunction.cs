@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -18,6 +19,11 @@ public sealed class GetRearrangementOptionsFunction
     }
 
     [Function("Bookings_GetRearrangementOptions")]
+    [BookingOpenApiOperation(
+        "Bookings",
+        "Get rearrangement options",
+        RequestBodyType = typeof(RearrangementOptionsRequest),
+        ResponseType = typeof(RearrangementOptionsResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/{bookingId}/rearrangement/options")]
         HttpRequestData req,

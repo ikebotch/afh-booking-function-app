@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Function.Http;
 using AFH.Booking.Function.Mapping;
 
@@ -25,6 +26,11 @@ public sealed class GetAvailabilityFunction
 
 
     [Function("Transactions_Availability")]
+    [BookingOpenApiOperation(
+        "Availability",
+        "Get availability",
+        RequestBodyType = typeof(GetAvailabilityRequest),
+        ResponseType = typeof(GetAvailabilityResponse))]
     public async Task<HttpResponseData> Run(
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/transactions/{transactionId}/availability")]
         HttpRequestData req,

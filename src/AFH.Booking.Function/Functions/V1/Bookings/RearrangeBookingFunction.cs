@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -23,6 +24,11 @@ public sealed class RearrangeBookingFunction
     }
 
     [Function("Bookings_Rearrange")]
+    [BookingOpenApiOperation(
+        "Bookings",
+        "Rearrange booking",
+        RequestBodyType = typeof(RearrangeBookingRequest),
+        ResponseType = typeof(RearrangeBookingResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/{bookingId}/rearrange")]
         HttpRequestData req,

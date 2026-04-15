@@ -103,6 +103,160 @@ public sealed class AvailabilityHandlerTests
     }
 
     [Fact]
+    public async Task HandleAsync_RemoteWithRequiredSkills_FiltersProjectedAdvisers()
+    {
+        var calendarView = new StubCalendarViewQueryHandler();
+
+        var sut = new AvailabilityHandler(
+            new StubSlotScorer(),
+            calendarView,
+            new StubTravelMatrixService(),
+            new StubClientDirectory(),
+            new StubProfiles(
+            [
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-1",
+                    DisplayName = "Adviser One",
+                    MailboxUserId = "adviser.one@tenant.com",
+                    IsActive = true,
+                    Skills = ["Investments & Wealth", "Pensions & Retirement"]
+                },
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-2",
+                    DisplayName = "Adviser Two",
+                    MailboxUserId = "adviser.two@tenant.com",
+                    IsActive = true,
+                    Skills = ["Investments & Wealth"]
+                }
+            ]),
+            new StubTransactionRepository(),
+            new StubSlotRepository(),
+            new StubUnitOfWork(),
+            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
+            new StubTimeZoneProvider(),
+            NullLogger<AvailabilityHandler>.Instance);
+
+        var result = await sut.HandleAsync(new GetAvailabilityQuery
+        {
+            ClientId = "client-1",
+            IsRemote = true,
+            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
+            Duration = 60,
+            Limit = 10,
+            Take = 1,
+            RequiredSkills = ["Investments & Wealth", "Pensions & Retirement"]
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal([1], calendarView.BatchSizes);
+        Assert.Equal("adviser.one@tenant.com", calendarView.LastMailboxUserId);
+    }
+
+    [Fact]
+    public async Task HandleAsync_RemoteWithoutRequiredSkills_KeepsAllActiveProjectedAdvisers()
+    {
+        var calendarView = new StubCalendarViewQueryHandler();
+
+        var sut = new AvailabilityHandler(
+            new StubSlotScorer(),
+            calendarView,
+            new StubTravelMatrixService(),
+            new StubClientDirectory(),
+            new StubProfiles(
+            [
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-1",
+                    DisplayName = "Adviser One",
+                    MailboxUserId = "adviser.one@tenant.com",
+                    IsActive = true,
+                    Skills = ["Investments & Wealth"]
+                },
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-2",
+                    DisplayName = "Adviser Two",
+                    MailboxUserId = "adviser.two@tenant.com",
+                    IsActive = true,
+                    Skills = ["Pensions & Retirement"]
+                }
+            ]),
+            new StubTransactionRepository(),
+            new StubSlotRepository(),
+            new StubUnitOfWork(),
+            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
+            new StubTimeZoneProvider(),
+            NullLogger<AvailabilityHandler>.Instance);
+
+        var result = await sut.HandleAsync(new GetAvailabilityQuery
+        {
+            ClientId = "client-1",
+            IsRemote = true,
+            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
+            Duration = 60,
+            Limit = 10,
+            Take = 1
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal([2], calendarView.BatchSizes);
+    }
+
+    [Fact]
+    public async Task HandleAsync_RemoteWithRequiredSkills_NormalizesWhitespaceAndCase()
+    {
+        var calendarView = new StubCalendarViewQueryHandler();
+
+        var sut = new AvailabilityHandler(
+            new StubSlotScorer(),
+            calendarView,
+            new StubTravelMatrixService(),
+            new StubClientDirectory(),
+            new StubProfiles(
+            [
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-1",
+                    DisplayName = "Adviser One",
+                    MailboxUserId = "adviser.one@tenant.com",
+                    IsActive = true,
+                    Skills = ["Investments   & Wealth", "Pensions   & Retirement"]
+                },
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-2",
+                    DisplayName = "Adviser Two",
+                    MailboxUserId = "adviser.two@tenant.com",
+                    IsActive = true,
+                    Skills = ["Protection & Insurance"]
+                }
+            ]),
+            new StubTransactionRepository(),
+            new StubSlotRepository(),
+            new StubUnitOfWork(),
+            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
+            new StubTimeZoneProvider(),
+            NullLogger<AvailabilityHandler>.Instance);
+
+        var result = await sut.HandleAsync(new GetAvailabilityQuery
+        {
+            ClientId = "client-1",
+            IsRemote = true,
+            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
+            Duration = 60,
+            Limit = 10,
+            Take = 1,
+            RequiredSkills = ["  investments & wealth ", "PENSIONS & RETIREMENT  "]
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal([1], calendarView.BatchSizes);
+        Assert.Equal("adviser.one@tenant.com", calendarView.LastMailboxUserId);
+    }
+
+    [Fact]
     public async Task HandleAsync_InPerson_ReusesTravelAndBatchesCalendarChecksPerSlot()
     {
         var txRepo = new StubTransactionRepository();

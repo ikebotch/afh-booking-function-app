@@ -73,14 +73,11 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         if (slot is null)
             return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, $"Slot '{hold.SlotId}' not found.", Errors.HoldSlotMissing);
 
-        var txTask = _tx.GetForUpdateAsync(slot.TransactionId, ct);
-        var calendarUserIdTask = _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
-
-        var tx = await txTask;
+        var tx = await _tx.GetForUpdateAsync(slot.TransactionId, ct);
         if (tx is null)
             return Result<ConfirmBookingResponse>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' not found.", Errors.HoldTransactionMissing);
 
-        var calendarUserId = await calendarUserIdTask;
+        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
 
         var conflicts = await _conflicts.EvaluateConfirmationConflictsAsync(hold, slot, tx, calendarUserId, ct);
         if (conflicts.IsBlocked)

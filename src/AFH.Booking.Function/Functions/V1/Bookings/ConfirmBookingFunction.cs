@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -21,12 +23,13 @@ public sealed class ConfirmHoldFunction
     public ConfirmHoldFunction(IConfirmBookingHandler handler)
         => _handler = handler;
 
-    private sealed class ConfirmHoldBody
-    {
-        public string? Notes { get; set; }
-    }
-
     [Function("Bookings_ConfirmHold")]
+    [BookingOpenApiOperation(
+        "Bookings",
+        "Confirm hold",
+        HttpMethod = "post",
+        RequestBodyType = typeof(ConfirmBookingRequest),
+        ResponseType = typeof(ConfirmBookingResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post",
             Route = "v1/bookings/holds/{holdId}/confirm")]
@@ -41,13 +44,13 @@ public sealed class ConfirmHoldFunction
                 ct,
                 "Validation");
 
-        ConfirmHoldBody? body = null;
+        ConfirmBookingRequest? body = null;
 
         if (req.Body is not null && req.Body.CanRead)
         {
             try
             {
-                body = await JsonSerializer.DeserializeAsync<ConfirmHoldBody>(
+                body = await JsonSerializer.DeserializeAsync<ConfirmBookingRequest>(
                     req.Body, JsonOpts, ct);
             }
             catch (JsonException)
@@ -63,7 +66,8 @@ public sealed class ConfirmHoldFunction
         var cmd = new ConfirmBookingCommand
         {
             HoldId = holdId.Trim(),
-            Notes = body?.Notes ?? "Confirmed"
+            BookingId = body?.BookingId ?? holdId.Trim(),
+            Notes = body?.Notes
         };
 
         var result = await _handler.HandleAsync(cmd, ct);

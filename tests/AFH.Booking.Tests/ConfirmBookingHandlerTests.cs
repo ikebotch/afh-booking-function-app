@@ -230,6 +230,82 @@ public class ConfirmBookingHandlerTests
         Assert.Equal(1, meetingLinks.CallCount);
     }
 
+    [Fact]
+    public async Task HandleAsync_ResolvesCalendarUserIdOnlyAfterTransactionLookupCompletes()
+    {
+        var now = DateTime.UtcNow.AddHours(1);
+        var hold = BookingHold.Rehydrate(
+            id: "hold-6",
+            slotId: "slot-1",
+            userid: "user-1",
+            status: BookingHoldStatus.Active,
+            createdUtc: now.AddMinutes(-10),
+            expiresUtc: now.AddMinutes(10),
+            confirmedUtc: null,
+            releasedUtc: null,
+            cancelledUtc: null,
+            cancelReason: null,
+            providerEventId: null);
+
+        var slot = BookingSlot.Rehydrate(
+            id: "slot-1",
+            transactionRef: "tx-1",
+            adviserId: "adv-1",
+            adviserName: "Adviser One",
+            startUtc: now.AddHours(1),
+            endUtc: now.AddHours(2),
+            score: 5,
+            scoreBreakdown: null,
+            locationRef: null,
+            travelMinutes: 0,
+            companyBufferMinutes: 0,
+            distanceMiles: null,
+            travelStatus: null,
+            travelMessage: null,
+            createdUtc: now.AddMinutes(-20));
+
+        var tx = BookingTransaction.Rehydrate(
+            id: "tx-1",
+            transactionRef: "TRX-1",
+            proposedStartUtc: now.AddHours(1),
+            duration: TimeSpan.FromHours(1),
+            timezone: "UTC",
+            isRemote: true,
+            meetingType: "Review",
+            locationRef: null,
+            status: BookingTransactionStatus.Open,
+            createdUtc: now.AddHours(-1),
+            expiresUtc: now.AddDays(1));
+
+        var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var txRepo = new SequencedTransactionRepository(tx, gate.Task);
+        var profiles = new SequencedProfiles("adv-1", "adviser.one@tenant.com");
+        var sut = new ConfirmBookingHandler(
+            new StubHoldRepository(hold),
+            new StubSlotRepository(slot),
+            txRepo,
+            new StubUnitOfWork(),
+            new StubClock(now),
+            new StubCalendarGateway(),
+            profiles,
+            new StubMeetingLinkFactory(),
+            new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())));
+
+        var handleTask = sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
+
+        await Task.Yield();
+
+        Assert.False(handleTask.IsCompleted);
+        Assert.False(profiles.GetAsyncStarted);
+
+        gate.SetResult();
+
+        var result = await handleTask;
+
+        Assert.True(result.IsSuccess);
+        Assert.True(profiles.GetAsyncStarted);
+    }
+
     private static ConfirmBookingHandler NewHandler(BookingHold hold)
     {
         return new ConfirmBookingHandler(
@@ -313,6 +389,57 @@ public class ConfirmBookingHandlerTests
         public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct)
         {
             ResolveCallCount++;
+            return Task.FromResult(string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
+        }
+    }
+
+    private sealed class SequencedTransactionRepository : IBookingTransactionRepository
+    {
+        private readonly BookingTransaction _transaction;
+        private readonly Task _gate;
+
+        public SequencedTransactionRepository(BookingTransaction transaction, Task gate)
+        {
+            _transaction = transaction;
+            _gate = gate;
+        }
+
+        public Task AddAsync(BookingTransaction transaction, CancellationToken ct) => Task.CompletedTask;
+        public Task<BookingTransaction?> GetAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(_transaction);
+        public Task<BookingTransaction?> GetWithSlotsAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(_transaction);
+        public Task UpdateAsync(BookingTransaction transaction, CancellationToken ct) => Task.CompletedTask;
+
+        public async Task<BookingTransaction?> GetForUpdateAsync(string transactionId, CancellationToken ct)
+        {
+            await _gate.WaitAsync(ct);
+            return _transaction;
+        }
+    }
+
+    private sealed class SequencedProfiles : IAdviserProfileProjectionRepository
+    {
+        private readonly AdviserProfileProjectionRecord _record;
+
+        public SequencedProfiles(string adviserId, string mailboxUserId)
+        {
+            _record = new AdviserProfileProjectionRecord
+            {
+                AdviserId = adviserId,
+                DisplayName = adviserId,
+                MailboxUserId = mailboxUserId,
+                IsActive = true
+            };
+        }
+
+        public bool GetAsyncStarted { get; private set; }
+
+        public Task UpsertRangeAsync(IReadOnlyList<AdviserProfileProjectionRecord> advisers, CancellationToken ct) => Task.CompletedTask;
+        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>([_record]);
+        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>([_record]);
+
+        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct)
+        {
+            GetAsyncStarted = true;
             return Task.FromResult(string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
         }
     }

@@ -20,6 +20,10 @@ public sealed class GetClientByTransactionFunctionV2
     }
 
     [Function("Client_GetByTransaction_V2")]
+    [BookingOpenApiOperation(
+        "Clients",
+        "Get client by transaction",
+        ResponseType = typeof(GetClientResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v2/clients/{transactionId}")]
         HttpRequestData req,

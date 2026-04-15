@@ -3,6 +3,7 @@ using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -29,6 +30,11 @@ public sealed class CancelBookingFunction
     }
 
     [Function("Bookings_CancelBooking")]
+    [BookingOpenApiOperation(
+        "Bookings",
+        "Cancel booking",
+        RequestBodyType = typeof(CancelBookingRequest),
+        ResponseType = typeof(CancelBookingResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/{bookingId}/cancel")]
         HttpRequestData req,

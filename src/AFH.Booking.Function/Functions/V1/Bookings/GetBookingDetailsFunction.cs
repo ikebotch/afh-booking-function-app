@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -17,6 +18,10 @@ public sealed class GetBookingDetailsFunction
     }
 
     [Function("Bookings_GetBooking")]
+    [BookingOpenApiOperation(
+        "Bookings",
+        "Get booking details",
+        ResponseType = typeof(BookingDetailsResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/bookings/{bookingId}")] HttpRequestData req,
         string bookingId,

@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Function.Http;
 
 namespace AFH.Booking.Function.Functions.V1.Admin;
@@ -19,6 +20,11 @@ public sealed class ReconcileDownstreamUpdatesFunction
     }
 
     [Function("Admin_ReconcileDownstreamUpdates")]
+    [BookingOpenApiOperation(
+        "Internal/Admin",
+        "Reconcile downstream updates",
+        RequestBodyType = typeof(DownstreamUpdateReconciliationRequest),
+        ResponseType = typeof(DownstreamUpdateReconciliationResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/admin/downstream-updates/reconcile")]
         HttpRequestData req,

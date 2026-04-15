@@ -1,3 +1,5 @@
+using AFH.Booking.Contracts.V1.Common;
+using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Http;
 using System.Reflection;
@@ -6,13 +8,15 @@ namespace AFH.Booking.Function.Functions.V1.Docs;
 
 internal static class BookingOpenApiDocumentFactory
 {
+    private static readonly Type ProblemResponseType = typeof(ApiResponse<>).MakeGenericType(typeof(ProblemDetailsDto));
+
     public static string CreateOpenApiJson(Uri requestUrl)
     {
         var baseUrl = $"{requestUrl.Scheme}://{requestUrl.Host}";
         if (!requestUrl.IsDefaultPort)
             baseUrl += $":{requestUrl.Port}";
 
-        var schemaTypes = new HashSet<Type>();
+        var schemaTypes = new HashSet<Type> { ProblemResponseType };
         var paths = BuildPaths(schemaTypes);
 
         var doc = new Dictionary<string, object>
@@ -33,8 +37,8 @@ internal static class BookingOpenApiDocumentFactory
             {
                 ["schemas"] = schemaTypes
                     .Distinct()
-                    .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                    .ToDictionary(x => x.Name, x => (object)OpenApiSchema.FromType(x), StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(OpenApiSchema.GetSchemaName, StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(x => OpenApiSchema.GetSchemaName(x), x => (object)OpenApiSchema.FromType(x), StringComparer.OrdinalIgnoreCase)
             }
         };
 
@@ -88,7 +92,7 @@ internal static class BookingOpenApiDocumentFactory
                         schemaTypes.Add(operation.RequestBodyType);
 
                     if (operation.ResponseType is not null)
-                        schemaTypes.Add(operation.ResponseType);
+                        schemaTypes.Add(GetSuccessEnvelopeType(operation.ResponseType));
 
                     pathItem[httpMethod] = BuildOperation(httpMethod, operation, parameters);
                 }
@@ -147,7 +151,7 @@ internal static class BookingOpenApiDocumentFactory
                     {
                         ["application/json"] = new Dictionary<string, object>
                         {
-                            ["schema"] = SchemaRef(operation.ResponseType)
+                            ["schema"] = SchemaRef(GetSuccessEnvelopeType(operation.ResponseType))
                         }
                     }
                 }
@@ -273,11 +277,14 @@ internal static class BookingOpenApiDocumentFactory
             {
                 ["application/json"] = new Dictionary<string, object>
                 {
-                    ["schema"] = new Dictionary<string, object> { ["type"] = "object" }
+                    ["schema"] = SchemaRef(ProblemResponseType)
                 }
             }
         };
 
+    private static Type GetSuccessEnvelopeType(Type responseType)
+        => typeof(ApiResponse<>).MakeGenericType(responseType);
+
     private static Dictionary<string, object> SchemaRef(Type dtoType)
-        => new() { ["$ref"] = $"#/components/schemas/{dtoType.Name}" };
+        => new() { ["$ref"] = $"#/components/schemas/{OpenApiSchema.GetSchemaName(dtoType)}" };
 }

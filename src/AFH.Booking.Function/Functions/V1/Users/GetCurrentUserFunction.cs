@@ -18,6 +18,10 @@ public sealed class GetCurrentUserFunction
     }
 
     [Function("Users_GetCurrentUser")]
+    [BookingOpenApiOperation(
+        "Users",
+        "Get current user",
+        ResponseType = typeof(CurrentUserResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/me")] HttpRequestData req,
         FunctionContext context,

@@ -18,6 +18,11 @@ public sealed class GetAvailabilityFunctionV2
     }
 
     [Function("Transactions_Availability_V2")]
+    [BookingOpenApiOperation(
+        "Availability",
+        "Get availability",
+        RequestBodyType = typeof(GetAvailabilityRequest),
+        ResponseType = typeof(GetAvailabilityResponse))]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v2/transactions/{transactionId}/availability")]
         HttpRequestData req,

@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Function.Http;
 using AFH.Booking.Function.Mapping;
 
@@ -20,6 +21,12 @@ public sealed class CreateHoldFunction
     }
 
     [Function("Bookings_CreateHold")]
+    [BookingOpenApiOperation(
+        "Bookings",
+        "Create hold",
+        RequestBodyType = typeof(CreateHoldRequest),
+        ResponseType = typeof(CreateBookingResponse),
+        SuccessStatusCode = HttpStatusCode.Created)]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/hold")] HttpRequestData req,
         CancellationToken ct)

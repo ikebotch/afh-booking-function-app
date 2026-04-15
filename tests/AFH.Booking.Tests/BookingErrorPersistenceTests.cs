@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AFH.Booking.Function.Middleware;
 using AFH.Booking.Infrastructure.Persistence;
+using AFH.Booking.Infrastructure.Persistence.Models;
 using AFH.Common.Errors.Builders;
 using AFH.Common.Errors.EntityFramework.Entities;
 using AFH.Common.Errors.EntityFramework.Persistence;
@@ -18,6 +19,18 @@ public sealed class BookingErrorPersistenceTests
         var entityType = dbContext.Model.FindEntityType(typeof(ErrorRecordEntity));
 
         Assert.NotNull(entityType);
+    }
+
+    [Fact]
+    public void BookingDbContext_ModelIncludesAdviserProfileProjectionPrimaryKey()
+    {
+        using var dbContext = CreateDbContext();
+
+        var entityType = dbContext.Model.FindEntityType(typeof(AdviserProfileProjectionModel));
+
+        Assert.NotNull(entityType);
+        Assert.NotNull(entityType!.FindPrimaryKey());
+        Assert.Equal(nameof(AdviserProfileProjectionModel.AdviserId), entityType.FindPrimaryKey()!.Properties.Single().Name);
     }
 
     [Fact]

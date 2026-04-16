@@ -95,6 +95,24 @@ public sealed class ArchitectureGuardTests
         Assert.DoesNotContain("AddAfhAcsInfrastructure", programText);
     }
 
+    [Fact]
+    public void Repo_DoesNotContain_LegacySpeechIntegrationProject()
+    {
+        var repoRoot = GetRepoRoot();
+        Assert.False(Directory.Exists(Path.Combine(repoRoot, "AFH.Integrations.SpeechAI")));
+        Assert.DoesNotContain("AFH.Integrations.SpeechAI", File.ReadAllText(Path.Combine(repoRoot, "AFH.Acs.sln")));
+    }
+
+    [Fact]
+    public void FunctionProject_References_LocalSpeechSdkProject()
+    {
+        var repoRoot = GetRepoRoot();
+        var functionCsprojPath = Path.Combine(repoRoot, "src", "AFH.Acs.Function", "AFH.Acs.Function.csproj");
+        var csprojText = File.ReadAllText(functionCsprojPath);
+
+        Assert.Contains("sdk\\afh-common-speechai\\src\\AFH.Common.SpeechAI\\AFH.Common.SpeechAI.csproj", csprojText, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string[] GetHttpFunctionNames(Assembly functionAssembly) =>
         functionAssembly.GetTypes()
             .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static))
@@ -132,5 +150,17 @@ public sealed class ArchitectureGuardTests
         }
 
         throw new DirectoryNotFoundException($"Could not locate Program.cs for {functionProjectName}.");
+    }
+
+    private static string GetRepoRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var candidate = Path.Combine(directory.FullName, "AFH.Acs.sln");
+            if (File.Exists(candidate))
+                return directory.FullName;
+        }
+
+        throw new DirectoryNotFoundException("Could not locate the repository root (AFH.Acs.sln).");
     }
 }

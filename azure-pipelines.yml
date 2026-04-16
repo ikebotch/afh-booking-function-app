@@ -1,5 +1,5 @@
 # =============================
-# ACS App CI
+# ACS Function App CI
 # =============================
 
 # Build number format (appears as $(Build.BuildNumber))
@@ -31,9 +31,18 @@ steps:
 - task: DotNetCoreCLI@2
   displayName: 'Build .NET'
   inputs:
-    command: 'build'
-    projects: 'AFH.Acs.Recorder/AFH.Acs.Recorder.csproj'
+    command: 'publish'
+    publishWebProjects: false
+    projects: 'src/AFH.Acs.Function/AFH.Acs.Function.csproj'
     arguments: '--output $(Build.BinariesDirectory)/publish_output --configuration $(buildConfiguration)'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Test .NET'
+  inputs:
+    command: 'test'
+    publishTestResults: true
+    projects: 'tests/AFH.Acs.Tests/AFH.Acs.Tests.csproj'
+    arguments: '--configuration $(buildConfiguration)'
 
 
 # ------------------------

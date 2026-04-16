@@ -232,7 +232,8 @@ public sealed class CalendarGateway : ICalendarGateway
             {
                 StartUtc = b.StartUtc,
                 EndUtc = b.EndUtc,
-                Subject = b.Subject
+                Subject = b.Subject,
+                ProviderEventId = string.IsNullOrWhiteSpace(b.BookingId) ? null : b.BookingId
             })
             .OrderBy(c => c.StartUtc)
             .ToList();

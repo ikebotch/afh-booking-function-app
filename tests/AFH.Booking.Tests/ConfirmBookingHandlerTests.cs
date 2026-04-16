@@ -2,8 +2,10 @@ using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Application.Governance;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings;
+using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Transactions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -306,6 +308,131 @@ public class ConfirmBookingHandlerTests
         Assert.True(profiles.GetAsyncStarted);
     }
 
+    [Fact]
+    public async Task HandleAsync_Succeeds_WhenOnlyConflictIsCurrentHoldProviderEvent()
+    {
+        var now = DateTime.UtcNow.AddHours(1);
+        var hold = ActiveHold(now, providerEventId: "evt-self");
+        var slot = InPersonSlot(now);
+        var tx = InPersonTransaction(now);
+        var calendar = new StubCalendarGateway(new AdviserAvailabilityResult
+        {
+            IsFree = false,
+            MailboxUnavailable = false,
+            StatusMessage = "Conflicts found",
+            Conflicts =
+            [
+                new CalendarConflictBlock
+                {
+                    StartUtc = slot.StartUtc.AddMinutes(5),
+                    EndUtc = slot.StartUtc.AddMinutes(25),
+                    Subject = "Current hold",
+                    ProviderEventId = "evt-self"
+                }
+            ]
+        });
+
+        var sut = new ConfirmBookingHandler(
+            new StubHoldRepository(hold),
+            new StubSlotRepository(slot),
+            new StubTransactionRepository(tx),
+            new StubUnitOfWork(),
+            new StubClock(now),
+            calendar,
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            new StubMeetingLinkFactory(),
+            new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)));
+
+        var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.True(calendar.UpdateCalled);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Fails_WhenConflictIsDifferentProviderEvent()
+    {
+        var now = DateTime.UtcNow.AddHours(1);
+        var hold = ActiveHold(now, providerEventId: "evt-self");
+        var slot = InPersonSlot(now);
+        var tx = InPersonTransaction(now);
+        var calendar = new StubCalendarGateway(new AdviserAvailabilityResult
+        {
+            IsFree = false,
+            MailboxUnavailable = false,
+            StatusMessage = "Conflicts found",
+            Conflicts =
+            [
+                new CalendarConflictBlock
+                {
+                    StartUtc = slot.StartUtc.AddMinutes(5),
+                    EndUtc = slot.StartUtc.AddMinutes(25),
+                    Subject = "Different event",
+                    ProviderEventId = "evt-other"
+                }
+            ]
+        });
+
+        var sut = new ConfirmBookingHandler(
+            new StubHoldRepository(hold),
+            new StubSlotRepository(slot),
+            new StubTransactionRepository(tx),
+            new StubUnitOfWork(),
+            new StubClock(now),
+            calendar,
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            new StubMeetingLinkFactory(),
+            new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)));
+
+        var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(Errors.BookingConflictDoubleBooked, result.ErrorCode);
+        Assert.False(calendar.UpdateCalled);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Fails_WhenConflictExistsAndHoldHasNoProviderEventId()
+    {
+        var now = DateTime.UtcNow.AddHours(1);
+        var hold = ActiveHold(now, providerEventId: null);
+        var slot = InPersonSlot(now);
+        var tx = InPersonTransaction(now);
+        var calendar = new StubCalendarGateway(new AdviserAvailabilityResult
+        {
+            IsFree = false,
+            MailboxUnavailable = false,
+            StatusMessage = "Conflicts found",
+            Conflicts =
+            [
+                new CalendarConflictBlock
+                {
+                    StartUtc = slot.StartUtc.AddMinutes(5),
+                    EndUtc = slot.StartUtc.AddMinutes(25),
+                    Subject = "Different event",
+                    ProviderEventId = "evt-other"
+                }
+            ]
+        });
+
+        var sut = new ConfirmBookingHandler(
+            new StubHoldRepository(hold),
+            new StubSlotRepository(slot),
+            new StubTransactionRepository(tx),
+            new StubUnitOfWork(),
+            new StubClock(now),
+            calendar,
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            new StubMeetingLinkFactory(),
+            new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)));
+
+        var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(Errors.BookingConflictDoubleBooked, result.ErrorCode);
+        Assert.False(calendar.UpdateCalled);
+    }
+
     private static ConfirmBookingHandler NewHandler(BookingHold hold)
     {
         return new ConfirmBookingHandler(
@@ -319,6 +446,52 @@ public class ConfirmBookingHandlerTests
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())));
     }
+
+    private static BookingHold ActiveHold(DateTime now, string? providerEventId)
+        => BookingHold.Rehydrate(
+            id: "hold-test",
+            slotId: "slot-1",
+            userid: "user-1",
+            status: BookingHoldStatus.Active,
+            createdUtc: now.AddMinutes(-10),
+            expiresUtc: now.AddMinutes(10),
+            confirmedUtc: null,
+            releasedUtc: null,
+            cancelledUtc: null,
+            cancelReason: null,
+            providerEventId: providerEventId);
+
+    private static BookingSlot InPersonSlot(DateTime now)
+        => BookingSlot.Rehydrate(
+            id: "slot-1",
+            transactionRef: "tx-1",
+            adviserId: "adv-1",
+            adviserName: "Adviser One",
+            startUtc: now.AddHours(1),
+            endUtc: now.AddHours(2),
+            score: 5,
+            scoreBreakdown: null,
+            locationRef: null,
+            travelMinutes: 15,
+            companyBufferMinutes: 30,
+            distanceMiles: null,
+            travelStatus: null,
+            travelMessage: null,
+            createdUtc: now.AddMinutes(-20));
+
+    private static BookingTransaction InPersonTransaction(DateTime now)
+        => BookingTransaction.Rehydrate(
+            id: "tx-1",
+            transactionRef: "TRX-1",
+            proposedStartUtc: now.AddHours(1),
+            duration: TimeSpan.FromHours(1),
+            timezone: "UTC",
+            isRemote: false,
+            meetingType: "Review",
+            locationRef: null,
+            status: BookingTransactionStatus.Open,
+            createdUtc: now.AddHours(-1),
+            expiresUtc: now.AddDays(1));
 
     private sealed class StubHoldRepository : IBookingHoldRepository
     {
@@ -452,6 +625,13 @@ public class ConfirmBookingHandlerTests
 
     private sealed class StubCalendarGateway : ICalendarGateway
     {
+        private readonly AdviserAvailabilityResult _availabilityResult;
+
+        public StubCalendarGateway(AdviserAvailabilityResult? availabilityResult = null)
+        {
+            _availabilityResult = availabilityResult ?? new AdviserAvailabilityResult();
+        }
+
         public bool UpdateCalled { get; private set; }
         public string? LastUpdatedUserId { get; private set; }
         public string? LastUpdatedBody { get; private set; }
@@ -465,7 +645,7 @@ public class ConfirmBookingHandlerTests
         }
         public Task CancelBookingEventAsync(string userId, string providerEventId, CancellationToken ct) => Task.CompletedTask;
         public Task<CalendarEventDetails?> GetEventAsync(string userId, string eventId, CancellationToken ct = default) => Task.FromResult<CalendarEventDetails?>(null);
-        public Task<AdviserAvailabilityResult> CheckAvailabilityAsync(string userId, DateTime startUtc, DateTime endUtc, string timezone, string? freshnessMode, CancellationToken ct) => Task.FromResult(new AdviserAvailabilityResult());
+        public Task<AdviserAvailabilityResult> CheckAvailabilityAsync(string userId, DateTime startUtc, DateTime endUtc, string timezone, string? freshnessMode, CancellationToken ct) => Task.FromResult(_availabilityResult);
     }
 
     private sealed class StubMeetingLinkFactory : IMeetingLinkFactory
@@ -492,5 +672,14 @@ public class ConfirmBookingHandlerTests
             LastCalendarUserId = calendarUserId;
             return Task.FromResult(_result);
         }
+    }
+
+    private sealed class StubOperationalIssueRepository : IOperationalIssueRepository
+    {
+        public Task AddAsync(OperationalIssueRecord record, CancellationToken ct) => Task.CompletedTask;
+        public Task<OperationalIssueRecord?> GetLatestAsync(string adviserId, string providerEventId, string code, CancellationToken ct)
+            => Task.FromResult<OperationalIssueRecord?>(null);
+        public Task<int> CountRecentAsync(string adviserId, string code, DateTime sinceUtc, CancellationToken ct) => Task.FromResult(0);
+        public Task UpdateAsync(OperationalIssueRecord record, CancellationToken ct) => Task.CompletedTask;
     }
 }

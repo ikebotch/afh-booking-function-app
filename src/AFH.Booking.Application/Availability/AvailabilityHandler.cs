@@ -23,6 +23,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
 {
     private static readonly TimeSpan DefaultDayStart = TimeSpan.FromHours(8);
     private static readonly TimeSpan DefaultDayEnd = TimeSpan.FromHours(17);
+    private static readonly char[] SkillWhitespaceSeparators = [' ', '\t', '\r', '\n'];
 
     private readonly ISlotScorer _scorer;
     private readonly ICalendarViewQueryHandler _calendarView;
@@ -192,6 +193,8 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         Domain.Client.ClientDirectoryItem? prospect,
         CancellationToken ct)
     {
+        var normalizedRequiredSkills = NormalizeSkills(q.RequiredSkills);
+
         if (q.IsRemote)
         {
             var activeProfiles = await _profiles.ListActiveAsync(ct);
@@ -217,7 +220,21 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                         })
                 : activeProfiles.Where(x => !q.ExcludeAdviserIds.Contains(x.AdviserId, StringComparer.OrdinalIgnoreCase));
 
-            var remoteAdvisers = remoteProfiles
+            var remoteProfilesList = remoteProfiles.ToList();
+            var filteredRemoteProfiles = remoteProfilesList
+                .Where(x => HasAllRequiredSkills(x.Skills, normalizedRequiredSkills))
+                .ToList();
+
+            _logger.LogInformation(
+                "Booking availability adviser pool built. IsRemote={IsRemote} TransactionId={TransactionId} RequiredSkillsCount={RequiredSkillsCount} RequiredSkills={RequiredSkills} PreFilterAdviserCount={PreFilterAdviserCount} PostSkillFilterAdviserCount={PostSkillFilterAdviserCount}",
+                true,
+                q.TransactionId ?? q.ClientId,
+                normalizedRequiredSkills.Count,
+                normalizedRequiredSkills,
+                remoteProfilesList.Count,
+                filteredRemoteProfiles.Count);
+
+            var remoteAdvisers = filteredRemoteProfiles
                 .Where(x => !string.IsNullOrWhiteSpace(x.AdviserId))
                 .Select(x => new AdviserDirectoryItem
                 {
@@ -418,6 +435,8 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         if (q.IsRemote || prospect is null)
             return null;
 
+        var normalizedRequiredSkills = NormalizeSkills(q.RequiredSkills);
+
         var destination = new LocationAddress
         {
             Line1 = prospect.StreetName1 ?? q.DestinationAddress?.Line1 ?? string.Empty,
@@ -425,6 +444,26 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             Postcode = prospect.PostalCode ?? q.DestinationAddress?.Postcode ?? string.Empty,
             Country = q.DestinationAddress?.Country ?? "UK"
         };
+
+        var prospectLocationResolved =
+            !string.IsNullOrWhiteSpace(destination.Line1) &&
+            !string.IsNullOrWhiteSpace(destination.Town) &&
+            !string.IsNullOrWhiteSpace(destination.Postcode);
+
+        var preferredAdviserIdsCount = q.PreferredAdviserIds
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Count();
+
+        _logger.LogInformation(
+            "Booking availability location request built. IsRemote={IsRemote} TransactionId={TransactionId} RequiredSkillsCount={RequiredSkillsCount} RequiredSkills={RequiredSkills} PreferredAdviserIdsCount={PreferredAdviserIdsCount} ProspectLocationResolved={ProspectLocationResolved}",
+            false,
+            q.TransactionId ?? q.ClientId,
+            normalizedRequiredSkills.Count,
+            normalizedRequiredSkills,
+            preferredAdviserIdsCount,
+            prospectLocationResolved);
 
         if (string.IsNullOrWhiteSpace(destination.Line1) ||
             string.IsNullOrWhiteSpace(destination.Town) ||
@@ -438,8 +477,23 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             q.TransactionId ?? q.ClientId!,
             destination,
             adviserIds);
+        req.Filters.RequiredSkills = normalizedRequiredSkills.ToList();
 
-        return await _travelMatrix.GetAsync(req, ct);
+        var result = await _travelMatrix.GetAsync(req, ct);
+
+        _logger.LogInformation(
+            "Booking availability location response received. IsRemote={IsRemote} TransactionId={TransactionId} CandidateCount={CandidateCount} CandidateAdviserIds={CandidateAdviserIds} EmptyResult={EmptyResult}",
+            false,
+            q.TransactionId ?? q.ClientId,
+            result.Candidates.Count,
+            result.Candidates
+                .Where(x => !string.IsNullOrWhiteSpace(x.AdviserId))
+                .Select(x => x.AdviserId)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray(),
+            result.Candidates.Count == 0);
+
+        return result;
     }
 
     private Result<GetAvailabilityResponse> BuildSuccessResponse(
@@ -550,6 +604,43 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         }
 
         return (result, null);
+    }
+
+    private static IReadOnlyList<string> NormalizeSkills(IEnumerable<string>? skills)
+    {
+        if (skills is null)
+            return [];
+
+        return skills
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(NormalizeSkill)
+            .Where(x => x.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static bool HasAllRequiredSkills(IReadOnlyList<string> adviserSkills, IReadOnlyList<string> requiredSkills)
+    {
+        if (requiredSkills.Count == 0)
+            return true;
+
+        if (adviserSkills is null || adviserSkills.Count == 0)
+            return false;
+
+        var normalizedAdviserSkills = adviserSkills
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(NormalizeSkill)
+            .Where(x => x.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return requiredSkills.All(normalizedAdviserSkills.Contains);
+    }
+
+    private static string NormalizeSkill(string skill)
+    {
+        return string.Join(" ", skill
+            .Trim()
+            .Split(SkillWhitespaceSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     }
 
     private sealed record AdviserPoolResult(

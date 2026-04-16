@@ -1,7 +1,8 @@
 using AFH.Common.Errors.Abstractions;
 using AFH.Common.Errors.Builders;
-using AFH.Common.Errors.AzureFunctions.Builders;
 using AFH.Common.Errors.AzureFunctions.Extensions;
+using AFH.Common.Errors.AzureFunctions.Mapping;
+using AFH.Common.Errors.Mapping;
 using AFH.Common.Errors.Models;
 using AFH.Booking.Infrastructure.Logging;
 using Microsoft.Azure.Functions.Worker;
@@ -18,12 +19,12 @@ public sealed class ExceptionHandlingMiddleware : IFunctionsWorkerMiddleware
     private readonly ErrorRecordBuilder _errorRecordBuilder = new();
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
     private readonly BookingExceptionMapper _exceptionMapper;
-    private readonly AzureFunctionErrorResponseBuilder _errorResponseBuilder;
+    private readonly ErrorResponseBuilder _errorResponseBuilder;
 
     public ExceptionHandlingMiddleware(
         ILogger<ExceptionHandlingMiddleware> logger,
         BookingExceptionMapper exceptionMapper,
-        AzureFunctionErrorResponseBuilder errorResponseBuilder)
+        ErrorResponseBuilder errorResponseBuilder)
     {
         _logger = logger;
         _exceptionMapper = exceptionMapper;
@@ -78,12 +79,23 @@ public sealed class ExceptionHandlingMiddleware : IFunctionsWorkerMiddleware
         TryTrackHandledExceptionTelemetry(context, mapping);
         await TrySendHandledExceptionEmailAsync(context, mapping);
 
-        context.GetInvocationResult().Value = await _errorResponseBuilder.BuildAsync(
+        context.GetInvocationResult().Value = await BuildHandledResponseAsync(
             request,
             mapping.MappingResult,
             CancellationToken.None);
 
         return true;
+    }
+
+    internal async Task<HttpResponseData> BuildHandledResponseAsync(
+        HttpRequestData request,
+        ExceptionMappingResult mappingResult,
+        CancellationToken cancellationToken)
+    {
+        var response = request.CreateResponse(HttpStatusCodeResolver.Resolve(mappingResult));
+        var errorResponse = _errorResponseBuilder.Build(mappingResult);
+        await response.WriteAsJsonAsync(errorResponse, cancellationToken: cancellationToken);
+        return response;
     }
 
     private async Task TryWriteFailureLogAsync(

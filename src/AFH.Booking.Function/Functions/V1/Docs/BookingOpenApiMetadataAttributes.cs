@@ -16,6 +16,7 @@ internal sealed class BookingOpenApiOperationAttribute : Attribute
     public string? Description { get; init; }
     public string? HttpMethod { get; init; }
     public Type? RequestBodyType { get; init; }
+    public bool RequestBodyRequired { get; init; } = true;
     public Type? ResponseType { get; init; }
     public HttpStatusCode SuccessStatusCode { get; init; } = HttpStatusCode.OK;
 }

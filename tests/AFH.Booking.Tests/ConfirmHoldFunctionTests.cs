@@ -14,6 +14,44 @@ namespace AFH.Booking.Tests;
 public sealed class ConfirmHoldFunctionTests
 {
     [Fact]
+    public async Task Run_AcceptsEmptyBody()
+    {
+        var handler = new StubConfirmBookingHandler();
+        var sut = new ConfirmHoldFunction(handler);
+        var request = TestHttpRequestData.Create();
+        ConfigureSerializer(request);
+
+        var response = await sut.Run(request, "hold-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(handler.LastCommand);
+        Assert.Equal("hold-1", handler.LastCommand!.HoldId);
+        Assert.Equal("hold-1", handler.LastCommand.BookingId);
+        Assert.Null(handler.LastCommand.Notes);
+    }
+
+    [Fact]
+    public async Task Run_AcceptsEmptyObjectBody()
+    {
+        var handler = new StubConfirmBookingHandler();
+        var sut = new ConfirmHoldFunction(handler);
+        var request = TestHttpRequestData.Create();
+        ConfigureSerializer(request);
+        await using var writer = new StreamWriter(request.Body, Encoding.UTF8, leaveOpen: true);
+        await writer.WriteAsync("""{}""");
+        await writer.FlushAsync();
+        request.Body.Position = 0;
+
+        var response = await sut.Run(request, "hold-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(handler.LastCommand);
+        Assert.Equal("hold-1", handler.LastCommand!.HoldId);
+        Assert.Equal("hold-1", handler.LastCommand.BookingId);
+        Assert.Null(handler.LastCommand.Notes);
+    }
+
+    [Fact]
     public async Task Run_AcceptsOmittedNotes()
     {
         var handler = new StubConfirmBookingHandler();
@@ -51,6 +89,24 @@ public sealed class ConfirmHoldFunctionTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.NotNull(handler.LastCommand);
         Assert.Null(handler.LastCommand!.Notes);
+    }
+
+    [Fact]
+    public async Task Run_ReturnsBadRequestForInvalidNonEmptyJson()
+    {
+        var handler = new StubConfirmBookingHandler();
+        var sut = new ConfirmHoldFunction(handler);
+        var request = TestHttpRequestData.Create();
+        ConfigureSerializer(request);
+        await using var writer = new StreamWriter(request.Body, Encoding.UTF8, leaveOpen: true);
+        await writer.WriteAsync("""{"notes":""");
+        await writer.FlushAsync();
+        request.Body.Position = 0;
+
+        var response = await sut.Run(request, "hold-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(handler.LastCommand);
     }
 
     private static void ConfigureSerializer(TestHttpRequestData request)

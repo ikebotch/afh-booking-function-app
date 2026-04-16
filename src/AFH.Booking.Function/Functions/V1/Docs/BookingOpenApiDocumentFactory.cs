@@ -124,7 +124,7 @@ internal static class BookingOpenApiDocumentFactory
         {
             value["requestBody"] = new Dictionary<string, object>
             {
-                ["required"] = true,
+                ["required"] = operation.RequestBodyRequired,
                 ["content"] = new Dictionary<string, object>
                 {
                     ["application/json"] = new Dictionary<string, object>

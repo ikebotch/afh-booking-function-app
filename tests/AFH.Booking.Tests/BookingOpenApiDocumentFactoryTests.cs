@@ -34,12 +34,17 @@ public class BookingOpenApiDocumentFactoryTests
         var schemas = document["components"]!["schemas"]!.AsObject();
 
         var confirmPost = paths["/v1/bookings/holds/{holdId}/confirm"]!["post"]!.AsObject();
+        var description = confirmPost["description"]!.GetValue<string>();
+        var requestBodyRequired = confirmPost["requestBody"]!["required"]!.GetValue<bool>();
         var requestBodySchemaRef = confirmPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>();
         var confirmSchema = schemas["ConfirmBookingRequest"]!.AsObject();
         var confirmProperties = confirmSchema["properties"]!.AsObject();
         var successSchemaRef = confirmPost["responses"]!["200"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>();
         var errorSchemaRef = confirmPost["responses"]!["400"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>();
 
+        Assert.Contains("route holdId", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("body is optional", description, StringComparison.OrdinalIgnoreCase);
+        Assert.False(requestBodyRequired);
         Assert.Equal("#/components/schemas/ConfirmBookingRequest", requestBodySchemaRef);
         Assert.Equal("#/components/schemas/ApiResponseOfConfirmBookingResponse", successSchemaRef);
         Assert.Equal("#/components/schemas/ApiResponseOfProblemDetailsDto", errorSchemaRef);

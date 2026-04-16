@@ -1,4 +1,9 @@
 using AFH.Acs.Infrastructure.Logging;
+using AFH.Acs.Infrastructure.Advisers;
+using AFH.Acs.Infrastructure.Identity;
+using AFH.Acs.Infrastructure.Meetings;
+using AFH.Acs.Infrastructure.Recordings;
+using AFH.Acs.Infrastructure.Transcription;
 using AFH.Acs.Infrastructure.Options;
 using AFH.Acs.Infrastructure.Persistence;
 using AFH.Acs.Infrastructure.Persistence.Repositories;
@@ -51,8 +56,11 @@ public static class ServiceCollectionExtensions
                     sp.GetRequiredService<ApplicationInsightsLogSink>())
             };
         });
+        services.AddAdviserInfoModule(configuration);
         services.AddMeetingModule();
         services.AddIdentityModule(acsConnectionString);
+        services.AddRecordingModule(configuration);
+        services.AddTranscriptionModule();
 
         return services;
     }

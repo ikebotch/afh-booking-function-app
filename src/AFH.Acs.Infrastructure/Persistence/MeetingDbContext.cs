@@ -7,8 +7,6 @@ namespace AFH.Acs.Infrastructure.Persistence;
 
 public sealed class MeetingDbContext(DbContextOptions<MeetingDbContext> options) : DbContext(options)
 {
-    public DbSet<AdviserEntity> Advisers => Set<AdviserEntity>();
-    public DbSet<LeadEntity> Leads => Set<LeadEntity>();
     public DbSet<MeetingEntity> Meetings => Set<MeetingEntity>();
     public DbSet<MeetingAttendeeEntity> MeetingAttendees => Set<MeetingAttendeeEntity>();
     public DbSet<MeetingRecordingEntity> MeetingRecordings => Set<MeetingRecordingEntity>();
@@ -21,8 +19,6 @@ public sealed class MeetingDbContext(DbContextOptions<MeetingDbContext> options)
         modelBuilder.AddErrorRecordEntity();
         modelBuilder.UseUpperSnakeCase();
 
-        modelBuilder.Entity<AdviserEntity>().HasKey(x => x.AdviserId);
-        modelBuilder.Entity<LeadEntity>().HasKey(x => x.LeadId);
         modelBuilder.Entity<MeetingEntity>().HasKey(x => x.MeetingId);
 
         modelBuilder.Entity<MeetingEntity>()
@@ -40,16 +36,6 @@ public sealed class MeetingDbContext(DbContextOptions<MeetingDbContext> options)
             .WithOne(x => x.Meeting)
             .HasForeignKey<MeetingTranscriptionEntity>(x => x.MeetingId)
             .OnDelete(DeleteBehavior.Restrict);
-
-        modelBuilder.Entity<MeetingEntity>()
-            .HasOne(x => x.Adviser)
-            .WithMany(x => x.Meetings)
-            .HasForeignKey(x => x.AdviserId);
-
-        modelBuilder.Entity<MeetingEntity>()
-            .HasOne(x => x.Lead)
-            .WithMany(x => x.Meetings)
-            .HasForeignKey(x => x.LeadId);
 
         modelBuilder.Entity<MeetingAttendeeEntity>().HasKey(x => new { x.MeetingId, x.Email });
         modelBuilder.Entity<MeetingRecordingEntity>().HasKey(x => x.RecordingId);

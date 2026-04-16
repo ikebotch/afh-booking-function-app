@@ -1,33 +1,47 @@
+using AFH.Acs.Application.Abstractions.Advisers;
+using AFH.Acs.Application.Abstractions.Identity;
+using AFH.Acs.Application.Abstractions.Meetings;
+using AFH.Acs.Application.Abstractions.Recordings;
+using AFH.Acs.Application.Abstractions.Transcription;
+using AFH.Acs.Application.Models;
+using AFH.Acs.Application.Services.Identity;
+using AFH.Acs.Application.Services.Meetings;
+using AFH.Acs.Application.Services.Transcription;
 using AFH.Acs.Contract.V1.Requests;
-using AFH.Acs.Function.Services.Meetings;
-using AFH.Acs.Function.Services.Recordings;
-using AFH.Acs.Function.Services.Transcription;
-using AFH.Common.SpeechAI.Abstractions;
-using AFH.Common.SpeechAI.Models.Requests;
+using AFH.Acs.Domain.Entities;
+using AFH.Acs.Infrastructure.Recordings;
 using AFH.Common.SpeechAI.Models;
+using AFH.Common.SpeechAI.Models.Requests;
 using AFH.Common.SpeechAI.Models.Responses;
-using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AFH.Acs.Tests;
 
 public sealed class TranscriptionWorkflowServiceTests
 {
     [Fact]
-    public async Task Workflow_Covers_Meeting_Join_Link_Recording_And_Transcription()
+    public async Task Consumer_Flow_Covers_Meeting_Recording_And_Transcription()
     {
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Frontend:JoinBaseUrl"] = "https://meetings.example"
-            })
-            .Build();
+        var sessions = new FakeMeetingSessionRepository();
+        var recordings = new FakeMeetingRecordingRepository();
+        var transcriptionRepository = new FakeMeetingTranscriptionRepository();
+        var adviserProvider = new FakeAdviserInfoProvider();
+        var joinTokens = new FakeJoinTokenIssuer();
+        var speechClient = new FakeSpeechTranscriptionClient();
 
-        var store = new MeetingWorkflowStore(configuration);
-        var recordings = new MetadataMeetingRecordingService(store);
-        var speechAi = new FakeSpeechAiService();
-        var service = new TranscriptionWorkflowService(speechAi, store);
+        var meetingService = new MeetingSessionService(
+            sessions,
+            joinTokens,
+            adviserProvider,
+            NullLogger<MeetingSessionService>.Instance,
+            "https://meetings.example");
 
-        var meeting = await store.CreateMeetingAsync(new ScheduleMeetingRequest
+        var linkService = new MeetingLinkService("https://meetings.example");
+        var identityService = new IdentityTokenService(joinTokens);
+        var recordingService = new MetadataMeetingRecordingService(sessions, recordings);
+        var transcriptionService = new TranscriptionWorkflowService(speechClient, transcriptionRepository, sessions);
+
+        var scheduled = await meetingService.ScheduleAsync(new ScheduleMeetingCommand
         {
             AdviserId = "adv-123",
             LeadId = "lead-456",
@@ -39,29 +53,30 @@ public sealed class TranscriptionWorkflowServiceTests
             ClientName = "Client Example"
         });
 
-        var identity = await store.IssueIdentityTokenAsync();
-        var joinToken = await store.IssueJoinTokenAsync(meeting.GroupId, new JoinTokenRequest
+        var identity = await identityService.IssueAsync();
+        var joinToken = await meetingService.IssueJoinTokenAsync(new IssueJoinTokenCommand
         {
+            GroupId = scheduled.GroupId,
             DisplayName = "Client Example",
             Role = "Client"
         });
-        var link = await store.CreateMeetingLinkAsync(new CreateMeetingLinkRequest
+        var link = await linkService.CreateAsync(new CreateMeetingLinkCommand
         {
             BookingId = "booking-123"
         });
 
-        var startedRecording = await recordings.StartRecordingAsync(new StartRecordingRequest
+        var startedRecording = await recordingService.StartRecordingAsync(new StartRecordingRequest
         {
-            MeetingId = meeting.MeetingId
+            MeetingId = scheduled.MeetingId
         });
 
-        var stoppedRecording = await recordings.StopRecordingAsync(new StopRecordingRequest
+        var stoppedRecording = await recordingService.StopRecordingAsync(new StopRecordingRequest
         {
             RecordingId = startedRecording.RecordingId
         });
 
-        var submitted = await service.SubmitAsync(
-            meeting.MeetingId,
+        var submitted = await transcriptionService.SubmitAsync(
+            scheduled.MeetingId,
             new SubmitTranscriptionRequest
             {
                 ContentUrl = "https://storage.example/recordings/meeting-42.wav",
@@ -74,71 +89,217 @@ public sealed class TranscriptionWorkflowServiceTests
                 }
             });
 
-        Assert.Equal(meeting.MeetingId, submitted.MeetingId);
-        Assert.Equal("job-123", submitted.JobId);
-        Assert.Equal("Running", submitted.Status);
-        Assert.Equal("https://storage.example/recordings/meeting-42.wav", submitted.SourceUrl);
-        Assert.False(string.IsNullOrWhiteSpace(identity.IdentityId));
+        var status = await transcriptionService.GetStatusAsync(submitted.JobId);
+        var files = await transcriptionService.GetFilesAsync(submitted.JobId);
+        var content = await transcriptionService.GetContentAsync(submitted.JobId);
+        var speakerTranscript = await transcriptionService.GetSpeakerFormattedTranscriptAsync(submitted.JobId);
+
+        await transcriptionService.CancelAsync(submitted.JobId);
+        await transcriptionService.DeleteAsync(submitted.JobId);
+
+        var storedSession = await sessions.GetByIdAsync(scheduled.MeetingId);
+
+        Assert.False(string.IsNullOrWhiteSpace(scheduled.MeetingId));
+        Assert.False(string.IsNullOrWhiteSpace(scheduled.GroupId));
+        Assert.Equal(scheduled.GroupId, scheduled.JoinCode);
+        Assert.NotNull(storedSession);
+        Assert.Equal(scheduled.MeetingId, storedSession!.MeetingId);
+        Assert.Equal(scheduled.GroupId, storedSession.GroupId);
+        Assert.Equal("adv-123", storedSession!.AdviserId);
+        Assert.Equal("Adviser Example", storedSession.AdviserName);
         Assert.False(string.IsNullOrWhiteSpace(identity.Token));
-        Assert.Equal(meeting.MeetingId, joinToken.MeetingId);
-        Assert.Equal(meeting.GroupId, joinToken.GroupId);
+        Assert.Equal(scheduled.MeetingId, joinToken.MeetingId);
         Assert.Equal("booking-123", link.BookingId);
-        Assert.Contains("https://meetings.example/meeting/", link.JoinUrl);
-        Assert.Equal(meeting.MeetingId, startedRecording.MeetingId);
+        Assert.Equal(scheduled.MeetingId, startedRecording.MeetingId);
+        Assert.Equal(scheduled.GroupId, startedRecording.GroupId);
         Assert.NotNull(stoppedRecording.RecordingEndUtc);
-
-        var status = await service.GetStatusAsync(submitted.JobId);
+        Assert.Equal("Running", submitted.Status);
         Assert.Equal("Succeeded", status.Status);
-        Assert.Equal("job-123", status.JobId);
-
-        var files = await service.GetFilesAsync(submitted.JobId);
-        Assert.Equal("job-123", files.JobId);
         Assert.Single(files.Files);
         Assert.NotNull(files.PrimaryTranscriptFile);
         Assert.Contains("transcript", files.PrimaryTranscriptFile!.Name, StringComparison.OrdinalIgnoreCase);
-
-        var content = await service.GetContentAsync(submitted.JobId);
-        Assert.Equal("job-123", content.JobId);
-        Assert.Equal("transcript.vtt", content.TranscriptFileName);
         Assert.Equal("Hello world", content.TranscriptText);
         Assert.Contains("Speaker 1", content.SpeakerFormattedTranscript);
-
-        var speakerTranscript = await service.GetSpeakerFormattedTranscriptAsync(submitted.JobId);
         Assert.Contains("Speaker 1", speakerTranscript);
-
-        await service.CancelAsync(submitted.JobId);
-        await service.DeleteAsync(submitted.JobId);
-
-        Assert.True(speechAi.Cancelled);
-        Assert.True(speechAi.Deleted);
-        Assert.NotNull(speechAi.LastStartRequest);
-        Assert.Equal("Quarterly review", speechAi.LastStartRequest!.DisplayName);
-
-        var storedMeeting = await store.GetMeetingByIdAsync(meeting.MeetingId);
-        Assert.NotNull(storedMeeting);
-        Assert.NotNull(storedMeeting!.Transcription);
-        Assert.Equal("job-123", storedMeeting.Transcription!.TranscriptionId);
-        Assert.Equal("Hello world", storedMeeting.Transcription.FullText);
-        Assert.Contains("Speaker 1", storedMeeting.Transcription.SummaryText);
-        Assert.Single(storedMeeting.Recordings);
-        Assert.Equal(startedRecording.RecordingId, storedMeeting.Recordings[0].RecordingId);
+        Assert.True(speechClient.Cancelled);
+        Assert.True(speechClient.Deleted);
+        Assert.NotNull(speechClient.LastStartRequest);
+        Assert.Equal("Quarterly review", speechClient.LastStartRequest!.DisplayName);
     }
 
-    private sealed class FakeSpeechAiService : ISpeechAiService
+    private sealed class FakeAdviserInfoProvider : IAdviserInfoProvider
+    {
+        public Task<AdviserInfo?> GetByIdAsync(string adviserId, CancellationToken ct = default)
+            => Task.FromResult<AdviserInfo?>(new AdviserInfo
+            {
+                AdviserId = adviserId,
+                DisplayName = "Adviser Example",
+                MailboxUserId = "adviser@example.com"
+            });
+    }
+
+    private sealed class FakeJoinTokenIssuer : IJoinTokenIssuer
+    {
+        public Task<IssuedJoinToken> IssueForMeetingAsync(MeetingSession session, string displayName, string role, CancellationToken ct = default)
+            => Task.FromResult(new IssuedJoinToken
+            {
+                MeetingId = session.MeetingId,
+                GroupId = session.GroupId,
+                UserId = "user-123",
+                Token = "join-token",
+                ExpiresOn = DateTimeOffset.UtcNow.AddHours(1),
+                DisplayName = displayName
+            });
+
+        public Task<IssuedIdentityToken> IssueIdentityTokenAsync(CancellationToken ct = default)
+            => Task.FromResult(new IssuedIdentityToken
+            {
+                IdentityId = "identity-123",
+                Token = "identity-token",
+                ExpiresOn = DateTimeOffset.UtcNow.AddHours(1)
+            });
+    }
+
+    private sealed class FakeMeetingSessionRepository : IMeetingSessionRepository
+    {
+        private readonly Dictionary<string, MeetingSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task InsertAsync(MeetingSession session, CancellationToken ct = default)
+        {
+            _sessions[session.MeetingId] = session;
+            return Task.CompletedTask;
+        }
+
+        public Task<MeetingSession?> GetByIdAsync(string meetingId, CancellationToken ct = default)
+            => Task.FromResult(_sessions.TryGetValue(meetingId, out var session) ? session : null);
+
+        public Task<MeetingSession?> GetByGroupIdAsync(string groupId, CancellationToken ct = default)
+            => Task.FromResult(_sessions.Values.FirstOrDefault(session => string.Equals(session.GroupId, groupId, StringComparison.OrdinalIgnoreCase)));
+
+        public Task<MeetingSession?> UpdateConsentAsync(string groupId, bool consent, DateTimeOffset consentTimestampUtc, CancellationToken ct = default)
+        {
+            var session = _sessions.Values.FirstOrDefault(item => string.Equals(item.GroupId, groupId, StringComparison.OrdinalIgnoreCase));
+            if (session is null)
+            {
+                return Task.FromResult<MeetingSession?>(null);
+            }
+
+            var updated = new MeetingSession
+            {
+                MeetingId = session.MeetingId,
+                GroupId = session.GroupId,
+                AdviserId = session.AdviserId,
+                AdviserName = session.AdviserName,
+                LeadId = session.LeadId,
+                MeetingType = session.MeetingType,
+                Title = session.Title,
+                StartUtc = session.StartUtc,
+                EndUtc = session.EndUtc,
+                ClientEmail = session.ClientEmail,
+                ClientName = session.ClientName,
+                ConsentToRecording = consent,
+                ConsentTimestampUtc = consent ? consentTimestampUtc : null,
+                Status = session.Status,
+                CalendarEventReference = session.CalendarEventReference,
+                Attendees = session.Attendees,
+                Recordings = session.Recordings,
+                Transcription = session.Transcription
+            };
+
+            _sessions[updated.MeetingId] = updated;
+            return Task.FromResult<MeetingSession?>(updated);
+        }
+    }
+
+    private sealed class FakeMeetingRecordingRepository : IMeetingRecordingRepository
+    {
+        private readonly Dictionary<string, MeetingRecordingArtifact> _recordings = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task<MeetingRecordingArtifact> StartAsync(string meetingId, string blobName, string blobUrl, DateTimeOffset startedUtc, CancellationToken ct = default)
+        {
+            var artifact = new MeetingRecordingArtifact
+            {
+                RecordingId = "recording-123",
+                MeetingId = meetingId,
+                BlobName = blobName,
+                BlobUrl = blobUrl,
+                RecordingStartUtc = startedUtc
+            };
+            _recordings[artifact.RecordingId] = artifact;
+            return Task.FromResult(artifact);
+        }
+
+        public Task<MeetingRecordingArtifact?> StopAsync(string recordingId, DateTimeOffset stoppedUtc, CancellationToken ct = default)
+        {
+            if (!_recordings.TryGetValue(recordingId, out var artifact))
+            {
+                return Task.FromResult<MeetingRecordingArtifact?>(null);
+            }
+
+            var updated = new MeetingRecordingArtifact
+            {
+                RecordingId = artifact.RecordingId,
+                MeetingId = artifact.MeetingId,
+                BlobName = artifact.BlobName,
+                BlobUrl = artifact.BlobUrl,
+                RecordingStartUtc = artifact.RecordingStartUtc,
+                RecordingEndUtc = stoppedUtc,
+                DurationSeconds = (int)Math.Max(0, Math.Round((stoppedUtc - artifact.RecordingStartUtc).TotalSeconds))
+            };
+            _recordings[recordingId] = updated;
+            return Task.FromResult<MeetingRecordingArtifact?>(updated);
+        }
+
+        public Task<IReadOnlyList<MeetingRecordingArtifact>> ListAsync(string? meetingId, CancellationToken ct = default)
+        {
+            var items = string.IsNullOrWhiteSpace(meetingId)
+                ? _recordings.Values.ToArray()
+                : _recordings.Values.Where(recording => string.Equals(recording.MeetingId, meetingId, StringComparison.OrdinalIgnoreCase)).ToArray();
+
+            return Task.FromResult<IReadOnlyList<MeetingRecordingArtifact>>(items);
+        }
+
+        public Task<MeetingRecordingArtifact?> GetAsync(string recordingId, CancellationToken ct = default)
+            => Task.FromResult(_recordings.TryGetValue(recordingId, out var artifact) ? artifact : null);
+    }
+
+    private sealed class FakeMeetingTranscriptionRepository : IMeetingTranscriptionRepository
+    {
+        private readonly Dictionary<string, MeetingTranscriptionArtifact> _byJobId = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task AttachJobAsync(string meetingId, MeetingTranscriptionArtifact transcription, CancellationToken ct = default)
+        {
+            _byJobId[transcription.TranscriptionId] = transcription;
+            return Task.CompletedTask;
+        }
+
+        public Task<MeetingTranscriptionArtifact?> GetByTranscriptionIdAsync(string transcriptionId, CancellationToken ct = default)
+            => Task.FromResult(_byJobId.TryGetValue(transcriptionId, out var artifact) ? artifact : null);
+
+        public Task AttachContentAsync(string transcriptionId, string fullText, string? summaryText, CancellationToken ct = default)
+        {
+            if (_byJobId.TryGetValue(transcriptionId, out var artifact))
+            {
+                _byJobId[transcriptionId] = new MeetingTranscriptionArtifact
+                {
+                    TranscriptionId = artifact.TranscriptionId,
+                    Language = artifact.Language,
+                    FullText = fullText,
+                    SummaryText = summaryText
+                };
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class FakeSpeechTranscriptionClient : ISpeechTranscriptionClient
     {
         public StartTranscriptionRequest? LastStartRequest { get; private set; }
-
         public bool Cancelled { get; private set; }
-
         public bool Deleted { get; private set; }
 
-        public Task<JobStatusResponse> StartJobAsync(string fileUrl, CancellationToken cancellationToken = default)
-            => StartJobAsync(new Uri(fileUrl), cancellationToken);
-
-        public Task<JobStatusResponse> StartJobAsync(Uri fileUrl, CancellationToken cancellationToken = default)
-            => StartJobAsync(new StartTranscriptionRequest { ContentUrls = [fileUrl] }, cancellationToken);
-
-        public Task<JobStatusResponse> StartJobAsync(StartTranscriptionRequest request, CancellationToken cancellationToken = default)
+        public Task<JobStatusResponse> StartJobAsync(StartTranscriptionRequest request, CancellationToken ct = default)
         {
             LastStartRequest = request;
             return Task.FromResult(new JobStatusResponse
@@ -152,7 +313,7 @@ public sealed class TranscriptionWorkflowServiceTests
             });
         }
 
-        public Task<JobStatusResponse> CheckJobStatusAsync(string jobId, CancellationToken cancellationToken = default)
+        public Task<JobStatusResponse> CheckJobStatusAsync(string jobId, CancellationToken ct = default)
             => Task.FromResult(new JobStatusResponse
             {
                 Status = "Succeeded",
@@ -163,10 +324,7 @@ public sealed class TranscriptionWorkflowServiceTests
                 Self = new Uri($"https://speech.example/transcriptions/{jobId}")
             });
 
-        public Task<JobStatusResponse> WaitForCompletionAsync(string jobId, TimeSpan? pollInterval = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
-            => CheckJobStatusAsync(jobId, cancellationToken);
-
-        public Task<JobFilesResponse> GetJobFilesAsync(string jobId, CancellationToken cancellationToken = default)
+        public Task<JobFilesResponse> GetJobFilesAsync(string jobId, CancellationToken ct = default)
             => Task.FromResult(new JobFilesResponse
             {
                 Self = new Uri($"https://speech.example/transcriptions/{jobId}/files"),
@@ -188,71 +346,25 @@ public sealed class TranscriptionWorkflowServiceTests
                 ]
             });
 
-        public Task<JobFileItem> GetPrimaryTranscriptFileAsync(string jobId, CancellationToken cancellationToken = default)
-            => Task.FromResult(new JobFileItem
-            {
-                Name = "transcript.vtt",
-                Kind = "Transcription",
-                Self = new Uri($"https://speech.example/transcriptions/{jobId}/files/transcript.vtt"),
-                Links = new ResourceLinks
-                {
-                    ContentUri = new Uri("https://speech.example/files/transcript.vtt")
-                }
-            });
+        public Task<TranscriptFileResponse> GetTranscriptByJobAsync(string jobId, CancellationToken ct = default)
+            => Task.FromResult(CreateTranscript($"https://speech.example/transcriptions/{jobId}/files/transcript.vtt"));
 
-        public Task<TranscriptFileResponse> GetTranscriptAsync(string fileUrl, CancellationToken cancellationToken = default)
-            => GetTranscriptAsync(new Uri(fileUrl), cancellationToken);
-
-        public Task<TranscriptFileResponse> GetTranscriptAsync(Uri fileUrl, CancellationToken cancellationToken = default)
-            => Task.FromResult(CreateTranscript(fileUrl));
-
-        public Task<TranscriptFileResponse> GetTranscriptByJobAsync(string jobId, CancellationToken cancellationToken = default)
-            => Task.FromResult(CreateTranscript(new Uri($"https://speech.example/transcriptions/{jobId}/files/transcript.vtt")));
-
-        public async Task<string> GetTranscriptTextAsync(string jobId, CancellationToken cancellationToken = default)
-        {
-            var transcript = await GetTranscriptByJobAsync(jobId, cancellationToken);
-            return transcript.CombinedRecognizedPhrases.First().Display!;
-        }
-
-        public Task<string> GetTranscriptTextAsync(TranscriptFileResponse transcript, CancellationToken cancellationToken = default)
-            => Task.FromResult(transcript.CombinedRecognizedPhrases.First().Display!);
-
-        public async Task<string> GetSpeakerFormattedTranscriptAsync(string jobId, CancellationToken cancellationToken = default)
-        {
-            var transcript = await GetTranscriptByJobAsync(jobId, cancellationToken);
-            var phrase = transcript.RecognizedPhrases.First();
-            return $"{phrase.Speaker}: {phrase.NBest.First().Display}";
-        }
-
-        public Task<string> GetSpeakerFormattedTranscriptAsync(TranscriptFileResponse transcript, CancellationToken cancellationToken = default)
-            => Task.FromResult("Speaker 1: Hello world");
-
-        public async Task<TranscriptFileResponse> TranscribeAndWaitAsync(string fileUrl, TimeSpan? pollInterval = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
-            => await GetTranscriptByJobAsync("job-123", cancellationToken);
-
-        public async Task<TranscriptFileResponse> TranscribeAndWaitAsync(Uri fileUrl, TimeSpan? pollInterval = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
-            => await GetTranscriptByJobAsync("job-123", cancellationToken);
-
-        public async Task<TranscriptFileResponse> TranscribeAndWaitAsync(StartTranscriptionRequest request, TimeSpan? pollInterval = null, TimeSpan? timeout = null, CancellationToken cancellationToken = default)
-            => await GetTranscriptByJobAsync("job-123", cancellationToken);
-
-        public Task CancelJobAsync(string jobId, CancellationToken cancellationToken = default)
+        public Task CancelJobAsync(string jobId, CancellationToken ct = default)
         {
             Cancelled = true;
             return Task.CompletedTask;
         }
 
-        public Task DeleteJobAsync(string jobId, CancellationToken cancellationToken = default)
+        public Task DeleteJobAsync(string jobId, CancellationToken ct = default)
         {
             Deleted = true;
             return Task.CompletedTask;
         }
 
-        private static TranscriptFileResponse CreateTranscript(Uri source)
+        private static TranscriptFileResponse CreateTranscript(string source)
             => new()
             {
-                Source = source.ToString(),
+                Source = source,
                 Timestamp = new DateTimeOffset(2026, 4, 1, 9, 31, 0, TimeSpan.Zero),
                 DurationInTicks = TimeSpan.FromMinutes(42).Ticks,
                 CombinedRecognizedPhrases =

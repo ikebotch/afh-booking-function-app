@@ -1,7 +1,7 @@
 using AFH.Acs.Application.Models;
 using AFH.Acs.Domain.Entities;
 
-namespace AFH.Acs.Application.Abstractions;
+namespace AFH.Acs.Application.Abstractions.Meetings;
 
 public interface IMeetingLinkService
 {

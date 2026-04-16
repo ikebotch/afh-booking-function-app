@@ -1,4 +1,4 @@
-using AFH.Acs.Application.Abstractions;
+using AFH.Acs.Application.Abstractions.Meetings;
 using AFH.Acs.Domain.Entities;
 using AFH.Acs.Domain.Enums;
 using AFH.Acs.Infrastructure.Persistence.Entities;
@@ -55,8 +55,6 @@ public sealed class MeetingSessionRepository(MeetingDbContext dbContext) : IMeet
     private IQueryable<MeetingEntity> BaseQuery()
         => dbContext.Meetings
             .AsNoTracking()
-            .Include(x => x.Adviser)
-            .Include(x => x.Lead)
             .Include(x => x.Attendees)
             .Include(x => x.Recordings)
             .Include(x => x.Transcription);
@@ -67,17 +65,19 @@ public sealed class MeetingSessionRepository(MeetingDbContext dbContext) : IMeet
             MeetingId = session.MeetingId,
             GroupId = session.GroupId,
             AdviserId = session.AdviserId,
+            AdviserName = session.AdviserName,
             LeadId = session.LeadId,
             MeetingType = session.MeetingType,
             Title = session.Title,
             StartUtc = session.StartUtc.UtcDateTime,
             EndUtc = session.EndUtc.UtcDateTime,
             ClientEmail = session.ClientEmail,
+            ClientName = session.ClientName,
             ConsentToRecording = session.ConsentToRecording,
             ConsentTimestampUtc = session.ConsentTimestampUtc?.UtcDateTime,
             Status = session.Status.ToString().ToUpperInvariant(),
             CreatedAtUtc = DateTime.UtcNow,
-            GraphEventId = session.CalendarEventReference
+            CalendarEventReference = session.CalendarEventReference
         };
 
     private static MeetingSession ToDomain(MeetingEntity entity)
@@ -86,19 +86,19 @@ public sealed class MeetingSessionRepository(MeetingDbContext dbContext) : IMeet
             MeetingId = entity.MeetingId,
             GroupId = entity.GroupId,
             AdviserId = entity.AdviserId,
-            AdviserName = entity.Adviser?.FullName,
+            AdviserName = entity.AdviserName,
             LeadId = entity.LeadId,
             MeetingType = entity.MeetingType,
             Title = entity.Title,
             StartUtc = new DateTimeOffset(DateTime.SpecifyKind(entity.StartUtc, DateTimeKind.Utc)),
             EndUtc = new DateTimeOffset(DateTime.SpecifyKind(entity.EndUtc, DateTimeKind.Utc)),
             ClientEmail = entity.ClientEmail,
-            ClientName = entity.Lead?.ClientName,
+            ClientName = entity.ClientName,
             ConsentToRecording = entity.ConsentToRecording,
             ConsentTimestampUtc = entity.ConsentTimestampUtc.HasValue
                 ? new DateTimeOffset(DateTime.SpecifyKind(entity.ConsentTimestampUtc.Value, DateTimeKind.Utc))
                 : null,
-            CalendarEventReference = entity.GraphEventId,
+            CalendarEventReference = entity.CalendarEventReference,
             Status = Enum.TryParse<MeetingSessionStatus>(entity.Status, ignoreCase: true, out var parsedStatus)
                 ? parsedStatus
                 : MeetingSessionStatus.Scheduled,
@@ -114,6 +114,7 @@ public sealed class MeetingSessionRepository(MeetingDbContext dbContext) : IMeet
             Recordings = entity.Recordings.Select(x => new MeetingRecordingArtifact
             {
                 RecordingId = x.RecordingId,
+                MeetingId = x.MeetingId,
                 BlobName = x.BlobName,
                 BlobUrl = x.BlobUrl,
                 RecordingStartUtc = new DateTimeOffset(DateTime.SpecifyKind(x.RecordingStartUtc, DateTimeKind.Utc)),

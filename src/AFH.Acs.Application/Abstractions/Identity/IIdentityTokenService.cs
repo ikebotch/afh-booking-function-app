@@ -1,6 +1,6 @@
 using AFH.Acs.Domain.Entities;
 
-namespace AFH.Acs.Application.Abstractions;
+namespace AFH.Acs.Application.Abstractions.Identity;
 
 public interface IIdentityTokenService
 {

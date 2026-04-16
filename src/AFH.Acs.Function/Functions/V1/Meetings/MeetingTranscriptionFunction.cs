@@ -1,6 +1,6 @@
+using AFH.Acs.Application.Abstractions.Transcription;
 using AFH.Acs.Contract.V1.Requests;
 using AFH.Acs.Function.Http;
-using AFH.Acs.Function.Services.Transcription;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using System.Net;

@@ -21,10 +21,8 @@ public sealed class ArchitectureGuardTests
         AssertReferences("AFH.Acs.Function", "AFH.Common.Errors.AzureFunctions");
         AssertReferences("AFH.Acs.Function", "AFH.Common.Errors.Email");
         AssertReferences("AFH.Acs.Function", "AFH.Common.SpeechAI");
-        AssertDoesNotReference("AFH.Acs.Function", "AFH.Common.Errors.ApplicationInsights");
-        AssertDoesNotReference("AFH.Acs.Function", "AFH.Common.Errors.EntityFramework");
-        AssertDoesNotReference("AFH.Acs.Function", "AFH.Acs.Application");
-        AssertDoesNotReference("AFH.Acs.Function", "AFH.Acs.Infrastructure");
+        AssertReferences("AFH.Acs.Function", "AFH.Acs.Application");
+        AssertReferences("AFH.Acs.Function", "AFH.Acs.Infrastructure");
     }
 
     [Fact]
@@ -86,13 +84,12 @@ public sealed class ArchitectureGuardTests
         Assert.Contains("ConfigureMiddlewarePipeline(app);", programText);
         Assert.Contains("ConfigureAppConfiguration(cfg);", programText);
         Assert.Contains("AddSharedErrorHandling(services, ctx.Configuration", programText);
-        Assert.Contains("services.AddRecordingServices(ctx.Configuration);", programText);
+        Assert.Contains("services.AddAfhAcsInfrastructure(ctx.Configuration);", programText);
         Assert.Contains("services.AddSpeechAi(ctx.Configuration);", programText);
-        Assert.Contains("services.AddSingleton<IMeetingWorkflowStore, MeetingWorkflowStore>();", programText);
         Assert.Contains("ErrorEmail:Enabled", programText);
         Assert.Contains("ConfigureWorkerSerialization(services, caseInsensitivePropertyNames: true);", programText);
         Assert.DoesNotContain("BuildServiceProvider(", programText);
-        Assert.DoesNotContain("AddAfhAcsInfrastructure", programText);
+        Assert.DoesNotContain("AddRecordingServices(", programText);
     }
 
     [Fact]
@@ -121,12 +118,6 @@ public sealed class ArchitectureGuardTests
             .Select(method => method.GetCustomAttribute<FunctionAttribute>()!.Name)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
-
-    private static void AssertDoesNotReference(string assemblyName, string forbiddenAssemblyName)
-    {
-        var references = Assembly.Load(assemblyName).GetReferencedAssemblies().Select(reference => reference.Name).ToArray();
-        Assert.DoesNotContain(forbiddenAssemblyName, references);
-    }
 
     private static void AssertReferences(string assemblyName, string expectedAssemblyName)
     {

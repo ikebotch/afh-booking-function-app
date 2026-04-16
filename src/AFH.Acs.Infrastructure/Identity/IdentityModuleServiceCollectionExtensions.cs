@@ -1,10 +1,9 @@
-using AFH.Acs.Application.Abstractions;
-using AFH.Acs.Application.Services;
-using AFH.Acs.Infrastructure.Acs;
+using AFH.Acs.Application.Abstractions.Identity;
+using AFH.Acs.Application.Services.Identity;
 using Azure.Communication.Identity;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace AFH.Acs.Infrastructure.Extensions;
+namespace AFH.Acs.Infrastructure.Identity;
 
 internal static class IdentityModuleServiceCollectionExtensions
 {

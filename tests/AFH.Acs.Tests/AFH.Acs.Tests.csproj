@@ -21,6 +21,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\AFH.Acs.Domain\AFH.Acs.Domain.csproj" />
+    <ProjectReference Include="..\..\src\AFH.Acs.Application\AFH.Acs.Application.csproj" />
+    <ProjectReference Include="..\..\src\AFH.Acs.Infrastructure\AFH.Acs.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\AFH.Acs.Function\AFH.Acs.Function.csproj" />
     <ProjectReference Include="..\..\src\AFH.Acs.Contract\AFH.Acs.Contract.csproj" />
     <ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors\AFH.Common.Errors.csproj" />

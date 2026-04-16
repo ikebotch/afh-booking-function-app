@@ -1,20 +1,49 @@
-# Introduction 
-TODO: Give a short introduction of your project. Let this section explain the objectives or the motivation behind this project. 
+# AFH ACS Function App
 
-# Getting Started
-TODO: Guide users through getting your code up and running on their own system. In this section you can talk about:
-1.	Installation process
-2.	Software dependencies
-3.	Latest releases
-4.	API references
+AFH ACS is the meeting-platform service for AFH. It owns meeting creation, ACS-issued meeting identity and join tokens, meeting links, meeting lifecycle lookups, recording abstractions, transcription workflows, and system docs/health endpoints.
 
-# Build and Test
-TODO: Describe and show how to build your code and run the tests. 
+It does not own booking workflows, adviser discovery, SharePoint/Graph lookup flows, or mandatory email delivery. Adviser display information is resolved from the Location service adviser coverage endpoint, and transcription flows are routed through the shared Speech AI SDK.
 
-# Contribute
-TODO: Explain how other users and developers can contribute to make your code better. 
+## Architecture
 
-If you want to learn more about creating good readme files then refer the following [guidelines](https://docs.microsoft.com/en-us/azure/devops/repos/git/create-a-readme?view=azure-devops). You can also seek inspiration from the below readme files:
-- [ASP.NET Core](https://github.com/aspnet/Home)
-- [Visual Studio Code](https://github.com/Microsoft/vscode)
-- [Chakra Core](https://github.com/Microsoft/ChakraCore)
+The source tree is organized into one active architecture:
+
+- `src/AFH.Acs.Function`: thin Azure Functions entry points, middleware, request parsing, and OpenAPI/Scalar endpoints.
+- `src/AFH.Acs.Contract`: versioned request and response DTOs only.
+- `src/AFH.Acs.Application`: orchestration, service abstractions, and meeting/transcription workflows.
+- `src/AFH.Acs.Domain`: core meeting entities and invariants.
+- `src/AFH.Acs.Infrastructure`: persistence, ACS identity integration, Location adviser client, recording implementations, Speech AI adapter, and logging.
+
+## Retained Endpoint Surface
+
+- Meetings: create meeting, issue identity token, issue join token, record consent, get meeting by id, get meeting by group, create meeting link.
+- Recordings: start, stop, list, get.
+- Transcription: submit from meeting, status, files, transcript content, speaker-formatted transcript, cancel, delete.
+- System: health, OpenAPI JSON, Scalar UI.
+
+## Configuration
+
+Copy `src/AFH.Acs.Function/local.settings.template.json` to `local.settings.json` and provide:
+
+- `Acs:ConnectionString` for ACS identity/token flows.
+- `MeetingDb:ConnectionString` or `MSSQL_CONN` for meeting persistence.
+- `Frontend:JoinBaseUrl` for client/adviser meeting links.
+- `Location:BaseUrl` and optional `Location:FunctionCode` for adviser info lookups.
+- `Recording:Mode` with `Metadata` as the default and `LiveAcs` as the structured extension point.
+- `ErrorEmail:Enabled=false` unless service-local handled error emails are explicitly wanted.
+
+## Build And Test
+
+Build the solution:
+
+```bash
+dotnet build AFH.Acs.sln -p:_FunctionsBuildEnabled=false
+```
+
+Run the focused ACS tests:
+
+```bash
+dotnet test tests/AFH.Acs.Tests/AFH.Acs.Tests.csproj -p:_FunctionsBuildEnabled=false
+```
+
+The `_FunctionsBuildEnabled=false` switch avoids a legacy Azure Functions extension metadata generator dependency on `.NETCore.App 2.0`, which is not present on current local toolchains. The function code itself still compiles successfully under the current isolated worker stack.

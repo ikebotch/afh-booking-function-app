@@ -8,6 +8,8 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.9" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\AFH.Acs.Contract\AFH.Acs.Contract.csproj" />
     <ProjectReference Include="..\AFH.Acs.Domain\AFH.Acs.Domain.csproj" />
+    <ProjectReference Include="..\..\..\..\sdk\afh-common-speechai\src\AFH.Common.SpeechAI\AFH.Common.SpeechAI.csproj" />
   </ItemGroup>
 </Project>

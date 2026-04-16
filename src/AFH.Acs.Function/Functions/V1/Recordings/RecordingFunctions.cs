@@ -1,7 +1,7 @@
+using AFH.Acs.Application.Abstractions.Recordings;
 using AFH.Acs.Contract.V1.Requests;
 using AFH.Acs.Contract.V1.Responses;
 using AFH.Acs.Function.Http;
-using AFH.Acs.Function.Services.Recordings;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using System.Net;

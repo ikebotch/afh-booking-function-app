@@ -1,7 +1,4 @@
 using AFH.Acs.Function.Configuration;
-using AFH.Acs.Function.Services.Meetings;
-using AFH.Acs.Function.Services.Recordings;
-using AFH.Acs.Function.Services.Transcription;
 using AFH.Acs.Function.Notifications;
 using AFH.Acs.Function.Middleware;
 using AFH.Acs.Function.Options;
@@ -16,6 +13,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
+using AFH.Acs.Infrastructure.Extensions;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication(app =>
@@ -34,10 +32,8 @@ var host = new HostBuilder()
     {
         AddSharedErrorHandling(services, ctx.Configuration, "[AFH ACS Error]", "acs");
         AddValidatedSecurityOptions(services, ctx.Configuration);
-        services.AddRecordingServices(ctx.Configuration);
+        services.AddAfhAcsInfrastructure(ctx.Configuration);
         services.AddSpeechAi(ctx.Configuration);
-        services.AddSingleton<IMeetingWorkflowStore, MeetingWorkflowStore>();
-        services.AddScoped<ITranscriptionWorkflowService, TranscriptionWorkflowService>();
         ConfigureWorkerSerialization(services, caseInsensitivePropertyNames: true);
     })
     .Build();

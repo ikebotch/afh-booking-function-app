@@ -11,6 +11,11 @@
     "InternalApiAuth:AllowAnonymousInDevelopment": "true",
     "Acs:ConnectionString": "<acs-connection-string>",
     "MeetingDb:ConnectionString": "<sql-connection-string>",
-    "Frontend:JoinBaseUrl": "http://localhost:5173"
+    "Frontend:JoinBaseUrl": "http://localhost:5173",
+    "Location:BaseUrl": "https://afh-location-function-app.azurewebsites.net",
+    "Location:CoveragePath": "/api/v1/admin/adviser-coverage",
+    "Location:FunctionCode": "<optional-location-function-code>",
+    "Recording:Mode": "Metadata",
+    "ErrorEmail:Enabled": "false"
   }
 }

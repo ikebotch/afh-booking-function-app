@@ -1,13 +1,16 @@
-using AFH.Acs.Application.Abstractions;
+using AFH.Acs.Application.Abstractions.Advisers;
+using AFH.Acs.Application.Abstractions.Identity;
+using AFH.Acs.Application.Abstractions.Meetings;
 using AFH.Acs.Application.Models;
 using AFH.Acs.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
-namespace AFH.Acs.Application.Services;
+namespace AFH.Acs.Application.Services.Meetings;
 
 public sealed class MeetingSessionService(
     IMeetingSessionRepository repository,
     IJoinTokenIssuer joinTokenIssuer,
+    IAdviserInfoProvider adviserInfoProvider,
     ILogger<MeetingSessionService> logger,
     string joinBaseUrl) : IMeetingSessionService
 {
@@ -16,6 +19,16 @@ public sealed class MeetingSessionService(
     public async Task<MeetingSessionScheduleResult> ScheduleAsync(ScheduleMeetingCommand command, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(command);
+
+        AdviserInfo? adviser = null;
+        try
+        {
+            adviser = await adviserInfoProvider.GetByIdAsync(command.AdviserId.Trim(), ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to resolve adviser info for AdviserId={AdviserId}. Continuing without adviser name.", command.AdviserId);
+        }
 
         var groupId = Guid.NewGuid().ToString("N");
         var meetingId = Guid.NewGuid().ToString("N");
@@ -26,6 +39,7 @@ public sealed class MeetingSessionService(
             MeetingId = meetingId,
             GroupId = groupId,
             AdviserId = command.AdviserId.Trim(),
+            AdviserName = adviser?.DisplayName,
             LeadId = command.LeadId.Trim(),
             MeetingType = command.MeetingType.Trim(),
             Title = command.Title.Trim(),

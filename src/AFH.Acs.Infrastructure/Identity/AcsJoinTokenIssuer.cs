@@ -1,9 +1,9 @@
-using AFH.Acs.Application.Abstractions;
+using AFH.Acs.Application.Abstractions.Identity;
 using AFH.Acs.Domain.Entities;
 using Azure.Communication.Identity;
 using Microsoft.Extensions.Logging;
 
-namespace AFH.Acs.Infrastructure.Acs;
+namespace AFH.Acs.Infrastructure.Identity;
 
 public sealed class AcsJoinTokenIssuer(
     CommunicationIdentityClient identityClient,

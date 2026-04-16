@@ -12,7 +12,7 @@ internal static class BookingTransactionPersistenceMapping
     {
         if (m is null) throw new ArgumentNullException(nameof(m));
 
-        var tx = BookingTransaction.Rehydrate(
+        return BookingTransaction.Rehydrate(
             id: m.Id,
             transactionRef: m.TransactionRef,
             proposedStartUtc: m.ProposedStartUtc,
@@ -24,21 +24,10 @@ internal static class BookingTransactionPersistenceMapping
             status: (BookingTransactionStatus)m.Status,
             createdUtc: m.CreatedUtc,
             expiresUtc: m.ExpiresUtc,
-            slots: null
+            slots: includeSlots
+                ? (m.Slots ?? Enumerable.Empty<BookingSlotModel>()).Select(slotModel => slotModel.ToDomain()).ToList()
+                : null
         );
-
-        if (!includeSlots)
-            return tx;
-
-        // Add slots (rehydration-safe)
-        foreach (var slotModel in m.Slots ?? Enumerable.Empty<BookingSlotModel>())
-        {
-            //var slot = slotModel.ToDomain(includeHold: true); // you’ll define this mapping
-            var slot = slotModel.ToDomain();
-            tx.AddSlot(slot); // will validate TransactionId matches tx.Id
-        }
-
-        return tx;
     }
 
     // ---------------------------

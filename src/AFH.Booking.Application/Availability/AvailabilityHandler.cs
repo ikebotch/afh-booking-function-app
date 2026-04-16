@@ -67,6 +67,8 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         if (!ValidateQuery(q, out var error))
             return error!;
 
+        LogRequestStart(q);
+
         var utcNow = _clock.UtcNow;
 
         var prospectResult = await LoadProspectIfRequired(q, ct);
@@ -74,6 +76,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             return prospectResult.Error;
 
         var prospect = prospectResult.Value;
+        LogProspectResolution(q, prospect is not null);
 
         var (slotStartsUtc, nextCursor) = BuildSlotStartTimesUtcPage(q);
         if (slotStartsUtc.Count == 0)
@@ -91,6 +94,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             return adviserPoolResult.Error;
 
         var advisers = adviserPoolResult.Value.Advisers;
+        LogAdviserPool(q, prospect, adviserPoolResult.Value.TravelByAdviserId.Count, advisers.Count);
         if (advisers.Count == 0)
             return EmptyResult(nextCursor);
 
@@ -105,6 +109,8 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             ct);
 
         await _uow.SaveChangesAsync(ct);
+
+        LogFinalResult(q, adviserSlots.Count);
 
         return BuildSuccessResponse(q, tx.Id, adviserSlots, nextCursor);
     }
@@ -256,6 +262,12 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             .GroupBy(x => x.AdviserId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
+        _logger.LogInformation(
+            "In-person adviser pool resolved. RequestKey={RequestKey} TravelCandidateCount={TravelCandidateCount} EligibleAdviserCount={EligibleAdviserCount}",
+            q.RequestId ?? q.TransactionId ?? q.ClientId ?? "n/a",
+            travel.Candidates.Count,
+            advisers.Count);
+
         return (new AdviserPoolResult(advisers, travelByAdviserId), null);
     }
 
@@ -300,10 +312,15 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         CancellationToken ct)
     {
         var result = new List<(string, string, string, bool, BookingSlot)>();
+        var requestKey = q.RequestId ?? q.TransactionId ?? q.ClientId ?? "n/a";
 
         foreach (var start in slotStarts)
         {
             var end = start.AddMinutes(q.Duration);
+            var calendarFreeCount = 0;
+            var travelCandidateMissingCount = 0;
+            var travelFitPassCount = 0;
+            var travelFitFailCount = 0;
 
             var travel = q.IsRemote
                 ? null
@@ -317,7 +334,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
 
             foreach (var adviser in advisers)
             {
-                var adviserId = adviser.Email;
+                var adviserId = adviser.AdviserId;
                 if (string.IsNullOrWhiteSpace(adviserId))
                     continue;
 
@@ -330,14 +347,22 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                     continue;
                 }
 
+                calendarFreeCount++;
+
                 if (!q.IsRemote)
                 {
                     if (travel is not null && travelCandidate is null)
+                    {
+                        travelCandidateMissingCount++;
                         continue;
+                    }
 
                     var t = travelCandidate?.TravelMinutes ?? 0;
                     if (t <= 0)
+                    {
+                        travelFitFailCount++;
                         continue;
+                    }
 
                     var fitsTravel = IsWindowFree(
                         availability,
@@ -345,7 +370,12 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                         end.AddMinutes(t));
 
                     if (!fitsTravel)
+                    {
+                        travelFitFailCount++;
                         continue;
+                    }
+
+                    travelFitPassCount++;
                 }
 
                 var score = _scorer.Score(new SlotScoringContext
@@ -374,6 +404,18 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
 
                 result.Add((adviserId + slot.AdviserName, adviserId, slot.AdviserName, travelCandidate?.GoldStar ?? false, slot));
             }
+
+            var emittedForSlot = result.Count(x => x.Item5.StartUtc == start);
+            _logger.LogInformation(
+                "Availability slot evaluated. RequestKey={RequestKey} SlotStartUtc={SlotStartUtc:O} AdviserCount={AdviserCount} CalendarFreeCount={CalendarFreeCount} TravelCandidateMissingCount={TravelCandidateMissingCount} TravelFitPassCount={TravelFitPassCount} TravelFitFailCount={TravelFitFailCount} EmittedSlots={EmittedSlots}",
+                requestKey,
+                start,
+                advisers.Count,
+                calendarFreeCount,
+                travelCandidateMissingCount,
+                travelFitPassCount,
+                travelFitFailCount,
+                emittedForSlot);
         }
 
         return result;
@@ -430,7 +472,12 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             string.IsNullOrWhiteSpace(destination.Town) ||
             string.IsNullOrWhiteSpace(destination.Postcode))
         {
-            _logger.LogWarning("Leads returned incomplete address for transaction/client lookup. Travel matrix call skipped.");
+            _logger.LogWarning(
+                "In-person availability address resolution failed. RequestKey={RequestKey} HasLine1={HasLine1} HasTown={HasTown} HasPostcode={HasPostcode}",
+                q.RequestId ?? q.TransactionId ?? q.ClientId ?? "n/a",
+                !string.IsNullOrWhiteSpace(destination.Line1),
+                !string.IsNullOrWhiteSpace(destination.Town),
+                !string.IsNullOrWhiteSpace(destination.Postcode));
             return null;
         }
 
@@ -439,7 +486,13 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             destination,
             adviserIds);
 
-        return await _travelMatrix.GetAsync(req, ct);
+        var travel = await _travelMatrix.GetAsync(req, ct);
+        _logger.LogInformation(
+            "In-person travel lookup completed. RequestKey={RequestKey} AdviserFilterCount={AdviserFilterCount} CandidateCount={CandidateCount}",
+            q.RequestId ?? q.TransactionId ?? q.ClientId ?? "n/a",
+            adviserIds.Count(),
+            travel.Candidates.Count);
+        return travel;
     }
 
     private Result<GetAvailabilityResponse> BuildSuccessResponse(
@@ -491,6 +544,57 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                 .Cast<LocationCandidate>()
                 .ToList()
         };
+    }
+
+    private void LogRequestStart(GetAvailabilityQuery q)
+    {
+        _logger.LogInformation(
+            "Availability request started. RequestKey={RequestKey} IsRemote={IsRemote} RequiredSkillsCount={RequiredSkillsCount} RequiredSkills={RequiredSkills} PreferredAdviserCount={PreferredAdviserCount} ExcludedAdviserCount={ExcludedAdviserCount}",
+            q.RequestId ?? q.TransactionId ?? q.ClientId ?? "n/a",
+            q.IsRemote,
+            q.RequiredSkills.Count,
+            q.RequiredSkills.Count == 0 ? string.Empty : string.Join(",", q.RequiredSkills),
+            q.PreferredAdviserIds.Count,
+            q.ExcludeAdviserIds.Count);
+    }
+
+    private void LogProspectResolution(GetAvailabilityQuery q, bool prospectResolved)
+    {
+        if (q.IsRemote)
+            return;
+
+        _logger.LogInformation(
+            "In-person prospect resolution completed. RequestKey={RequestKey} ProspectResolved={ProspectResolved}",
+            q.RequestId ?? q.TransactionId ?? q.ClientId ?? "n/a",
+            prospectResolved);
+    }
+
+    private void LogAdviserPool(GetAvailabilityQuery q, Domain.Client.ClientDirectoryItem? prospect, int travelCandidateCount, int adviserCount)
+    {
+        if (q.IsRemote)
+        {
+            _logger.LogInformation(
+                "Remote adviser pool resolved. RequestKey={RequestKey} AdviserCount={AdviserCount}",
+                q.RequestId ?? q.TransactionId ?? q.ClientId ?? "n/a",
+                adviserCount);
+            return;
+        }
+
+        _logger.LogInformation(
+            "In-person adviser pool resolved. RequestKey={RequestKey} HasProspect={HasProspect} TravelCandidateCount={TravelCandidateCount} AdviserCount={AdviserCount}",
+            q.RequestId ?? q.TransactionId ?? q.ClientId ?? "n/a",
+            prospect is not null,
+            travelCandidateCount,
+            adviserCount);
+    }
+
+    private void LogFinalResult(GetAvailabilityQuery q, int slotCount)
+    {
+        _logger.LogInformation(
+            "Availability request completed. RequestKey={RequestKey} IsRemote={IsRemote} FinalSlotCount={FinalSlotCount}",
+            q.RequestId ?? q.TransactionId ?? q.ClientId ?? "n/a",
+            q.IsRemote,
+            slotCount);
     }
 
     private static bool IsWindowFree(CalendarViewDto availability, DateTime windowStartUtc, DateTime windowEndUtc)

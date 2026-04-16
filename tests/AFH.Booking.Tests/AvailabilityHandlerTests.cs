@@ -176,6 +176,8 @@ public sealed class AvailabilityHandlerTests
         Assert.Equal(3, calendarView.CallCount);
         Assert.Equal([2, 2, 2], calendarView.BatchSizes);
         Assert.Equal(6, slotRepo.AddedSlots.Count);
+        Assert.Contains(slotRepo.AddedSlots, slot => slot.AdviserId == "adv-1");
+        Assert.Contains(slotRepo.AddedSlots, slot => slot.AdviserId == "adv-2");
     }
 
     private sealed class StubSlotScorer : ISlotScorer

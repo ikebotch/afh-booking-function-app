@@ -5,7 +5,6 @@
 		<OutputType>Exe</OutputType>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
-		<_FunctionsBuildEnabled>false</_FunctionsBuildEnabled>
 	</PropertyGroup>
 	<ItemGroup>
 		<FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -17,10 +16,12 @@
 		<PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="2.0.7" />
 		
 		
-		<PackageReference Include="Serilog" Version="4.3.0" />
-		<PackageReference Include="Serilog.AspNetCore" Version="9.0.0" />
-		<PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
-		<PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+		
+	</ItemGroup>
+	<ItemGroup>
+		<Compile Remove="WorkerExtensions/**" />
+		<EmbeddedResource Remove="WorkerExtensions/**" />
+		<None Remove="WorkerExtensions/**" />
 	</ItemGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\AFH.Acs.Domain\AFH.Acs.Domain.csproj" />
@@ -30,6 +31,13 @@
 		<ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors\AFH.Common.Errors.csproj" />
 		<ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.AzureFunctions\AFH.Common.Errors.AzureFunctions.csproj" />
 		<ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.Email\AFH.Common.Errors.Email.csproj" />
-		<ProjectReference Include="..\..\..\..\sdk\afh-common-speechai\src\AFH.Common.SpeechAI\AFH.Common.SpeechAI.csproj" />
 	</ItemGroup>
+	<Target Name="RewriteGeneratedWorkerExtensionsProject"
+	        AfterTargets="_FunctionsGenerateCommon"
+	        BeforeTargets="_WorkerExtensionsRestore">
+		<MakeDir Directories="$(ExtensionsCsProjDirectory)" />
+		<Copy SourceFiles="$(MSBuildProjectDirectory)/WorkerExtensions/WorkerExtensions.template.csproj"
+		      DestinationFiles="$(ExtensionsCsProj)"
+		      OverwriteReadOnlyFiles="true" />
+	</Target>
 </Project>

@@ -3,9 +3,6 @@ using AFH.Acs.Application.Abstractions.Transcription;
 using AFH.Acs.Contract.V1.Requests;
 using AFH.Acs.Contract.V1.Responses;
 using AFH.Acs.Domain.Entities;
-using AFH.Common.SpeechAI.Extensions;
-using AFH.Common.SpeechAI.Models.Requests;
-using AFH.Common.SpeechAI.Models.Responses;
 
 namespace AFH.Acs.Application.Services.Transcription;
 
@@ -19,19 +16,19 @@ public sealed class TranscriptionWorkflowService(
         ArgumentNullException.ThrowIfNull(request);
 
         var contentUrl = RequireAbsoluteUri(request.ContentUrl, nameof(request.ContentUrl));
-        var sdkResponse = await speechClient.StartJobAsync(new StartTranscriptionRequest
+        var transcriptionResponse = await speechClient.StartJobAsync(new SpeechTranscriptionStartRequest
         {
             ContentUrls = [contentUrl],
             DisplayName = request.DisplayName,
             Locale = request.Locale,
-            Properties = new TranscriptionJobProperties
+            Settings = new SpeechTranscriptionSettings
             {
                 DiarizationEnabled = request.Settings?.DiarizationEnabled,
                 WordLevelTimestampsEnabled = request.Settings?.WordLevelTimestampsEnabled
             }
         }, ct);
 
-        var result = MapJobResponse(sdkResponse, meetingId, contentUrl);
+        var result = MapJobResponse(transcriptionResponse, meetingId, contentUrl);
 
         if (!string.IsNullOrWhiteSpace(meetingId))
         {
@@ -53,23 +50,22 @@ public sealed class TranscriptionWorkflowService(
 
     public async Task<TranscriptionJobResponse> GetStatusAsync(string jobId, CancellationToken ct = default)
     {
-        var sdkResponse = await speechClient.CheckJobStatusAsync(RequireJobId(jobId), ct);
-        return MapJobResponse(sdkResponse, null, null, jobId);
+        var transcriptionResponse = await speechClient.CheckJobStatusAsync(RequireJobId(jobId), ct);
+        return MapJobResponse(transcriptionResponse, null, null);
     }
 
     public async Task<TranscriptionFilesResponse> GetFilesAsync(string jobId, CancellationToken ct = default)
     {
         var resolvedJobId = RequireJobId(jobId);
-        var sdkResponse = await speechClient.GetJobFilesAsync(resolvedJobId, ct);
-        var files = sdkResponse.Files
+        var fileResult = await speechClient.GetJobFilesAsync(resolvedJobId, ct);
+        var files = fileResult.Files
             .Select(MapFileResponse)
             .ToArray();
 
-        var primary = sdkResponse.GetPrimaryTranscriptFile();
         return new TranscriptionFilesResponse
         {
             JobId = resolvedJobId,
-            PrimaryTranscriptFile = primary is null ? null : MapFileResponse(primary),
+            PrimaryTranscriptFile = fileResult.PrimaryTranscriptFile is null ? null : MapFileResponse(fileResult.PrimaryTranscriptFile),
             Files = files
         };
     }
@@ -79,19 +75,17 @@ public sealed class TranscriptionWorkflowService(
         var resolvedJobId = RequireJobId(jobId);
         var transcript = await speechClient.GetTranscriptByJobAsync(resolvedJobId, ct);
         var files = await speechClient.GetJobFilesAsync(resolvedJobId, ct);
-        var primary = files.GetPrimaryTranscriptFile();
-        var transcriptText = transcript.ToTranscriptText();
-        var speakerFormattedTranscript = transcript.ToSpeakerFormattedTranscript();
+        var primary = files.PrimaryTranscriptFile;
 
-        await repository.AttachContentAsync(resolvedJobId, transcriptText, speakerFormattedTranscript, ct);
+        await repository.AttachContentAsync(resolvedJobId, transcript.TranscriptText, transcript.SpeakerFormattedTranscript, ct);
 
         return new TranscriptionContentResponse
         {
             JobId = resolvedJobId,
             TranscriptFileName = primary?.Name,
-            TranscriptFileUrl = primary?.GetContentUri()?.ToString(),
-            TranscriptText = transcriptText,
-            SpeakerFormattedTranscript = speakerFormattedTranscript
+            TranscriptFileUrl = primary?.ContentUri?.ToString(),
+            TranscriptText = transcript.TranscriptText,
+            SpeakerFormattedTranscript = transcript.SpeakerFormattedTranscript
         };
     }
 
@@ -99,7 +93,7 @@ public sealed class TranscriptionWorkflowService(
     {
         var resolvedJobId = RequireJobId(jobId);
         var transcript = await speechClient.GetTranscriptByJobAsync(resolvedJobId, ct);
-        return transcript.ToSpeakerFormattedTranscript();
+        return transcript.SpeakerFormattedTranscript;
     }
 
     public Task CancelAsync(string jobId, CancellationToken ct = default)
@@ -108,18 +102,14 @@ public sealed class TranscriptionWorkflowService(
     public Task DeleteAsync(string jobId, CancellationToken ct = default)
         => speechClient.DeleteJobAsync(RequireJobId(jobId), ct);
 
-    private static TranscriptionJobResponse MapJobResponse(JobStatusResponse response, string? meetingId, Uri? sourceUrl, string? jobIdOverride = null)
+    private static TranscriptionJobResponse MapJobResponse(SpeechTranscriptionJobStatus response, string? meetingId, Uri? sourceUrl)
     {
         ArgumentNullException.ThrowIfNull(response);
-
-        var jobId = jobIdOverride
-            ?? ExtractJobId(response)
-            ?? string.Empty;
 
         return new TranscriptionJobResponse
         {
             MeetingId = meetingId,
-            JobId = jobId,
+            JobId = response.JobId,
             Status = response.Status,
             DisplayName = response.DisplayName,
             CreatedDateTime = response.CreatedDateTime,
@@ -130,20 +120,20 @@ public sealed class TranscriptionWorkflowService(
         };
     }
 
-    private static TranscriptionFileResponse MapFileResponse(JobFileItem file)
+    private static TranscriptionFileResponse MapFileResponse(SpeechTranscriptionFile file)
     {
         ArgumentNullException.ThrowIfNull(file);
 
         return new TranscriptionFileResponse
         {
-            Name = file.Name ?? string.Empty,
+            Name = file.Name,
             Kind = file.Kind,
             CreatedDateTime = file.CreatedDateTime,
             SizeInBytes = file.SizeInBytes,
             ContentLength = file.ContentLength,
             Self = file.Self?.ToString(),
-            ContentUrl = file.Links?.ContentUrl?.ToString(),
-            ContentUri = file.Links?.ContentUri?.ToString()
+            ContentUrl = file.ContentUrl?.ToString(),
+            ContentUri = file.ContentUri?.ToString()
         };
     }
 
@@ -165,21 +155,5 @@ public sealed class TranscriptionWorkflowService(
         }
 
         return uri;
-    }
-
-    private static string? ExtractJobId(JobStatusResponse response)
-    {
-        return ExtractJobId(response.Self) ?? ExtractJobId(response.Links?.Self);
-    }
-
-    private static string? ExtractJobId(Uri? jobUri)
-    {
-        if (jobUri is null)
-        {
-            return null;
-        }
-
-        var trimmed = jobUri.AbsolutePath.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return trimmed.Length == 0 ? null : trimmed[^1];
     }
 }

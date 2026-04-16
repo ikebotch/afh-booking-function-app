@@ -10,9 +10,6 @@ using AFH.Acs.Application.Services.Transcription;
 using AFH.Acs.Contract.V1.Requests;
 using AFH.Acs.Domain.Entities;
 using AFH.Acs.Infrastructure.Recordings;
-using AFH.Common.SpeechAI.Models;
-using AFH.Common.SpeechAI.Models.Requests;
-using AFH.Common.SpeechAI.Models.Responses;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AFH.Acs.Tests;
@@ -295,15 +292,16 @@ public sealed class TranscriptionWorkflowServiceTests
 
     private sealed class FakeSpeechTranscriptionClient : ISpeechTranscriptionClient
     {
-        public StartTranscriptionRequest? LastStartRequest { get; private set; }
+        public SpeechTranscriptionStartRequest? LastStartRequest { get; private set; }
         public bool Cancelled { get; private set; }
         public bool Deleted { get; private set; }
 
-        public Task<JobStatusResponse> StartJobAsync(StartTranscriptionRequest request, CancellationToken ct = default)
+        public Task<SpeechTranscriptionJobStatus> StartJobAsync(SpeechTranscriptionStartRequest request, CancellationToken ct = default)
         {
             LastStartRequest = request;
-            return Task.FromResult(new JobStatusResponse
+            return Task.FromResult(new SpeechTranscriptionJobStatus
             {
+                JobId = "job-123",
                 Status = "Running",
                 DisplayName = request.DisplayName,
                 CreatedDateTime = new DateTimeOffset(2026, 4, 1, 9, 0, 0, TimeSpan.Zero),
@@ -313,9 +311,10 @@ public sealed class TranscriptionWorkflowServiceTests
             });
         }
 
-        public Task<JobStatusResponse> CheckJobStatusAsync(string jobId, CancellationToken ct = default)
-            => Task.FromResult(new JobStatusResponse
+        public Task<SpeechTranscriptionJobStatus> CheckJobStatusAsync(string jobId, CancellationToken ct = default)
+            => Task.FromResult(new SpeechTranscriptionJobStatus
             {
+                JobId = jobId,
                 Status = "Succeeded",
                 DisplayName = "Quarterly review",
                 CreatedDateTime = new DateTimeOffset(2026, 4, 1, 9, 0, 0, TimeSpan.Zero),
@@ -324,30 +323,32 @@ public sealed class TranscriptionWorkflowServiceTests
                 Self = new Uri($"https://speech.example/transcriptions/{jobId}")
             });
 
-        public Task<JobFilesResponse> GetJobFilesAsync(string jobId, CancellationToken ct = default)
-            => Task.FromResult(new JobFilesResponse
+        public Task<SpeechTranscriptionFilesResult> GetJobFilesAsync(string jobId, CancellationToken ct = default)
+        {
+            var transcript = new SpeechTranscriptionFile
             {
-                Self = new Uri($"https://speech.example/transcriptions/{jobId}/files"),
-                Files =
-                [
-                    new JobFileItem
-                    {
-                        Name = "transcript.vtt",
-                        Kind = "Transcription",
-                        CreatedDateTime = new DateTimeOffset(2026, 4, 1, 9, 31, 0, TimeSpan.Zero),
-                        SizeInBytes = 1024,
-                        ContentLength = 1024,
-                        Self = new Uri($"https://speech.example/transcriptions/{jobId}/files/transcript.vtt"),
-                        Links = new ResourceLinks
-                        {
-                            ContentUri = new Uri("https://speech.example/files/transcript.vtt")
-                        }
-                    }
-                ]
-            });
+                Name = "transcript.vtt",
+                Kind = "Transcription",
+                CreatedDateTime = new DateTimeOffset(2026, 4, 1, 9, 31, 0, TimeSpan.Zero),
+                SizeInBytes = 1024,
+                ContentLength = 1024,
+                Self = new Uri($"https://speech.example/transcriptions/{jobId}/files/transcript.vtt"),
+                ContentUri = new Uri("https://speech.example/files/transcript.vtt")
+            };
 
-        public Task<TranscriptFileResponse> GetTranscriptByJobAsync(string jobId, CancellationToken ct = default)
-            => Task.FromResult(CreateTranscript($"https://speech.example/transcriptions/{jobId}/files/transcript.vtt"));
+            return Task.FromResult(new SpeechTranscriptionFilesResult
+            {
+                Files = [transcript],
+                PrimaryTranscriptFile = transcript
+            });
+        }
+
+        public Task<SpeechTranscriptContent> GetTranscriptByJobAsync(string jobId, CancellationToken ct = default)
+            => Task.FromResult(new SpeechTranscriptContent
+            {
+                TranscriptText = "Hello world",
+                SpeakerFormattedTranscript = "Speaker 1: Hello world"
+            });
 
         public Task CancelJobAsync(string jobId, CancellationToken ct = default)
         {
@@ -360,39 +361,5 @@ public sealed class TranscriptionWorkflowServiceTests
             Deleted = true;
             return Task.CompletedTask;
         }
-
-        private static TranscriptFileResponse CreateTranscript(string source)
-            => new()
-            {
-                Source = source,
-                Timestamp = new DateTimeOffset(2026, 4, 1, 9, 31, 0, TimeSpan.Zero),
-                DurationInTicks = TimeSpan.FromMinutes(42).Ticks,
-                CombinedRecognizedPhrases =
-                [
-                    new CombinedRecognizedPhrase
-                    {
-                        Display = "Hello world"
-                    }
-                ],
-                RecognizedPhrases =
-                [
-                    new RecognizedPhrase
-                    {
-                        OffsetInTicks = 0,
-                        DurationInTicks = TimeSpan.FromSeconds(2).Ticks,
-                        Speaker = "1",
-                        Channel = 0,
-                        Locale = "en-GB",
-                        NBest =
-                        [
-                            new PhraseAlternative
-                            {
-                                Display = "Hello world",
-                                Lexical = "hello world"
-                            }
-                        ]
-                    }
-                ]
-            };
     }
 }

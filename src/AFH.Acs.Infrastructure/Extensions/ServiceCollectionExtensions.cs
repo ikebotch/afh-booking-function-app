@@ -9,6 +9,7 @@ using AFH.Acs.Infrastructure.Persistence;
 using AFH.Acs.Infrastructure.Persistence.Repositories;
 using AFH.Common.Errors.ApplicationInsights.DependencyInjection;
 using AFH.Common.Errors.EntityFramework.DependencyInjection;
+using AFH.Common.SpeechAI.Extensions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,6 +61,7 @@ public static class ServiceCollectionExtensions
         services.AddMeetingModule();
         services.AddIdentityModule(acsConnectionString);
         services.AddRecordingModule(configuration);
+        services.AddSpeechAi(configuration);
         services.AddTranscriptionModule();
 
         return services;

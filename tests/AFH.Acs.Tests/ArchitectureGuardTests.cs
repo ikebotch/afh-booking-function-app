@@ -20,9 +20,15 @@ public sealed class ArchitectureGuardTests
         AssertReferences("AFH.Acs.Function", "AFH.Common.Errors");
         AssertReferences("AFH.Acs.Function", "AFH.Common.Errors.AzureFunctions");
         AssertReferences("AFH.Acs.Function", "AFH.Common.Errors.Email");
-        AssertReferences("AFH.Acs.Function", "AFH.Common.SpeechAI");
+        AssertDoesNotReferencePrefix("AFH.Acs.Function", "AFH.Common.SpeechAI");
         AssertReferences("AFH.Acs.Function", "AFH.Acs.Application");
         AssertReferences("AFH.Acs.Function", "AFH.Acs.Infrastructure");
+    }
+
+    [Fact]
+    public void Application_Assembly_DoesNotReferenceSpeechSdk()
+    {
+        AssertDoesNotReferencePrefix("AFH.Acs.Application", "AFH.Common.SpeechAI");
     }
 
     [Fact]
@@ -85,7 +91,6 @@ public sealed class ArchitectureGuardTests
         Assert.Contains("ConfigureAppConfiguration(cfg);", programText);
         Assert.Contains("AddSharedErrorHandling(services, ctx.Configuration", programText);
         Assert.Contains("services.AddAfhAcsInfrastructure(ctx.Configuration);", programText);
-        Assert.Contains("services.AddSpeechAi(ctx.Configuration);", programText);
         Assert.Contains("ErrorEmail:Enabled", programText);
         Assert.Contains("ConfigureWorkerSerialization(services, caseInsensitivePropertyNames: true);", programText);
         Assert.DoesNotContain("BuildServiceProvider(", programText);
@@ -101,13 +106,34 @@ public sealed class ArchitectureGuardTests
     }
 
     [Fact]
-    public void FunctionProject_References_LocalSpeechSdkProject()
+    public void FunctionProject_DoesNotReference_LocalSpeechSdkProject()
     {
         var repoRoot = GetRepoRoot();
         var functionCsprojPath = Path.Combine(repoRoot, "src", "AFH.Acs.Function", "AFH.Acs.Function.csproj");
         var csprojText = File.ReadAllText(functionCsprojPath);
 
+        Assert.DoesNotContain("sdk\\afh-common-speechai\\src\\AFH.Common.SpeechAI\\AFH.Common.SpeechAI.csproj", csprojText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("WorkerExtensions/WorkerExtensions.template.csproj", csprojText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void InfrastructureProject_References_LocalSpeechSdkProject()
+    {
+        var repoRoot = GetRepoRoot();
+        var infrastructureCsprojPath = Path.Combine(repoRoot, "src", "AFH.Acs.Infrastructure", "AFH.Acs.Infrastructure.csproj");
+        var csprojText = File.ReadAllText(infrastructureCsprojPath);
+
         Assert.Contains("sdk\\afh-common-speechai\\src\\AFH.Common.SpeechAI\\AFH.Common.SpeechAI.csproj", csprojText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ApplicationProject_DoesNotReference_LocalSpeechSdkProject()
+    {
+        var repoRoot = GetRepoRoot();
+        var applicationCsprojPath = Path.Combine(repoRoot, "src", "AFH.Acs.Application", "AFH.Acs.Application.csproj");
+        var csprojText = File.ReadAllText(applicationCsprojPath);
+
+        Assert.DoesNotContain("sdk\\afh-common-speechai\\src\\AFH.Common.SpeechAI\\AFH.Common.SpeechAI.csproj", csprojText, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string[] GetHttpFunctionNames(Assembly functionAssembly) =>

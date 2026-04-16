@@ -4,7 +4,6 @@ using AFH.Acs.Function.Middleware;
 using AFH.Acs.Function.Options;
 using AFH.Common.Errors.Abstractions;
 using AFH.Common.Errors.AzureFunctions.DependencyInjection;
-using AFH.Common.SpeechAI.Extensions;
 using Azure.Core.Serialization;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
@@ -33,7 +32,6 @@ var host = new HostBuilder()
         AddSharedErrorHandling(services, ctx.Configuration, "[AFH ACS Error]", "acs");
         AddValidatedSecurityOptions(services, ctx.Configuration);
         services.AddAfhAcsInfrastructure(ctx.Configuration);
-        services.AddSpeechAi(ctx.Configuration);
         ConfigureWorkerSerialization(services, caseInsensitivePropertyNames: true);
     })
     .Build();

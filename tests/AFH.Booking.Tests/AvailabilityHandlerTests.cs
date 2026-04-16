@@ -267,6 +267,7 @@ public sealed class AvailabilityHandlerTests
             new AFH.Booking.Domain.Location.LocationCandidate
             {
                 AdviserId = "adv-1",
+                MailboxUserId = "adviser.one@tenant.com",
                 TravelMinutes = 15,
                 DistanceMiles = 10,
                 GoldStar = true
@@ -274,6 +275,7 @@ public sealed class AvailabilityHandlerTests
             new AFH.Booking.Domain.Location.LocationCandidate
             {
                 AdviserId = "adv-2",
+                MailboxUserId = "adviser.two@tenant.com",
                 TravelMinutes = 20,
                 DistanceMiles = 12,
                 GoldStar = false
@@ -330,6 +332,7 @@ public sealed class AvailabilityHandlerTests
         Assert.Equal(3, calendarView.CallCount);
         Assert.Equal([2, 2, 2], calendarView.BatchSizes);
         Assert.Equal(6, slotRepo.AddedSlots.Count);
+        Assert.All(slotRepo.AddedSlots, slot => Assert.StartsWith("adv-", slot.AdviserId, StringComparison.Ordinal));
     }
 
     private sealed class StubSlotScorer : ISlotScorer

@@ -181,9 +181,17 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             return (null,
                 Result<GetAvailabilityResponse>.Fail(
                     HttpStatusCode.NotFound,
-                    "Client/prospect not found in leads directory.",
-                    Errors.NotFound));
+                "Client/prospect not found in leads directory.",
+                Errors.NotFound));
         }
+
+        _logger.LogInformation(
+            "Booking availability prospect resolved. IsRemote={IsRemote} TransactionId={TransactionId} ProspectLocationResolved={ProspectLocationResolved}",
+            false,
+            q.TransactionId ?? q.ClientId,
+            !string.IsNullOrWhiteSpace(prospect.StreetName1) &&
+            !string.IsNullOrWhiteSpace(prospect.Town) &&
+            !string.IsNullOrWhiteSpace(prospect.PostalCode));
 
         return (prospect, null);
     }
@@ -317,6 +325,12 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         CancellationToken ct)
     {
         var result = new List<(string, string, string, bool, BookingSlot)>();
+        var requestId = q.TransactionId ?? q.ClientId;
+        var calendarWindowPassCount = 0;
+        var missingTravelCandidateCount = 0;
+        var nonPositiveTravelCount = 0;
+        var travelFitPassCount = 0;
+        var travelFitFailCount = 0;
 
         foreach (var start in slotStarts)
         {
@@ -334,7 +348,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
 
             foreach (var adviser in advisers)
             {
-                var adviserId = adviser.Email;
+                var adviserId = adviser.AdviserId;
                 if (string.IsNullOrWhiteSpace(adviserId))
                     continue;
 
@@ -347,14 +361,22 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                     continue;
                 }
 
+                calendarWindowPassCount++;
+
                 if (!q.IsRemote)
                 {
                     if (travel is not null && travelCandidate is null)
+                    {
+                        missingTravelCandidateCount++;
                         continue;
+                    }
 
                     var t = travelCandidate?.TravelMinutes ?? 0;
                     if (t <= 0)
+                    {
+                        nonPositiveTravelCount++;
                         continue;
+                    }
 
                     var fitsTravel = IsWindowFree(
                         availability,
@@ -362,7 +384,12 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                         end.AddMinutes(t));
 
                     if (!fitsTravel)
+                    {
+                        travelFitFailCount++;
                         continue;
+                    }
+
+                    travelFitPassCount++;
                 }
 
                 var score = _scorer.Score(new SlotScoringContext
@@ -392,6 +419,19 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                 result.Add((adviserId + slot.AdviserName, adviserId, slot.AdviserName, travelCandidate?.GoldStar ?? false, slot));
             }
         }
+
+        _logger.LogInformation(
+            "Booking availability slot filtering complete. IsRemote={IsRemote} TransactionId={TransactionId} AdviserPoolCount={AdviserPoolCount} SlotStartCount={SlotStartCount} CalendarWindowPassCount={CalendarWindowPassCount} MissingTravelCandidateCount={MissingTravelCandidateCount} NonPositiveTravelCount={NonPositiveTravelCount} TravelFitPassCount={TravelFitPassCount} TravelFitFailCount={TravelFitFailCount} FinalSlotCount={FinalSlotCount}",
+            q.IsRemote,
+            requestId,
+            advisers.Count,
+            slotStarts.Count,
+            calendarWindowPassCount,
+            missingTravelCandidateCount,
+            nonPositiveTravelCount,
+            travelFitPassCount,
+            travelFitFailCount,
+            result.Count);
 
         return result;
     }

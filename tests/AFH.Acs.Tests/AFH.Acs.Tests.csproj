@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.2" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.5" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\AFH.Acs.Domain\AFH.Acs.Domain.csproj" />
+    <ProjectReference Include="..\..\src\AFH.Acs.Function\AFH.Acs.Function.csproj" />
+    <ProjectReference Include="..\..\src\AFH.Acs.Contract\AFH.Acs.Contract.csproj" />
+    <ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors\AFH.Common.Errors.csproj" />
+    <ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.ApplicationInsights\AFH.Common.Errors.ApplicationInsights.csproj" />
+    <ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.AzureFunctions\AFH.Common.Errors.AzureFunctions.csproj" />
+    <ProjectReference Include="..\..\..\..\sdk\afh-common-error\src\AFH.Common.Errors.Email\AFH.Common.Errors.Email.csproj" />
+  </ItemGroup>
+
+</Project>

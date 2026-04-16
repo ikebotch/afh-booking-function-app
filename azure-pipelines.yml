@@ -1,0 +1,96 @@
+# =============================
+# ACS App CI
+# =============================
+
+# Build number format (appears as $(Build.BuildNumber))
+name: ACSApp_$(Date:yyyyMMdd).$(Rev:r)
+
+trigger:
+- main
+- staging
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+
+steps:
+# NuGet
+# - task: NuGetToolInstaller@1
+
+# - task: NuGetCommand@2
+#   inputs:
+#     command: 'restore'
+#     restoreSolution: '$(solution)'
+#     feedsToUse: 'select'
+#     vstsFeed: '$(vstsFeed)'
+
+- task: DotNetCoreCLI@2
+  displayName: 'Build .NET'
+  inputs:
+    command: 'build'
+    projects: 'AFH.Acs.Recorder/AFH.Acs.Recorder.csproj'
+    arguments: '--output $(Build.BinariesDirectory)/publish_output --configuration $(buildConfiguration)'
+
+
+# ------------------------
+# STAGING ARTIFACT
+# ------------------------
+- task: ArchiveFiles@2
+  displayName: 'Archive (staging)'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/staging'))
+  inputs:
+    rootFolderOrFile: '$(Build.BinariesDirectory)/publish_output'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId)-ACSApp-staging.zip'
+    replaceExistingArchive: true
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish artifacts (staging)'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/staging'))
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop-staging'
+    publishLocation: 'Container'
+
+# Tag build for staging
+- powershell: |
+    $tagName = "staging_$(Build.BuildNumber)"
+    Write-Host "##vso[build.addbuildtag]$tagName"
+    Write-Host "Tagged build with: $tagName"
+  displayName: 'Tag build (staging with build number)'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/staging'))
+
+
+# ------------------------
+# PRODUCTION ARTIFACT
+# ------------------------
+- task: ArchiveFiles@2
+  displayName: 'Archive (production)'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  inputs:
+    rootFolderOrFile: '$(Build.BinariesDirectory)/publish_output'
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId)-ACSApp-prod.zip'
+    replaceExistingArchive: true
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish artifacts (production)'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop-production'
+    publishLocation: 'Container'
+
+# Tag build for production
+- powershell: |
+    $tagName = "production_$(Build.BuildNumber)"
+    Write-Host "##vso[build.addbuildtag]$tagName"
+    Write-Host "Tagged build with: $tagName"
+  displayName: 'Tag build (production with build number)'
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))

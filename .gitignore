@@ -1,0 +1,15 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/AFH.Integrations.Sharepoint/obj
+/.vs/AcsTeamsRecorder/FileContentIndex
+/.idea/
+/bin/
+/obj/
+**/bin/
+**/obj/
+local.settings.json
+.DS_Store
+__MACOSX/
+/.vs

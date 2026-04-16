@@ -81,8 +81,8 @@ public sealed class TravelMatrixService : ITravelMatrixService
             AdviserId = c.AdviserId,
             MailboxUserId = c.MailboxUserId,
             GoldStar = c.GoldStar,
-            TravelMinutes = c.TravelToClient.EtaMinutes ?? 0,
-            DistanceMiles = c.TravelToClient.DistanceMiles ?? 0,
+            TravelMinutes = c.TravelToClient.EtaMinutes,
+            DistanceMiles = c.TravelToClient.DistanceMiles,
             CompanyBufferMinutes = c.Buffers?.CompanyBufferMinutes
         }).ToList();
 

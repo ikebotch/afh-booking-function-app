@@ -102,6 +102,40 @@ public class InternalOutboundAuthTests
     }
 
     [Fact]
+    public async Task TravelMatrixService_PreservesUnverifiedTravelValuesFromLocationResponse()
+    {
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"data\":{\"candidates\":[{\"adviserId\":\"adv-1\",\"mailboxUserId\":\"adviser.one@tenant.com\",\"goldStar\":false,\"travelToClient\":{\"etaMinutes\":null,\"distanceMiles\":null,\"confidence\":\"Low\"},\"buffers\":{\"companyBufferMinutes\":30}}]}}",
+                Encoding.UTF8,
+                "application/json")
+        });
+
+        var sut = new TravelMatrixService(
+            new HttpClient(handler),
+            Options.Create(new LocationServiceOptions
+            {
+                BaseUrl = "https://location.example",
+                FunctionKey = "location-function-key",
+                InternalToken = "location-token"
+            }),
+            new InternalBearerServiceAuthenticator(),
+            NullLogger<TravelMatrixService>.Instance);
+
+        var result = await sut.GetAsync(new TravelMatrixRequest
+        {
+            RequestId = "req-1"
+        }, CancellationToken.None);
+
+        var candidate = Assert.Single(result.Candidates);
+        Assert.Equal("adv-1", candidate.AdviserId);
+        Assert.Null(candidate.TravelMinutes);
+        Assert.Null(candidate.DistanceMiles);
+        Assert.Equal(30, candidate.CompanyBufferMinutes);
+    }
+
+    [Fact]
     public async Task AcsMeetingLinkFactory_UsesFunctionKeyAndBearerAuth()
     {
         HttpRequestMessage? captured = null;

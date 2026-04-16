@@ -13,4 +13,5 @@ public sealed class CalendarConflictBlock
     public DateTime StartUtc { get; init; }
     public DateTime EndUtc { get; init; }
     public string? Subject { get; init; }
+    public string? ProviderEventId { get; init; }
 }

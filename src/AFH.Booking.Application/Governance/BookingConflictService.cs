@@ -47,12 +47,15 @@ public sealed class BookingConflictService : IBookingConflictService
             ct);
 
         var relevantBlocks = liveAvailability.Conflicts
+            .Where(x =>
+                string.IsNullOrWhiteSpace(hold.CalendarProviderEventId) ||
+                !string.Equals(x.ProviderEventId, hold.CalendarProviderEventId, StringComparison.OrdinalIgnoreCase))
             .Select(x => new
             {
                 x.StartUtc,
                 x.EndUtc,
                 x.Subject,
-                ProviderEventId = string.Empty
+                x.ProviderEventId
             })
             .ToList();
 

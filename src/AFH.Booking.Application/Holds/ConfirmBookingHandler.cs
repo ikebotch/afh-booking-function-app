@@ -97,14 +97,15 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
             await _tx.UpdateAsync(tx, ct);
         }
 
-        Task<string?>? joinUrlTask = null;
+        // Meeting-link creation may require loading additional booking/client data.
+        // Keep this sequential to avoid overlapping EF-backed operations on the scoped DbContext.
+        string? joinUrl = null;
         if (tx.IsRemote)
-            joinUrlTask = _meetingLinks.CreateJoinLinkAsync(hold.Id, ct);
+            joinUrl = await _meetingLinks.CreateJoinLinkAsync(hold.Id, ct);
 
         if (!string.IsNullOrWhiteSpace(hold.CalendarProviderEventId))
         {
             var windows = BuildHoldWindows(slot, tx);
-            var joinUrl = joinUrlTask is null ? null : await joinUrlTask;
 
             var calendarTemplate = ConfirmedBookingTemplate.BuildConfirmedTemplate(
                 slot: slot,
@@ -124,10 +125,9 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
             await _calendar.UpdateBookingEventAsync(calendarEvent, ct);
         }
 
-        var finalJoinUrl = joinUrlTask is null ? null : await joinUrlTask;
         await _uow.SaveChangesAsync(ct);
 
-        return OkResponse(hold, finalJoinUrl);
+        return OkResponse(hold, joinUrl);
     }
 
     private static Result<ConfirmBookingResponse> OkResponse(BookingHold hold, string? joinUrl = null)

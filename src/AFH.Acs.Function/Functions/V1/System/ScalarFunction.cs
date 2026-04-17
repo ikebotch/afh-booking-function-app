@@ -7,11 +7,11 @@ namespace AFH.Acs.Function.Functions.V1.System;
 public sealed class ScalarFunction
 {
     [Function("v1-scalar-ui")]
-    public HttpResponseData GetScalarUi([HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/scalar")] HttpRequestData req)
+    public async Task<HttpResponseData> GetScalarUi([HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/scalar")] HttpRequestData req)
     {
         var response = req.CreateResponse(HttpStatusCode.OK);
         response.Headers.Add("Content-Type", "text/html; charset=utf-8");
-        response.WriteString("""
+        await response.WriteStringAsync("""
 <!doctype html>
 <html lang="en">
   <head>

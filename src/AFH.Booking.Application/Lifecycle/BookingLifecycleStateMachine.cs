@@ -7,6 +7,7 @@ public static class BookingLifecycleStateMachine
     private static readonly HashSet<string> ValidStates = new(StringComparer.OrdinalIgnoreCase)
     {
         LifecycleStates.Booked,
+        LifecycleStates.Confirmed,
         LifecycleStates.Rearranged,
         LifecycleStates.Cancelled,
         LifecycleStates.NoShow
@@ -15,6 +16,13 @@ public static class BookingLifecycleStateMachine
     private static readonly Dictionary<string, HashSet<string>> AllowedTransitions = new(StringComparer.OrdinalIgnoreCase)
     {
         [LifecycleStates.Booked] =
+        [
+            LifecycleStates.Confirmed,
+            LifecycleStates.Rearranged,
+            LifecycleStates.Cancelled,
+            LifecycleStates.NoShow
+        ],
+        [LifecycleStates.Confirmed] =
         [
             LifecycleStates.Rearranged,
             LifecycleStates.Cancelled,
@@ -60,6 +68,7 @@ public static class BookingLifecycleStateMachine
         return eventType switch
         {
             LifecycleEventTypes.Booked => LifecycleStates.Booked,
+            LifecycleEventTypes.Confirmed => LifecycleStates.Confirmed,
             LifecycleEventTypes.Rearranged or LifecycleEventTypes.ReArranged => LifecycleStates.Rearranged,
             LifecycleEventTypes.Cancelled => LifecycleStates.Cancelled,
             LifecycleEventTypes.NoShow => LifecycleStates.NoShow,

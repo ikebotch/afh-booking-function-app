@@ -2,6 +2,7 @@ namespace AFH.Booking.Application.Common;
 
 public static class LifecycleEventTypes
 {
+    public const string Booked = "Booked";
     public const string Cancelled = "Cancelled";
     public const string ReArranged = "ReArranged";
 }

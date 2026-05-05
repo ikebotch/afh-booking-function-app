@@ -1,7 +1,9 @@
 using AFH.Booking.Application.Abstractions.Bookings.Handlers;
 using AFH.Booking.Application.Abstractions.Governance;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Contracts.V1.Responses;
@@ -23,6 +25,8 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
     private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IMeetingLinkFactory _meetingLinks;
     private readonly IBookingConflictService _conflicts;
+    private readonly ILifecycleAuditService _audit;
+    private readonly INotificationService _notifications;
 
     public ConfirmBookingHandler(
         IBookingHoldRepository holds,
@@ -33,7 +37,9 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         ICalendarGateway calendar,
         IAdviserProfileProjectionRepository profiles,
         IMeetingLinkFactory meetingLinks,
-        IBookingConflictService conflicts)
+        IBookingConflictService conflicts,
+        ILifecycleAuditService audit,
+        INotificationService notifications)
     {
         _holds = holds;
         _slots = slots;
@@ -44,6 +50,8 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         _profiles = profiles;
         _meetingLinks = meetingLinks;
         _conflicts = conflicts;
+        _audit = audit;
+        _notifications = notifications;
     }
 
     public async Task<Result<ConfirmBookingResponse>> HandleAsync(ConfirmBookingCommand cmd, CancellationToken ct)
@@ -88,6 +96,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
                 conflicts.ErrorCode ?? Errors.Conflict);
         }
 
+        var before = CreateSnapshot(hold, slot, tx);
         hold.Confirm(utcNow);
         await _holds.UpdateAsync(hold, ct);
 
@@ -125,17 +134,90 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
             await _calendar.UpdateBookingEventAsync(calendarEvent, ct);
         }
 
+        var eventId = await _audit.RecordEventAsync(new LifecycleAuditEntry(
+            BookingId: hold.Id,
+            TransactionId: tx.Id,
+            EventType: LifecycleEventTypes.Booked,
+            ActorType: LifecycleActors.Client,
+            ActorId: null,
+            ReasonCode: null,
+            ReasonNotes: cmd.Notes,
+            Before: before,
+            After: CreateSnapshot(hold, slot, tx),
+            OccurredUtc: utcNow,
+            CorrelationId: null,
+            SourceSystem: "BookingService",
+            RelatedBookingId: null), ct);
+
+        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
+            eventId,
+            LifecycleStepNames.Outlook,
+            1,
+            string.IsNullOrWhiteSpace(hold.CalendarProviderEventId)
+                ? LifecycleStepStatuses.Skipped
+                : LifecycleStepStatuses.Succeeded,
+            utcNow,
+            _clock.UtcNow), ct);
+
+        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
+            eventId,
+            LifecycleStepNames.SqlAudit,
+            2,
+            LifecycleStepStatuses.Succeeded,
+            utcNow,
+            _clock.UtcNow), ct);
+
         await _uow.SaveChangesAsync(ct);
 
-        return OkResponse(hold, joinUrl);
+        var notificationStartedUtc = _clock.UtcNow;
+        var notificationStatus = LifecycleStepStatuses.Succeeded;
+        string? notificationErrorCode = null;
+        string? notificationErrorDetails = null;
+
+        try
+        {
+            await _notifications.SendBookingNotificationAsync(
+                new NotificationDispatchRequest(
+                    hold.Id,
+                    LifecycleEventTypes.Booked,
+                    BuildBookingConfirmationMessage(slot),
+                    true,
+                    true,
+                    eventId,
+                    null),
+                ct);
+        }
+        catch (Exception ex)
+        {
+            notificationStatus = LifecycleStepStatuses.Failed;
+            notificationErrorCode = LifecycleErrorCodes.NotificationFailed;
+            notificationErrorDetails = ex.Message;
+        }
+
+        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
+            eventId,
+            LifecycleStepNames.Notifications,
+            3,
+            notificationStatus,
+            notificationStartedUtc,
+            _clock.UtcNow,
+            notificationErrorCode,
+            notificationErrorDetails), ct);
+
+        await _uow.SaveChangesAsync(ct);
+
+        return OkResponse(hold, tx, joinUrl);
     }
 
-    private static Result<ConfirmBookingResponse> OkResponse(BookingHold hold, string? joinUrl = null)
+    private static Result<ConfirmBookingResponse> OkResponse(BookingHold hold, BookingTransaction tx, string? joinUrl = null)
         => Result<ConfirmBookingResponse>.Ok(new ConfirmBookingResponse
         {
             BookingId = hold.Id,
             SlotId = hold.SlotId,
+            TransactionId = tx.Id,
+            TransactionRef = tx.TransactionRef,
             Status = BookingHoldStatus.Confirmed.ToString(),
+            LifecycleState = LifecycleEventTypes.Booked,
             OnlineMeetingJoinUrl = joinUrl
         });
 
@@ -157,4 +239,25 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
 
         return new HoldWindows(start, end, travelMinutes, companyBufferMinutes, preMeetingMinutes > 0 || postMeetingMinutes > 0);
     }
+
+    private static object CreateSnapshot(BookingHold hold, BookingSlot slot, BookingTransaction tx)
+    {
+        return new
+        {
+            bookingId = hold.Id,
+            lifecycleState = hold.Status == BookingHoldStatus.Confirmed ? LifecycleEventTypes.Booked : hold.Status.ToString(),
+            holdStatus = hold.Status.ToString(),
+            holdConfirmedUtc = hold.ConfirmedUtc,
+            slotId = slot.Id,
+            slotStartUtc = slot.StartUtc,
+            slotEndUtc = slot.EndUtc,
+            adviserId = slot.AdviserId,
+            transactionId = tx.Id,
+            transactionRef = tx.TransactionRef,
+            transactionStatus = tx.Status.ToString()
+        };
+    }
+
+    private static string BuildBookingConfirmationMessage(BookingSlot slot)
+        => $"Your meeting with {slot.AdviserName} on {slot.StartUtc:yyyy-MM-dd HH:mm} has been booked.";
 }

@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Abstractions.Governance;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Governance;
@@ -149,7 +150,9 @@ public class ConfirmBookingHandlerTests
             calendar,
             profiles,
             new StubMeetingLinkFactory(),
-            conflicts);
+            conflicts,
+            new StubLifecycleAuditService(),
+            new StubNotificationService());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -219,7 +222,9 @@ public class ConfirmBookingHandlerTests
             calendar,
             profiles,
             meetingLinks,
-            new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())));
+            new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
+            new StubLifecycleAuditService(),
+            new StubNotificationService());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -230,6 +235,43 @@ public class ConfirmBookingHandlerTests
         Assert.Contains("https://meeting.example", calendar.LastUpdatedBody ?? string.Empty);
         Assert.Equal(1, profiles.ResolveCallCount);
         Assert.Equal(1, meetingLinks.CallCount);
+    }
+
+    [Fact]
+    public async Task HandleAsync_RecordsBookedLifecycleEvent_AndReturnsTransactionReference()
+    {
+        var now = DateTime.UtcNow.AddHours(1);
+        var hold = ActiveHold(now, providerEventId: null);
+        var slot = InPersonSlot(now);
+        var tx = InPersonTransaction(now);
+        var audit = new StubLifecycleAuditService();
+        var notifications = new StubNotificationService();
+        var sut = new ConfirmBookingHandler(
+            new StubHoldRepository(hold),
+            new StubSlotRepository(slot),
+            new StubTransactionRepository(tx),
+            new StubUnitOfWork(),
+            new StubClock(now),
+            new StubCalendarGateway(),
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            new StubMeetingLinkFactory(),
+            new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
+            audit,
+            notifications);
+
+        var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(result.Value);
+        Assert.Equal("tx-1", result.Value.TransactionId);
+        Assert.Equal("TRX-1", result.Value.TransactionRef);
+        Assert.Equal(LifecycleEventTypes.Booked, result.Value.LifecycleState);
+        Assert.Equal(BookingHoldStatus.Confirmed.ToString(), result.Value.Status);
+        Assert.Equal(LifecycleEventTypes.Booked, audit.LastEvent?.EventType);
+        Assert.Equal(tx.Id, audit.LastEvent?.TransactionId);
+        Assert.Equal(LifecycleActors.Client, audit.LastEvent?.ActorType);
+        Assert.Equal(LifecycleEventTypes.Booked, notifications.LastRequest?.EventType);
+        Assert.Equal(BookingTransactionStatus.Completed, tx.Status);
     }
 
     [Fact]
@@ -291,7 +333,9 @@ public class ConfirmBookingHandlerTests
             new StubCalendarGateway(),
             profiles,
             new StubMeetingLinkFactory(),
-            new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())));
+            new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
+            new StubLifecycleAuditService(),
+            new StubNotificationService());
 
         var handleTask = sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -341,7 +385,9 @@ public class ConfirmBookingHandlerTests
             calendar,
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
-            new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)));
+            new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
+            new StubLifecycleAuditService(),
+            new StubNotificationService());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -382,7 +428,9 @@ public class ConfirmBookingHandlerTests
             calendar,
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
-            new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)));
+            new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
+            new StubLifecycleAuditService(),
+            new StubNotificationService());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -424,7 +472,9 @@ public class ConfirmBookingHandlerTests
             calendar,
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
-            new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)));
+            new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
+            new StubLifecycleAuditService(),
+            new StubNotificationService());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -444,7 +494,9 @@ public class ConfirmBookingHandlerTests
             new StubCalendarGateway(),
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
-            new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())));
+            new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
+            new StubLifecycleAuditService(),
+            new StubNotificationService());
     }
 
     private static BookingHold ActiveHold(DateTime now, string? providerEventId)
@@ -671,6 +723,46 @@ public class ConfirmBookingHandlerTests
         {
             LastCalendarUserId = calendarUserId;
             return Task.FromResult(_result);
+        }
+    }
+
+    private sealed class StubLifecycleAuditService : ILifecycleAuditService
+    {
+        public LifecycleAuditEntry? LastEvent { get; private set; }
+        public List<LifecycleAuditStepEntry> Steps { get; } = [];
+
+        public Task<string> RecordEventAsync(LifecycleAuditEntry entry, CancellationToken ct)
+        {
+            LastEvent = entry;
+            return Task.FromResult("lifecycle-event-1");
+        }
+
+        public Task RecordStepAsync(LifecycleAuditStepEntry step, CancellationToken ct)
+        {
+            Steps.Add(step);
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubNotificationService : INotificationService
+    {
+        public NotificationDispatchRequest? LastRequest { get; private set; }
+
+        public Task<NotificationDispatchResponse> SendBookingNotificationAsync(NotificationDispatchRequest request, CancellationToken ct)
+        {
+            LastRequest = request;
+            return Task.FromResult(new NotificationDispatchResponse
+            {
+                DispatchId = "dispatch-1",
+                BookingId = request.BookingId,
+                EventType = request.EventType,
+                SmsRequested = request.SendSms,
+                EmailRequested = request.SendEmail,
+                SmsStatus = "Skipped",
+                EmailStatus = "Skipped",
+                ProviderMessageId = "provider-1",
+                CreatedUtc = DateTime.UtcNow
+            });
         }
     }
 

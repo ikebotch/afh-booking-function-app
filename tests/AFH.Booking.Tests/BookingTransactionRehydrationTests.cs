@@ -1,9 +1,11 @@
 using AFH.Booking.Application.Abstractions.Governance;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
@@ -53,7 +55,9 @@ public sealed class BookingTransactionRehydrationTests
             new StubCalendarGateway(),
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
-            new StubConflictService());
+            new StubConflictService(),
+            new StubLifecycleAuditService(),
+            new StubNotificationService());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = "hold-1" }, CancellationToken.None);
 
@@ -204,6 +208,29 @@ public sealed class BookingTransactionRehydrationTests
     {
         public Task<BookingConflictCheckResult> EvaluateConfirmationConflictsAsync(BookingHold hold, BookingSlot slot, BookingTransaction transaction, string calendarUserId, CancellationToken ct)
             => Task.FromResult(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>()));
+    }
+
+    private sealed class StubLifecycleAuditService : ILifecycleAuditService
+    {
+        public Task<string> RecordEventAsync(LifecycleAuditEntry entry, CancellationToken ct) => Task.FromResult("event-1");
+        public Task RecordStepAsync(LifecycleAuditStepEntry step, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class StubNotificationService : INotificationService
+    {
+        public Task<NotificationDispatchResponse> SendBookingNotificationAsync(NotificationDispatchRequest request, CancellationToken ct)
+            => Task.FromResult(new NotificationDispatchResponse
+            {
+                DispatchId = "dispatch-1",
+                BookingId = request.BookingId,
+                EventType = request.EventType,
+                SmsRequested = request.SendSms,
+                EmailRequested = request.SendEmail,
+                SmsStatus = "Skipped",
+                EmailStatus = "Skipped",
+                ProviderMessageId = "provider-1",
+                CreatedUtc = DateTime.UtcNow
+            });
     }
 
     private sealed class StubCalendarGateway : ICalendarGateway

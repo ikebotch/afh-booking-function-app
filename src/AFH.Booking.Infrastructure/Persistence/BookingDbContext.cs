@@ -26,6 +26,31 @@ public sealed class BookingDbContext : DbContext
     public DbSet<IntegrationSyncStateModel> IntegrationSyncStates => Set<IntegrationSyncStateModel>();
     public DbSet<IntegrationOperationAuditModel> IntegrationOperationAudits => Set<IntegrationOperationAuditModel>();
     public DbSet<ApplicationLogModel> ApplicationLogs => Set<ApplicationLogModel>();
+
+    public override int SaveChanges()
+    {
+        EnforceImmutableAuditRecords();
+        return base.SaveChanges();
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        EnforceImmutableAuditRecords();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        EnforceImmutableAuditRecords();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        EnforceImmutableAuditRecords();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);
@@ -55,5 +80,20 @@ public sealed class BookingDbContext : DbContext
         });
 
         base.OnModelCreating(modelBuilder);
+    }
+
+    private void EnforceImmutableAuditRecords()
+    {
+        foreach (var entry in ChangeTracker.Entries())
+        {
+            if (entry.State is not (EntityState.Modified or EntityState.Deleted))
+                continue;
+
+            if (entry.Entity is LifecycleEventModel or LifecycleStepModel or ApprovalHistoryModel)
+            {
+                throw new InvalidOperationException(
+                    $"Audit records are immutable and cannot be {entry.State.ToString().ToLowerInvariant()}.");
+            }
+        }
     }
 }

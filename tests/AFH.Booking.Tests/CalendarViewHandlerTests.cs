@@ -29,12 +29,14 @@ public sealed class CalendarViewHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal("adviser.one@tenant.com", calendar.LastUserId);
+        Assert.Equal("ForceRefresh", calendar.LastFreshnessMode);
         Assert.Equal("adv-1", Assert.Single(result.Value!).AdviserId);
     }
 
     private sealed class StubCalendarGateway : ICalendarGateway
     {
         public string? LastUserId { get; private set; }
+        public string? LastFreshnessMode { get; private set; }
 
         public Task<string?> CreateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct) => Task.FromResult<string?>(null);
         public Task<string?> UpdateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct) => Task.FromResult<string?>(null);
@@ -44,6 +46,7 @@ public sealed class CalendarViewHandlerTests
         public Task<AdviserAvailabilityResult> CheckAvailabilityAsync(string userId, DateTime startUtc, DateTime endUtc, string timezone, string? freshnessMode, CancellationToken ct)
         {
             LastUserId = userId;
+            LastFreshnessMode = freshnessMode;
             return Task.FromResult(new AdviserAvailabilityResult
             {
                 IsFree = false,

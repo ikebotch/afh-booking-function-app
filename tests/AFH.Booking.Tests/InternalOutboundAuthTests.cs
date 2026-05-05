@@ -207,6 +207,7 @@ public class InternalOutboundAuthTests
         public Task<ActiveHoldLookupResult> GetActiveForCreateHoldAsync(string transactionId, string slotId, DateTime utcNow, CancellationToken ct) => throw new NotSupportedException();
         public Task<BookingHold?> GetTrackedAsync(string holdId, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyList<BookingHold>> GetExpiredActiveAsync(DateTime utcNow, int take, CancellationToken ct) => throw new NotSupportedException();
+        public Task<int> CountActiveOrConfirmedByAdviserAsync(string adviserId, DateTime fromUtc, DateTime toUtc, DateTime utcNow, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<BookingHold?> GetAsync(string holdId, CancellationToken ct)
             => Task.FromResult<BookingHold?>(BookingHold.Rehydrate(

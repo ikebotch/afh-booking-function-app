@@ -562,6 +562,7 @@ public class ConfirmBookingHandlerTests
         public Task UpdateAsync(BookingHold hold, CancellationToken ct) => Task.CompletedTask;
         public Task<BookingHold?> GetTrackedAsync(string holdId, CancellationToken ct) => Task.FromResult<BookingHold?>(_hold);
         public Task<IReadOnlyList<BookingHold>> GetExpiredActiveAsync(DateTime utcNow, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<BookingHold>>([]);
+        public Task<int> CountActiveOrConfirmedByAdviserAsync(string adviserId, DateTime fromUtc, DateTime toUtc, DateTime utcNow, CancellationToken ct) => Task.FromResult(0);
     }
 
     private sealed class StubSlotRepository : IBookingSlotRepository

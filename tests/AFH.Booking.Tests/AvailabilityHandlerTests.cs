@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Bookings;
+using AFH.Booking.Application.Abstractions.Availability;
 using AFH.Booking.Application.Abstractions.Calendar;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Bookings;
@@ -46,6 +47,7 @@ public sealed class AvailabilityHandlerTests
             new StubUnitOfWork(),
             new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
             new StubTimeZoneProvider(),
+            new StubAvailabilityRulesService(),
             NullLogger<AvailabilityHandler>.Instance);
 
         var result = await sut.HandleAsync(new GetAvailabilityQuery
@@ -86,6 +88,7 @@ public sealed class AvailabilityHandlerTests
             new StubUnitOfWork(),
             new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
             new StubTimeZoneProvider(),
+            new StubAvailabilityRulesService(),
             NullLogger<AvailabilityHandler>.Instance);
 
         var result = await sut.HandleAsync(new GetAvailabilityQuery
@@ -136,6 +139,7 @@ public sealed class AvailabilityHandlerTests
             new StubUnitOfWork(),
             new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
             new StubTimeZoneProvider(),
+            new StubAvailabilityRulesService(),
             NullLogger<AvailabilityHandler>.Instance);
 
         var result = await sut.HandleAsync(new GetAvailabilityQuery
@@ -188,6 +192,7 @@ public sealed class AvailabilityHandlerTests
             new StubUnitOfWork(),
             new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
             new StubTimeZoneProvider(),
+            new StubAvailabilityRulesService(),
             NullLogger<AvailabilityHandler>.Instance);
 
         var result = await sut.HandleAsync(new GetAvailabilityQuery
@@ -238,6 +243,7 @@ public sealed class AvailabilityHandlerTests
             new StubUnitOfWork(),
             new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
             new StubTimeZoneProvider(),
+            new StubAvailabilityRulesService(),
             NullLogger<AvailabilityHandler>.Instance);
 
         var result = await sut.HandleAsync(new GetAvailabilityQuery
@@ -314,6 +320,7 @@ public sealed class AvailabilityHandlerTests
             new StubUnitOfWork(),
             new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
             new StubTimeZoneProvider(),
+            new StubAvailabilityRulesService(),
             NullLogger<AvailabilityHandler>.Instance);
 
         var result = await sut.HandleAsync(new GetAvailabilityQuery
@@ -333,6 +340,61 @@ public sealed class AvailabilityHandlerTests
         Assert.Equal([2, 2, 2], calendarView.BatchSizes);
         Assert.Equal(6, slotRepo.AddedSlots.Count);
         Assert.All(slotRepo.AddedSlots, slot => Assert.StartsWith("adv-", slot.AdviserId, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task HandleAsync_ExcludesAdvisersRejectedByAvailabilityRules_AndStoresRuleAudit()
+    {
+        var slotRepo = new StubSlotRepository();
+        var rules = new StubAvailabilityRulesService(new HashSet<string>(["adv-2"], StringComparer.OrdinalIgnoreCase));
+
+        var sut = new AvailabilityHandler(
+            new StubSlotScorer(),
+            new StubCalendarViewQueryHandler(),
+            new StubTravelMatrixService(),
+            new StubClientDirectory(),
+            new StubProfiles(
+            [
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-1",
+                    DisplayName = "Adviser One",
+                    MailboxUserId = "adviser.one@tenant.com",
+                    IsActive = true
+                },
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-2",
+                    DisplayName = "Adviser Two",
+                    MailboxUserId = "adviser.two@tenant.com",
+                    IsActive = true
+                }
+            ]),
+            new StubTransactionRepository(),
+            slotRepo,
+            new StubUnitOfWork(),
+            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
+            new StubTimeZoneProvider(),
+            rules,
+            NullLogger<AvailabilityHandler>.Instance);
+
+        var result = await sut.HandleAsync(new GetAvailabilityQuery
+        {
+            ClientId = "client-1",
+            IsRemote = true,
+            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
+            Duration = 60,
+            Limit = 10,
+            Take = 1
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Single(slotRepo.AddedSlots);
+        Assert.Equal("adv-1", slotRepo.AddedSlots[0].AdviserId);
+        Assert.Equal(2, rules.EvaluationCount);
+        Assert.NotNull(slotRepo.AddedSlots[0].ScoreBreakdown);
+        Assert.Equal(1, slotRepo.AddedSlots[0].ScoreBreakdown!["rule.workingPatternAllowed"]);
+        Assert.Equal(1, slotRepo.AddedSlots[0].ScoreBreakdown!["rule.capacityAllowed"]);
     }
 
     private sealed class StubSlotScorer : ISlotScorer
@@ -467,5 +529,41 @@ public sealed class AvailabilityHandlerTests
     private sealed class StubTimeZoneProvider : ITimeZoneProvider
     {
         public string DefaultTimeZoneId => "Europe/London";
+    }
+
+    private sealed class StubAvailabilityRulesService : IAvailabilityRulesService
+    {
+        private readonly IReadOnlySet<string> _blockedAdviserIds;
+
+        public StubAvailabilityRulesService(IReadOnlySet<string>? blockedAdviserIds = null)
+        {
+            _blockedAdviserIds = blockedAdviserIds ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        public int EvaluationCount { get; private set; }
+
+        public Task<AvailabilityRuleEvaluation> EvaluateAsync(
+            AdviserDirectoryItem adviser,
+            DateTime startUtc,
+            DateTime endUtc,
+            double durationMinutes,
+            DateTime utcNow,
+            CancellationToken ct)
+        {
+            EvaluationCount++;
+            var allowed = !_blockedAdviserIds.Contains(adviser.AdviserId);
+            return Task.FromResult(new AvailabilityRuleEvaluation(
+                allowed,
+                allowed,
+                allowed,
+                true,
+                allowed ? null : "Capacity",
+                new Dictionary<string, int>
+                {
+                    ["workingPatternAllowed"] = allowed ? 1 : 0,
+                    ["capacityAllowed"] = allowed ? 1 : 0,
+                    ["minimumDurationAllowed"] = 1
+                }));
+        }
     }
 }

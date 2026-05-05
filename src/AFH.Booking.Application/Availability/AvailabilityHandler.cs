@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions;
+using AFH.Booking.Application.Abstractions.Availability;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Abstractions.Persistence;
@@ -35,6 +36,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
     private readonly ITimeZoneProvider _timeZoneProvider;
+    private readonly IAvailabilityRulesService _availabilityRules;
     private readonly ILogger<AvailabilityHandler> _logger;
 
     public AvailabilityHandler(
@@ -48,6 +50,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         IUnitOfWork uow,
         IClock clock,
         ITimeZoneProvider timeZoneProvider,
+        IAvailabilityRulesService availabilityRules,
         ILogger<AvailabilityHandler> logger)
     {
         _scorer = scorer;
@@ -60,6 +63,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         _uow = uow;
         _clock = clock;
         _timeZoneProvider = timeZoneProvider;
+        _availabilityRules = availabilityRules;
         _logger = logger;
     }
 
@@ -327,6 +331,9 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         var result = new List<(string, string, string, bool, BookingSlot)>();
         var requestId = q.TransactionId ?? q.ClientId;
         var calendarWindowPassCount = 0;
+        var workingPatternFailCount = 0;
+        var capacityFailCount = 0;
+        var minimumDurationFailCount = 0;
         var missingTravelCandidateCount = 0;
         var nonPositiveTravelCount = 0;
         var travelFitPassCount = 0;
@@ -351,6 +358,26 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                 var adviserId = adviser.AdviserId;
                 if (string.IsNullOrWhiteSpace(adviserId))
                     continue;
+
+                var rules = await _availabilityRules.EvaluateAsync(
+                    adviser,
+                    start,
+                    end,
+                    q.Duration,
+                    utcNow,
+                    ct);
+
+                if (!rules.IsAllowed)
+                {
+                    if (!rules.WorkingPatternAllowed)
+                        workingPatternFailCount++;
+                    if (!rules.CapacityAllowed)
+                        capacityFailCount++;
+                    if (!rules.MinimumDurationAllowed)
+                        minimumDurationFailCount++;
+
+                    continue;
+                }
 
                 var travelCandidate = travel?.Candidates
                     .FirstOrDefault(x => string.Equals(x.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase));
@@ -400,6 +427,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                     TravelMinutes = travelCandidate?.TravelMinutes,
                     AdviserPreferred = q.PreferredAdviserIds.Contains(adviserId, StringComparer.OrdinalIgnoreCase)
                 });
+                var scoreBreakdown = MergeAudit(score.Breakdown, rules.Audit);
 
                 var slot = BookingSlot.Create(
                     id: Guid.NewGuid().ToString("N"),
@@ -409,7 +437,7 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
                     startUtc: start,
                     endUtc: end,
                     score: score.Score,
-                    scoreBreakdown: score.Breakdown,
+                    scoreBreakdown: scoreBreakdown,
                     travel: travelCandidate,
                     locationRef: q.LocationRef,
                     utcNow: utcNow);
@@ -432,6 +460,16 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             travelFitPassCount,
             travelFitFailCount,
             result.Count);
+
+        if (workingPatternFailCount > 0 || capacityFailCount > 0 || minimumDurationFailCount > 0)
+        {
+            _logger.LogInformation(
+                "Booking availability rule filtering complete. TransactionId={TransactionId} WorkingPatternFailCount={WorkingPatternFailCount} CapacityFailCount={CapacityFailCount} MinimumDurationFailCount={MinimumDurationFailCount}",
+                requestId,
+                workingPatternFailCount,
+                capacityFailCount,
+                minimumDurationFailCount);
+        }
 
         return result;
     }
@@ -681,6 +719,20 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         return string.Join(" ", skill
             .Trim()
             .Split(SkillWhitespaceSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+    }
+
+    private static IReadOnlyDictionary<string, int> MergeAudit(
+        IReadOnlyDictionary<string, int>? scoreBreakdown,
+        IReadOnlyDictionary<string, int> ruleAudit)
+    {
+        var merged = scoreBreakdown is null
+            ? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, int>(scoreBreakdown, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (key, value) in ruleAudit)
+            merged[$"rule.{key}"] = value;
+
+        return merged;
     }
 
     private sealed record AdviserPoolResult(

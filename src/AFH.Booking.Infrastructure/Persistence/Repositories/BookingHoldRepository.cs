@@ -62,6 +62,31 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         return models.Select(m => m.ToDomain()).ToList();
     }
 
+    public async Task<int> CountActiveOrConfirmedByAdviserAsync(
+        string adviserId,
+        DateTime fromUtc,
+        DateTime toUtc,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(adviserId))
+            throw new ArgumentException("adviserId is required.", nameof(adviserId));
+
+        fromUtc = DateTime.SpecifyKind(fromUtc, DateTimeKind.Utc);
+        toUtc = DateTime.SpecifyKind(toUtc, DateTimeKind.Utc);
+        utcNow = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
+
+        return await _db.Holds
+            .AsNoTracking()
+            .Include(x => x.Slot)
+            .Where(x => x.Slot.AdviserId == adviserId)
+            .Where(x => x.Slot.StartUtc < toUtc && x.Slot.EndUtc > fromUtc)
+            .Where(x =>
+                x.Status == HoldStatus.Confirmed ||
+                (x.Status == HoldStatus.Active && x.HoldExpiresUtc > utcNow))
+            .CountAsync(ct);
+    }
+
 
     public async Task<BookingHold?> GetForUpdateAsync(string holdId, CancellationToken ct)
     {

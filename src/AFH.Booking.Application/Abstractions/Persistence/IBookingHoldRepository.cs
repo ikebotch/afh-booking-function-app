@@ -20,6 +20,7 @@ public interface IBookingHoldRepository
     Task<BookingHold?> GetTrackedAsync(string holdId, CancellationToken ct);
 
     Task<IReadOnlyList<BookingHold>> GetExpiredActiveAsync(DateTime utcNow, int take, CancellationToken ct);
+    Task<int> CountActiveOrConfirmedByAdviserAsync(string adviserId, DateTime fromUtc, DateTime toUtc, DateTime utcNow, CancellationToken ct);
 }
 
 public sealed record ActiveHoldLookupResult(

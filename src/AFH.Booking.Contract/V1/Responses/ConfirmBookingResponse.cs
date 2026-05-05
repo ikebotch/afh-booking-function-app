@@ -4,6 +4,9 @@ public sealed class ConfirmBookingResponse
 {
     public string BookingId { get; init; } = default!;
     public string SlotId { get; init; } = default!;
+    public string TransactionId { get; init; } = default!;
+    public string TransactionRef { get; init; } = default!;
     public string Status { get; init; } = default!;
+    public string LifecycleState { get; init; } = default!;
     public string? OnlineMeetingJoinUrl { get; init; }
 }

@@ -131,7 +131,10 @@ public sealed class ConfirmHoldFunctionTests
             {
                 BookingId = cmd.HoldId,
                 SlotId = "slot-1",
-                Status = "Confirmed"
+                TransactionId = "tx-1",
+                TransactionRef = "TRX-1",
+                Status = "Confirmed",
+                LifecycleState = "Booked"
             }));
         }
     }

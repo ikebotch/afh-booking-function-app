@@ -134,7 +134,7 @@ public sealed class LifecycleOrchestratorSequencingTests
         var confirm = new Mock<IConfirmBookingHandler>();
         confirm.Setup(x => x.HandleAsync(It.IsAny<ConfirmBookingCommand>(), It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("confirm"))
-            .ReturnsAsync(Result<ConfirmBookingResponse>.Ok(new ConfirmBookingResponse { BookingId = "booking-new", SlotId = "slot-new", Status = "Confirmed" }));
+            .ReturnsAsync(Result<ConfirmBookingResponse>.Ok(new ConfirmBookingResponse { BookingId = "booking-new", SlotId = "slot-new", TransactionId = "tx-1", TransactionRef = "TRX-1", Status = "Confirmed", LifecycleState = "Booked" }));
 
         var cancel = new Mock<ICancellationOrchestrator>();
         cancel.Setup(x => x.CancelAsync(It.IsAny<CancelBookingCommand>(), false, It.IsAny<CancellationToken>()))

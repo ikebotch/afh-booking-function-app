@@ -147,7 +147,9 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
             OccurredUtc: utcNow,
             CorrelationId: null,
             SourceSystem: "BookingService",
-            RelatedBookingId: null), ct);
+            RelatedBookingId: null,
+            PreviousState: null,
+            NewState: LifecycleStates.Booked), ct);
 
         await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
             eventId,

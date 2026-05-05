@@ -20,6 +20,8 @@ public sealed class LifecycleEventRepository : ILifecycleEventRepository
             BookingId = record.BookingId,
             TransactionId = record.TransactionId,
             EventType = record.EventType,
+            PreviousState = record.PreviousState,
+            NewState = record.NewState,
             ActorType = record.ActorType,
             ActorId = record.ActorId,
             ReasonCode = record.ReasonCode,

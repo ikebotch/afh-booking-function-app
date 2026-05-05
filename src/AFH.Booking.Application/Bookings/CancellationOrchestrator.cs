@@ -132,7 +132,9 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             OccurredUtc: utcNow,
             CorrelationId: cmd.CorrelationId,
             SourceSystem: "BookingService",
-            RelatedBookingId: null), ct);
+            RelatedBookingId: null,
+            PreviousState: ResolveLifecycleStateBeforeCancellation(before),
+            NewState: LifecycleStates.Cancelled), ct);
 
         await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
             eventId,
@@ -245,6 +247,17 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             transactionId = tx.Id,
             transactionRef = tx.TransactionRef,
             transactionStatus = tx.Status.ToString()
+        };
+    }
+
+    private static string? ResolveLifecycleStateBeforeCancellation(object before)
+    {
+        var status = before.GetType().GetProperty("holdStatus")?.GetValue(before)?.ToString();
+        return status switch
+        {
+            nameof(BookingHoldStatus.Confirmed) => LifecycleStates.Booked,
+            nameof(BookingHoldStatus.Cancelled) => LifecycleStates.Cancelled,
+            _ => null
         };
     }
 

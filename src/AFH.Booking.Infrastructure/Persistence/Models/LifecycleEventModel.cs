@@ -6,6 +6,8 @@ public sealed class LifecycleEventModel
     public string BookingId { get; set; } = default!;
     public string? TransactionId { get; set; }
     public string EventType { get; set; } = default!;
+    public string? PreviousState { get; set; }
+    public string? NewState { get; set; }
     public string? ActorType { get; set; }
     public string? ActorId { get; set; }
     public string? ReasonCode { get; set; }

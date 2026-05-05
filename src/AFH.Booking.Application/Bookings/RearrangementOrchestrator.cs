@@ -142,7 +142,9 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             OccurredUtc: _clock.UtcNow,
             CorrelationId: cmd.CorrelationId,
             SourceSystem: "BookingService",
-            RelatedBookingId: oldHold.Id), ct);
+            RelatedBookingId: oldHold.Id,
+            PreviousState: LifecycleStates.Booked,
+            NewState: LifecycleStates.Rearranged), ct);
 
         var now = _clock.UtcNow;
         await _audit.RecordStepAsync(new LifecycleAuditStepEntry(eventId, LifecycleStepNames.Outlook, 1, LifecycleStepStatuses.Succeeded, now, now, null, null, cmd.CorrelationId), ct);

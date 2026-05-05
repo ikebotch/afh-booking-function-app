@@ -4,7 +4,17 @@ public static class LifecycleEventTypes
 {
     public const string Booked = "Booked";
     public const string Cancelled = "Cancelled";
+    public const string Rearranged = "Rearranged";
     public const string ReArranged = "ReArranged";
+    public const string NoShow = "No Show";
+}
+
+public static class LifecycleStates
+{
+    public const string Booked = "Booked";
+    public const string Rearranged = "Rearranged";
+    public const string Cancelled = "Cancelled";
+    public const string NoShow = "No Show";
 }
 
 public static class LifecycleActors

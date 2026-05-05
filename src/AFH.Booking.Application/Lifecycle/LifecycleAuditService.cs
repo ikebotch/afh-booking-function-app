@@ -22,6 +22,12 @@ public sealed class LifecycleAuditService : ILifecycleAuditService
 
     public async Task<string> RecordEventAsync(LifecycleAuditEntry entry, CancellationToken ct)
     {
+        var newState = string.IsNullOrWhiteSpace(entry.NewState)
+            ? BookingLifecycleStateMachine.ResolveStateForEventType(entry.EventType)
+            : entry.NewState;
+
+        BookingLifecycleStateMachine.Validate(entry.PreviousState, newState);
+
         var id = Guid.NewGuid().ToString("N");
         await _events.AddAsync(new LifecycleEventRecord
         {
@@ -29,6 +35,8 @@ public sealed class LifecycleAuditService : ILifecycleAuditService
             BookingId = entry.BookingId,
             TransactionId = entry.TransactionId,
             EventType = entry.EventType,
+            PreviousState = entry.PreviousState,
+            NewState = newState,
             ActorType = entry.ActorType,
             ActorId = entry.ActorId,
             ReasonCode = entry.ReasonCode,

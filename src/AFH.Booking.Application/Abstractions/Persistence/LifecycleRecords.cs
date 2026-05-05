@@ -6,6 +6,8 @@ public sealed record LifecycleEventRecord
     public string BookingId { get; init; } = default!;
     public string? TransactionId { get; init; }
     public string EventType { get; init; } = default!;
+    public string? PreviousState { get; init; }
+    public string? NewState { get; init; }
     public string? ActorType { get; init; }
     public string? ActorId { get; init; }
     public string? ReasonCode { get; init; }

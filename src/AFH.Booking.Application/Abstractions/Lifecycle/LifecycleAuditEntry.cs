@@ -13,7 +13,9 @@ public sealed record LifecycleAuditEntry(
     DateTime OccurredUtc,
     string? CorrelationId,
     string? SourceSystem = null,
-    string? RelatedBookingId = null);
+    string? RelatedBookingId = null,
+    string? PreviousState = null,
+    string? NewState = null);
 
 public sealed record LifecycleAuditStepEntry(
     string LifecycleEventId,

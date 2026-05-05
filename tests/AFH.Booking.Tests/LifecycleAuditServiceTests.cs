@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Lifecycle;
 
 namespace AFH.Booking.Tests;
@@ -21,7 +22,7 @@ public sealed class LifecycleAuditServiceTests
             new LifecycleAuditEntry(
                 BookingId: "booking-1",
                 TransactionId: "tx-1",
-                EventType: "BookingCancelled",
+                EventType: LifecycleEventTypes.Cancelled,
                 ActorType: "Client",
                 ActorId: "client-1",
                 ReasonCode: "CLIENT_REQUEST",
@@ -29,7 +30,8 @@ public sealed class LifecycleAuditServiceTests
                 Before: new { status = "Confirmed", slotId = "slot-old" },
                 After: new { status = "Cancelled", slotId = "slot-old" },
                 OccurredUtc: DateTime.UtcNow,
-                CorrelationId: "corr-1"),
+                CorrelationId: "corr-1",
+                PreviousState: LifecycleStates.Booked),
             CancellationToken.None);
 
         Assert.NotEmpty(eventId);
@@ -37,7 +39,38 @@ public sealed class LifecycleAuditServiceTests
         Assert.Equal("booking-1", persisted.BookingId);
         Assert.Contains("\"status\":\"Confirmed\"", persisted.BeforeJson);
         Assert.Contains("\"status\":\"Cancelled\"", persisted.AfterJson);
+        Assert.Equal(LifecycleStates.Booked, persisted.PreviousState);
+        Assert.Equal(LifecycleStates.Cancelled, persisted.NewState);
         Assert.Equal("corr-1", persisted.CorrelationId);
+    }
+
+    [Fact]
+    public async Task RecordEventAsync_BlocksInvalidLifecycleTransition()
+    {
+        var events = new List<LifecycleEventRecord>();
+        var service = new LifecycleAuditService(
+            new InMemoryLifecycleEventRepository(events),
+            new InMemoryLifecycleStepRepository(new List<LifecycleStepRecord>()),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.RecordEventAsync(
+            new LifecycleAuditEntry(
+                BookingId: "booking-1",
+                TransactionId: "tx-1",
+                EventType: LifecycleEventTypes.Booked,
+                ActorType: LifecycleActors.System,
+                ActorId: "system",
+                ReasonCode: null,
+                ReasonNotes: null,
+                Before: null,
+                After: new { status = "Confirmed" },
+                OccurredUtc: DateTime.UtcNow,
+                CorrelationId: "corr-1",
+                PreviousState: LifecycleStates.Cancelled,
+                NewState: LifecycleStates.Booked),
+            CancellationToken.None));
+
+        Assert.Empty(events);
     }
 
     [Fact]

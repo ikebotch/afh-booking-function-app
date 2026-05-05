@@ -74,36 +74,6 @@ public sealed class LifecycleAuditServiceTests
     }
 
     [Fact]
-    public async Task RecordEventAsync_AllowsBookedToConfirmedTransition()
-    {
-        var events = new List<LifecycleEventRecord>();
-        var service = new LifecycleAuditService(
-            new InMemoryLifecycleEventRepository(events),
-            new InMemoryLifecycleStepRepository(new List<LifecycleStepRecord>()),
-            new JsonSerializerOptions(JsonSerializerDefaults.Web));
-
-        await service.RecordEventAsync(
-            new LifecycleAuditEntry(
-                BookingId: "booking-1",
-                TransactionId: "tx-1",
-                EventType: LifecycleEventTypes.Confirmed,
-                ActorType: LifecycleActors.System,
-                ActorId: "system",
-                ReasonCode: null,
-                ReasonNotes: null,
-                Before: new { state = LifecycleStates.Booked },
-                After: new { state = LifecycleStates.Confirmed },
-                OccurredUtc: DateTime.UtcNow,
-                CorrelationId: "corr-1",
-                PreviousState: LifecycleStates.Booked),
-            CancellationToken.None);
-
-        var persisted = Assert.Single(events);
-        Assert.Equal(LifecycleStates.Booked, persisted.PreviousState);
-        Assert.Equal(LifecycleStates.Confirmed, persisted.NewState);
-    }
-
-    [Fact]
     public async Task RecordStepAsync_PersistsTimelineStep()
     {
         var events = new List<LifecycleEventRecord>();

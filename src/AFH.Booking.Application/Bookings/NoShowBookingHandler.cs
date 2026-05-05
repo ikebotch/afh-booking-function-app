@@ -98,7 +98,10 @@ public sealed class NoShowBookingHandler : INoShowBookingHandler
             SourceSystem: "BookingService",
             RelatedBookingId: null,
             PreviousState: LifecycleStates.Booked,
-            NewState: LifecycleStates.NoShow), ct);
+            NewState: LifecycleStates.NoShow,
+            TriggerReason: string.IsNullOrWhiteSpace(cmd.ReasonCode)
+                ? "ConfirmedBookingMarkedNoShow"
+                : cmd.ReasonCode.Trim()), ct);
 
         await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
             eventId,

@@ -31,7 +31,8 @@ public sealed class LifecycleEventRepository : ILifecycleEventRepository
             OccurredUtc = record.OccurredUtc,
             CorrelationId = record.CorrelationId,
             SourceSystem = record.SourceSystem,
-            RelatedBookingId = record.RelatedBookingId
+            RelatedBookingId = record.RelatedBookingId,
+            TriggerReason = record.TriggerReason
         }, ct);
     }
 }

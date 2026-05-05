@@ -74,6 +74,38 @@ public sealed class LifecycleAuditServiceTests
     }
 
     [Fact]
+    public async Task RecordEventAsync_DefaultsMissingActorToSystem_AndPersistsTriggerReason()
+    {
+        var events = new List<LifecycleEventRecord>();
+        var service = new LifecycleAuditService(
+            new InMemoryLifecycleEventRepository(events),
+            new InMemoryLifecycleStepRepository(new List<LifecycleStepRecord>()),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        await service.RecordEventAsync(
+            new LifecycleAuditEntry(
+                BookingId: "booking-1",
+                TransactionId: "tx-1",
+                EventType: LifecycleEventTypes.NoShow,
+                ActorType: null,
+                ActorId: "scheduler",
+                ReasonCode: null,
+                ReasonNotes: null,
+                Before: new { state = LifecycleStates.Booked },
+                After: new { state = LifecycleStates.NoShow },
+                OccurredUtc: DateTime.UtcNow,
+                CorrelationId: "corr-1",
+                PreviousState: LifecycleStates.Booked,
+                NewState: LifecycleStates.NoShow,
+                TriggerReason: "MissedAppointmentSweep"),
+            CancellationToken.None);
+
+        var persisted = Assert.Single(events);
+        Assert.Equal(LifecycleActors.System, persisted.ActorType);
+        Assert.Equal("MissedAppointmentSweep", persisted.TriggerReason);
+    }
+
+    [Fact]
     public async Task RecordStepAsync_PersistsTimelineStep()
     {
         var events = new List<LifecycleEventRecord>();

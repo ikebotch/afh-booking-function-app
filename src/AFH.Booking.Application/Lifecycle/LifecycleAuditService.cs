@@ -1,6 +1,7 @@
 using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.Common;
 
 namespace AFH.Booking.Application.Lifecycle;
 
@@ -29,6 +30,10 @@ public sealed class LifecycleAuditService : ILifecycleAuditService
         BookingLifecycleStateMachine.Validate(entry.PreviousState, newState);
 
         var id = Guid.NewGuid().ToString("N");
+        var actorType = string.IsNullOrWhiteSpace(entry.ActorType)
+            ? LifecycleActors.System
+            : entry.ActorType.Trim();
+
         await _events.AddAsync(new LifecycleEventRecord
         {
             Id = id,
@@ -37,7 +42,7 @@ public sealed class LifecycleAuditService : ILifecycleAuditService
             EventType = entry.EventType,
             PreviousState = entry.PreviousState,
             NewState = newState,
-            ActorType = entry.ActorType,
+            ActorType = actorType,
             ActorId = entry.ActorId,
             ReasonCode = entry.ReasonCode,
             ReasonNotes = entry.ReasonNotes,
@@ -46,7 +51,8 @@ public sealed class LifecycleAuditService : ILifecycleAuditService
             OccurredUtc = entry.OccurredUtc,
             CorrelationId = entry.CorrelationId,
             SourceSystem = entry.SourceSystem,
-            RelatedBookingId = entry.RelatedBookingId
+            RelatedBookingId = entry.RelatedBookingId,
+            TriggerReason = entry.TriggerReason
         }, ct);
 
         return id;

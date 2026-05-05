@@ -18,6 +18,7 @@ public sealed class LifecycleEventModel
     public string? CorrelationId { get; set; }
     public string? SourceSystem { get; set; }
     public string? RelatedBookingId { get; set; }
+    public string? TriggerReason { get; set; }
 
     public List<LifecycleStepModel> Steps { get; set; } = new();
 }

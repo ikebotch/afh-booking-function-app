@@ -26,6 +26,7 @@ public sealed class LifecycleEventModelConfiguration : IEntityTypeConfiguration<
         b.Property(x => x.CorrelationId).HasMaxLength(128);
         b.Property(x => x.SourceSystem).HasMaxLength(64);
         b.Property(x => x.RelatedBookingId).HasMaxLength(64);
+        b.Property(x => x.TriggerReason).HasMaxLength(256);
 
         b.HasMany(x => x.Steps)
             .WithOne(x => x.LifecycleEvent)
@@ -38,5 +39,6 @@ public sealed class LifecycleEventModelConfiguration : IEntityTypeConfiguration<
         b.HasIndex(x => x.NewState);
         b.HasIndex(x => x.OccurredUtc);
         b.HasIndex(x => x.CorrelationId);
+        b.HasIndex(x => x.TriggerReason);
     }
 }

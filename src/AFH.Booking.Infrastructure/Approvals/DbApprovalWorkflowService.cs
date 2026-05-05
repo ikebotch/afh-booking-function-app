@@ -5,6 +5,7 @@ using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Mapping;
@@ -49,6 +50,7 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
         ValidateCreate(request);
 
         var booking = await LoadBookingAsync(request.BookingId, ct);
+        var lifecycleState = ResolveLifecycleState(booking.Hold.Status) ?? LifecycleStates.Booked;
         var routeTarget = await _routing.ResolveAsync(ct);
         var payloadJson = JsonSerializer.Serialize(new
         {
@@ -111,7 +113,11 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
             },
             OccurredUtc: model.RequestedUtc,
             CorrelationId: request.CorrelationId,
-            SourceSystem: "BookingService"), ct);
+            SourceSystem: "BookingService",
+            RelatedBookingId: null,
+            PreviousState: lifecycleState,
+            NewState: lifecycleState,
+            TriggerReason: "AdviserApprovalRequestSubmitted"), ct);
 
         await _uow.SaveChangesAsync(ct);
 
@@ -159,6 +165,8 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
         row.Reviewer = request.Reviewer.Trim();
         row.ReviewNotes = request.Notes?.Trim();
         row.ReviewedUtc = DateTime.UtcNow;
+        var bookingBeforeDecision = await LoadBookingAsync(row.BookingId, ct);
+        var beforeDecisionState = ResolveLifecycleState(bookingBeforeDecision.Hold.Status) ?? LifecycleStates.Booked;
 
         _db.ApprovalHistory.Add(new ApprovalHistoryModel
         {
@@ -184,15 +192,18 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
             After: new { approvalStatus = row.Status, approver = row.Reviewer },
             OccurredUtc: row.ReviewedUtc.Value,
             CorrelationId: request.CorrelationId,
-            SourceSystem: "BookingService"), ct);
+            SourceSystem: "BookingService",
+            RelatedBookingId: null,
+            PreviousState: beforeDecisionState,
+            NewState: beforeDecisionState,
+            TriggerReason: request.Approved ? "ManagerApprovedAdviserRequest" : "ManagerRejectedAdviserRequest"), ct);
 
         await _uow.SaveChangesAsync(ct);
 
-        var booking = await LoadBookingAsync(row.BookingId, ct);
         await _notifications.RecordOutcomeAsync(
             row.BookingId,
             row.TransactionId,
-            booking.Transaction.TransactionRef,
+            bookingBeforeDecision.Transaction.TransactionRef,
             row.RequesterId ?? row.RequestedBy,
             row.Reviewer!,
             row.Status,
@@ -224,6 +235,38 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
                 Comments = execution.ErrorMessage,
                 OccurredUtc = DateTime.UtcNow
             });
+
+            var executionState = execution.IsSuccess
+                ? ResolveExecutionState(row.ChangeType)
+                : beforeDecisionState;
+
+            await _audit.RecordEventAsync(new LifecycleAuditEntry(
+                BookingId: row.BookingId,
+                TransactionId: row.TransactionId,
+                EventType: execution.IsSuccess ? "ApprovalExecutionCompleted" : "ApprovalExecutionFailed",
+                ActorType: LifecycleActors.System,
+                ActorId: "BookingService",
+                ReasonCode: row.ReasonCode,
+                ReasonNotes: execution.ErrorMessage ?? row.ReviewNotes,
+                Before: new
+                {
+                    approvalStatus = row.Status,
+                    changeType = row.ChangeType,
+                    lifecycleState = beforeDecisionState
+                },
+                After: new
+                {
+                    approvalExecution = execution.IsSuccess ? "Completed" : "Failed",
+                    changeType = row.ChangeType,
+                    lifecycleState = executionState
+                },
+                OccurredUtc: DateTime.UtcNow,
+                CorrelationId: request.CorrelationId,
+                SourceSystem: "BookingService",
+                RelatedBookingId: row.BookingId,
+                PreviousState: beforeDecisionState,
+                NewState: executionState,
+                TriggerReason: "ApprovedAdviserRequestExecution"), ct);
 
             await _uow.SaveChangesAsync(ct);
         }
@@ -316,6 +359,23 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
         {
             throw new InvalidOperationException("newSlotId is required for adviser rearrangement approval requests.");
         }
+    }
+
+    private static string? ResolveLifecycleState(BookingHoldStatus status)
+    {
+        return status switch
+        {
+            BookingHoldStatus.Confirmed => LifecycleStates.Booked,
+            BookingHoldStatus.Cancelled => LifecycleStates.Cancelled,
+            _ => null
+        };
+    }
+
+    private static string ResolveExecutionState(string changeType)
+    {
+        return string.Equals(changeType, "Cancel", StringComparison.OrdinalIgnoreCase)
+            ? LifecycleStates.Cancelled
+            : LifecycleStates.Rearranged;
     }
 
     private static ApprovalRequestResponse ToResponse(ApprovalRequestModel model)

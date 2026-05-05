@@ -15,7 +15,8 @@ public sealed record LifecycleAuditEntry(
     string? SourceSystem = null,
     string? RelatedBookingId = null,
     string? PreviousState = null,
-    string? NewState = null);
+    string? NewState = null,
+    string? TriggerReason = null);
 
 public sealed record LifecycleAuditStepEntry(
     string LifecycleEventId,

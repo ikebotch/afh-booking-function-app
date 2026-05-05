@@ -16,6 +16,7 @@ internal static class BookingFlowModuleServiceCollectionExtensions
     {
         services.AddScoped<ICancelBookingHandler, CancelBookingHandler>();
         services.AddScoped<IBookingDetailsHandler, BookingDetailsHandler>();
+        services.AddScoped<INoShowBookingHandler, NoShowBookingHandler>();
         services.AddScoped<IRearrangementOptionsHandler, RearrangementOptionsHandler>();
         services.AddScoped<IRearrangeBookingHandler, RearrangeBookingHandler>();
         services.AddScoped<ICancellationOrchestrator, CancellationOrchestrator>();

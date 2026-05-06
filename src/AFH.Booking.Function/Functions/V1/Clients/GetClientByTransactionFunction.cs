@@ -33,14 +33,22 @@ public sealed class GetClientByTransactionFunction
         if (string.IsNullOrWhiteSpace(transactionId))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "transactionId is required.", ct);
 
-        _logger.LogInformation("Client lookup (transaction): {TransactionId}", transactionId);
+        var transactionRef = transactionId.Trim();
+        _logger.LogInformation("Client lookup (transaction): {TransactionId}", transactionRef);
 
-        var client = await _clients.GetAsync(transactionId.Trim(), ct);
+        var transaction = await _transactions.GetLatestByTransactionRefAsync(transactionRef, ct);
+        if (transaction is not null && transaction.Status != BookingTransactionStatus.Open)
+            return await req.ProblemAsync(
+                HttpStatusCode.Conflict,
+                $"Transaction reference '{transactionRef}' is already {transaction.Status}.",
+                ct,
+                "TransactionClosed");
+
+        var client = await _clients.GetAsync(transactionRef, ct);
 
         if (client is null)
             return await req.ProblemAsync(HttpStatusCode.NotFound, "Client not found.", ct, "NotFound");
 
-        var transaction = await _transactions.GetLatestByTransactionRefAsync(transactionId.Trim(), ct);
         var clientInfo = new
         {
             FirstName = Masking.MaskName(client.FirstName?.Trim() ?? string.Empty),
@@ -48,7 +56,7 @@ public sealed class GetClientByTransactionFunction
             Email = Masking.MaskEmail(client.Email?.Trim() ?? string.Empty),
             PreferredStartUtc = client?.AppointmentDateTime,
             TransactionStatus = transaction?.Status.ToString(),
-            IsTransactionClosed = transaction is not null && transaction.Status != BookingTransactionStatus.Open
+            IsTransactionClosed = false
         };
 
         return await req.OkJsonAsync(clientInfo, ct);

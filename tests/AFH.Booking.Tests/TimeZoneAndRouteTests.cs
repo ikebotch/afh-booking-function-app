@@ -35,6 +35,7 @@ public class TimeZoneAndRouteTests
     [InlineData("Admin_GetAdviserProjectionFeed", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Bookings_RecordEmailBounce", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Client_GetByTransaction_V2", EndpointAccessPolicy.InternalOnly)]
+    [InlineData("Config_GetMeetingTypes", EndpointAccessPolicy.Public)]
     public void EndpointAccessPolicies_ClassifiesFunctions(string functionName, EndpointAccessPolicy expected)
     {
         Assert.Equal(expected, EndpointAccessPolicies.GetPolicy(functionName));

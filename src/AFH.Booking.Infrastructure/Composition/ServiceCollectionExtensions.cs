@@ -52,6 +52,7 @@ public static class ServiceCollectionExtensions
         services.Configure<OutlookGovernanceOptions>(config.GetSection(OutlookGovernanceOptions.SectionName));
         services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
         services.Configure<AvailabilityRulesOptions>(config.GetSection(AvailabilityRulesOptions.SectionName));
+        services.Configure<BookingConfigOptions>(config.GetSection(BookingConfigOptions.SectionName));
         services.Configure<ApplicationLoggingOptions>(config.GetSection(ApplicationLoggingOptions.SectionName));
         services.AddSingleton<IInternalServiceAuthenticator, InternalBearerServiceAuthenticator>();
         services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();

@@ -1,8 +1,6 @@
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Function.Http;
-using Microsoft.Extensions.Options;
-
 namespace AFH.Booking.Function.Functions.V1.Config;
 
 [BookingOpenApiTag("Config")]
@@ -10,17 +8,17 @@ public sealed class GetMeetingTopicsFunction
 {
     private static readonly char[] TopicWhitespaceSeparators = [' ', '\t', '\r', '\n'];
 
-    private readonly IOptions<BookingConfigOptions> _options;
     private readonly IAdviserProfileProjectionRepository _profiles;
+    private readonly IMeetingTopicRepository _topics;
     private readonly ILogger<GetMeetingTopicsFunction> _logger;
 
     public GetMeetingTopicsFunction(
-        IOptions<BookingConfigOptions> options,
         IAdviserProfileProjectionRepository profiles,
+        IMeetingTopicRepository topics,
         ILogger<GetMeetingTopicsFunction> logger)
     {
-        _options = options;
         _profiles = profiles;
+        _topics = topics;
         _logger = logger;
     }
 
@@ -34,20 +32,20 @@ public sealed class GetMeetingTopicsFunction
         HttpRequestData req,
         CancellationToken ct)
     {
-        var configuredTopics = _options.Value.MeetingTopics
+        var configuredTopics = (await _topics.ListActiveAsync(ct))
             .Where(x => !string.IsNullOrWhiteSpace(x.Code))
             .Select(x => new MeetingTopicDto
             {
                 Code = x.Code.Trim(),
                 Label = string.IsNullOrWhiteSpace(x.Label) ? x.Code.Trim() : x.Label.Trim(),
                 IsDefault = x.IsDefault,
-                Source = "Configuration"
+                Source = "MeetingTopics"
             })
             .GroupBy(x => NormalizeTopic(x.Code), StringComparer.OrdinalIgnoreCase)
             .ToDictionary(x => x.Key, x => x.First(), StringComparer.OrdinalIgnoreCase);
 
         IReadOnlyList<AdviserProfileProjectionRecord> activeProfiles = [];
-        var source = "ConfigurationAndAdviserSkills";
+        var source = "MeetingTopicsAndAdviserSkills";
 
         try
         {
@@ -55,7 +53,7 @@ public sealed class GetMeetingTopicsFunction
         }
         catch (Exception ex)
         {
-            source = "Configuration";
+            source = "MeetingTopics";
             _logger.LogWarning(ex, "Unable to load adviser skills for meeting topics. Returning configured topics only.");
         }
 
@@ -73,7 +71,7 @@ public sealed class GetMeetingTopicsFunction
                         Code = configured.Code,
                         Label = configured.Label,
                         IsDefault = configured.IsDefault,
-                        Source = "ConfigurationAndAdviserSkills"
+                        Source = "MeetingTopicsAndAdviserSkills"
                     }
                     : new MeetingTopicDto
                     {
@@ -86,7 +84,7 @@ public sealed class GetMeetingTopicsFunction
         var meetingTopics = configuredTopics.Values
             .Concat(adviserSkillTopics)
             .GroupBy(x => NormalizeTopic(x.Code), StringComparer.OrdinalIgnoreCase)
-            .Select(x => x.OrderByDescending(y => y.Source.Contains("Configuration", StringComparison.OrdinalIgnoreCase)).First())
+            .Select(x => x.OrderByDescending(y => y.Source.Contains("MeetingTopics", StringComparison.OrdinalIgnoreCase)).First())
             .OrderByDescending(x => x.IsDefault)
             .ThenBy(x => x.Label, StringComparer.OrdinalIgnoreCase)
             .ToArray();

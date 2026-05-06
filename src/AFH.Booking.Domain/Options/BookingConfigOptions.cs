@@ -11,12 +11,6 @@ public sealed class BookingConfigOptions
         new() { Code = "Wills", Label = "Wills" }
     ];
 
-    public List<MeetingTopicOptions> MeetingTopics { get; set; } =
-    [
-        new() { Code = "Retirement", Label = "Retirement" },
-        new() { Code = "Pension", Label = "Pension" },
-        new() { Code = "Will", Label = "Will" }
-    ];
 }
 
 public sealed class MeetingTypeOptions
@@ -25,11 +19,4 @@ public sealed class MeetingTypeOptions
     public string Label { get; set; } = string.Empty;
     public bool IsDefault { get; set; }
     public int? DefaultDurationMinutes { get; set; }
-}
-
-public sealed class MeetingTopicOptions
-{
-    public string Code { get; set; } = string.Empty;
-    public string Label { get; set; } = string.Empty;
-    public bool IsDefault { get; set; }
 }

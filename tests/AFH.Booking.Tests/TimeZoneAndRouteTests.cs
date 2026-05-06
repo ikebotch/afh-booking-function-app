@@ -37,6 +37,7 @@ public class TimeZoneAndRouteTests
     [InlineData("Client_GetByTransaction_V2", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Config_GetMeetingTypes", EndpointAccessPolicy.Public)]
     [InlineData("Config_GetMeetingTopics", EndpointAccessPolicy.Public)]
+    [InlineData("Config_UpsertMeetingTopic", EndpointAccessPolicy.InternalOnly)]
     public void EndpointAccessPolicies_ClassifiesFunctions(string functionName, EndpointAccessPolicy expected)
     {
         Assert.Equal(expected, EndpointAccessPolicies.GetPolicy(functionName));

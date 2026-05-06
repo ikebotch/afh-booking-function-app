@@ -2,7 +2,7 @@ namespace AFH.Booking.Contracts.V1.Responses;
 
 public sealed class MeetingTopicsResponse
 {
-    public string Source { get; init; } = "ConfigurationAndAdviserSkills";
+    public string Source { get; init; } = "MeetingTopicsAndAdviserSkills";
     public IReadOnlyList<MeetingTopicDto> MeetingTopics { get; init; } = [];
 }
 

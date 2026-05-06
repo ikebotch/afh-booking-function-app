@@ -151,6 +151,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBookingSlotRepository, BookingSlotRepository>();
         services.AddScoped<IBookingHoldRepository, BookingHoldRepository>();
         services.AddScoped<IAdviserProfileProjectionRepository, AdviserProfileProjectionRepository>();
+        services.AddScoped<IMeetingTopicRepository, MeetingTopicRepository>();
         services.AddScoped<IIntegrationSyncStateRepository, IntegrationSyncStateRepository>();
         services.AddScoped<ILifecycleEventRepository, LifecycleEventRepository>();
         services.AddScoped<ILifecycleStepRepository, LifecycleStepRepository>();

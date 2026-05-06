@@ -23,6 +23,7 @@ public sealed class BookingDbContext : DbContext
     public DbSet<DownstreamUpdateModel> DownstreamUpdates => Set<DownstreamUpdateModel>();
     public DbSet<OperationalIssueModel> OperationalIssues => Set<OperationalIssueModel>();
     public DbSet<AdviserProfileProjectionModel> AdviserProfileProjections => Set<AdviserProfileProjectionModel>();
+    public DbSet<MeetingTopicModel> MeetingTopics => Set<MeetingTopicModel>();
     public DbSet<IntegrationSyncStateModel> IntegrationSyncStates => Set<IntegrationSyncStateModel>();
     public DbSet<IntegrationOperationAuditModel> IntegrationOperationAudits => Set<IntegrationOperationAuditModel>();
     public DbSet<ApplicationLogModel> ApplicationLogs => Set<ApplicationLogModel>();

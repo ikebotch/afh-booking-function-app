@@ -1,17 +1,17 @@
+using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Function.Http;
-using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Function.Functions.V1.Config;
 
 [BookingOpenApiTag("Config")]
 public sealed class GetMeetingTypesFunction
 {
-    private readonly IOptions<BookingConfigOptions> _options;
+    private readonly IMeetingTypeRepository _types;
 
-    public GetMeetingTypesFunction(IOptions<BookingConfigOptions> options)
+    public GetMeetingTypesFunction(IMeetingTypeRepository types)
     {
-        _options = options;
+        _types = types;
     }
 
     [Function("Config_GetMeetingTypes")]
@@ -24,8 +24,7 @@ public sealed class GetMeetingTypesFunction
         HttpRequestData req,
         CancellationToken ct)
     {
-        var meetingTypes = _options.Value.MeetingTypes
-            .Where(x => !string.IsNullOrWhiteSpace(x.Code))
+        var meetingTypes = (await _types.ListActiveAsync(ct))
             .Select(x => new MeetingTypeDto
             {
                 Code = x.Code.Trim(),
@@ -41,7 +40,7 @@ public sealed class GetMeetingTypesFunction
 
         return await req.OkJsonAsync(new MeetingTypesResponse
         {
-            Source = "Configuration",
+            Source = "MeetingTypes",
             MeetingTypes = meetingTypes
         }, ct);
     }

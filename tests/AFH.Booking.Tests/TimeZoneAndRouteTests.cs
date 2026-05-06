@@ -35,8 +35,11 @@ public class TimeZoneAndRouteTests
     [InlineData("Admin_GetAdviserProjectionFeed", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Bookings_RecordEmailBounce", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Client_GetByTransaction_V2", EndpointAccessPolicy.InternalOnly)]
+    [InlineData("Config_DeleteMeetingType", EndpointAccessPolicy.InternalOnly)]
+    [InlineData("Config_DeleteMeetingTopic", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Config_GetMeetingTypes", EndpointAccessPolicy.Public)]
     [InlineData("Config_GetMeetingTopics", EndpointAccessPolicy.Public)]
+    [InlineData("Config_UpsertMeetingType", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Config_UpsertMeetingTopic", EndpointAccessPolicy.InternalOnly)]
     public void EndpointAccessPolicies_ClassifiesFunctions(string functionName, EndpointAccessPolicy expected)
     {

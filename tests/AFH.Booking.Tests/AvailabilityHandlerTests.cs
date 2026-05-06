@@ -15,11 +15,67 @@ using AFH.Booking.Domain.Bookings.Score;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Transactions;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
 
 namespace AFH.Booking.Tests;
 
 public sealed class AvailabilityHandlerTests
 {
+    [Fact]
+    public async Task HandleAsync_WhenTransactionReferenceIsCompleted_ReturnsClosedConflict()
+    {
+        var closed = BookingTransaction.Rehydrate(
+            id: "tx-closed",
+            transactionRef: "lead-1",
+            proposedStartUtc: new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
+            duration: TimeSpan.FromMinutes(60),
+            timezone: "Europe/London",
+            isRemote: true,
+            meetingType: "Review",
+            locationRef: null,
+            status: BookingTransactionStatus.Completed,
+            createdUtc: new DateTime(2026, 04, 01, 9, 0, 0, DateTimeKind.Utc),
+            expiresUtc: null);
+        var txRepo = new StubTransactionRepository(closed);
+        var sut = new AvailabilityHandler(
+            new StubSlotScorer(),
+            new StubCalendarViewQueryHandler(),
+            new StubTravelMatrixService(),
+            new StubClientDirectory(),
+            new StubProfiles(
+            [
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-1",
+                    DisplayName = "Adviser One",
+                    MailboxUserId = "adviser.one@tenant.com",
+                    IsActive = true
+                }
+            ]),
+            txRepo,
+            new StubSlotRepository(),
+            new StubUnitOfWork(),
+            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
+            new StubTimeZoneProvider(),
+            new StubAvailabilityRulesService(),
+            NullLogger<AvailabilityHandler>.Instance);
+
+        var result = await sut.HandleAsync(new GetAvailabilityQuery
+        {
+            TransactionId = "lead-1",
+            IsRemote = true,
+            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
+            Duration = 60,
+            Limit = 10,
+            Take = 1
+        }, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.Conflict, result.StatusCode);
+        Assert.Equal("TransactionClosed", result.ErrorCode);
+        Assert.Null(txRepo.AddedTransaction);
+    }
+
     [Fact]
     public async Task HandleAsync_RemoteWithoutPreferredAdvisers_UsesActiveProjectedAdvisers()
     {
@@ -484,6 +540,13 @@ public sealed class AvailabilityHandlerTests
 
     private sealed class StubTransactionRepository : IBookingTransactionRepository
     {
+        private readonly BookingTransaction? _latestByRef;
+
+        public StubTransactionRepository(BookingTransaction? latestByRef = null)
+        {
+            _latestByRef = latestByRef;
+        }
+
         public BookingTransaction? AddedTransaction { get; private set; }
         public Task AddAsync(BookingTransaction transaction, CancellationToken ct)
         {
@@ -495,6 +558,7 @@ public sealed class AvailabilityHandlerTests
         public Task<BookingTransaction?> GetWithSlotsAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(null);
         public Task UpdateAsync(BookingTransaction transaction, CancellationToken ct) => Task.CompletedTask;
         public Task<BookingTransaction?> GetForUpdateAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(null);
+        public Task<BookingTransaction?> GetLatestByTransactionRefAsync(string transactionRef, CancellationToken ct) => Task.FromResult(_latestByRef);
     }
 
     private sealed class StubSlotRepository : IBookingSlotRepository

@@ -52,6 +52,19 @@ public sealed class BookingTransactionRepository : IBookingTransactionRepository
         return m?.ToDomain(includeSlots: true);
     }
 
+    public async Task<BookingTransaction?> GetLatestByTransactionRefAsync(string transactionRef, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(transactionRef))
+            return null;
+
+        var m = await _db.BookingTransactions
+            .AsNoTracking()
+            .OrderByDescending(x => x.CreatedUtc)
+            .FirstOrDefaultAsync(x => x.TransactionRef == transactionRef.Trim(), ct);
+
+        return m?.ToDomain();
+    }
+
     public async Task UpdateAsync(BookingTransaction tx, CancellationToken ct)
     {
         var model = await _db.BookingTransactions

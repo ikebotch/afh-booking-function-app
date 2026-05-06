@@ -79,6 +79,9 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
             return prospectResult.Error;
 
         var prospect = prospectResult.Value;
+        var closedResult = await EnsureTransactionReferenceIsOpenAsync(q, ct);
+        if (closedResult is not null)
+            return closedResult;
 
         var (slotStartsUtc, nextCursor) = BuildSlotStartTimesUtcPage(q);
         if (slotStartsUtc.Count == 0)
@@ -146,6 +149,24 @@ public sealed class AvailabilityHandler : IAvailabilityHandler
         }
 
         return true;
+    }
+
+    private async Task<Result<GetAvailabilityResponse>?> EnsureTransactionReferenceIsOpenAsync(
+        GetAvailabilityQuery q,
+        CancellationToken ct)
+    {
+        var transactionRef = q.TransactionId ?? q.ClientId;
+        if (string.IsNullOrWhiteSpace(transactionRef))
+            return null;
+
+        var existing = await _txRepo.GetLatestByTransactionRefAsync(transactionRef.Trim(), ct);
+        if (existing is null || existing.Status == BookingTransactionStatus.Open)
+            return null;
+
+        return Result<GetAvailabilityResponse>.Fail(
+            HttpStatusCode.Conflict,
+            $"Transaction reference '{transactionRef.Trim()}' is already {existing.Status}.",
+            "TransactionClosed");
     }
 
     private async Task<(Domain.Client.ClientDirectoryItem? Value, Result<GetAvailabilityResponse>? Error)> LoadProspectIfRequired(

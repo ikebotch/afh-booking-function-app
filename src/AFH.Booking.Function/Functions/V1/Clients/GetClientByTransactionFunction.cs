@@ -1,5 +1,7 @@
 ﻿using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common;
+using AFH.Booking.Domain.Transactions;
 using AFH.Booking.Function.Http;
 
 namespace AFH.Booking.Function.Functions.V1.Clients;
@@ -8,13 +10,16 @@ namespace AFH.Booking.Function.Functions.V1.Clients;
 public sealed class GetClientByTransactionFunction
 {
     private readonly IClientDirectory _clients;
+    private readonly IBookingTransactionRepository _transactions;
     private readonly ILogger<GetClientByTransactionFunction> _logger;
 
     public GetClientByTransactionFunction(
         IClientDirectory clients,
+        IBookingTransactionRepository transactions,
         ILogger<GetClientByTransactionFunction> logger)
     {
         _clients = clients;
+        _transactions = transactions;
         _logger = logger;
     }
 
@@ -35,12 +40,15 @@ public sealed class GetClientByTransactionFunction
         if (client is null)
             return await req.ProblemAsync(HttpStatusCode.NotFound, "Client not found.", ct, "NotFound");
 
+        var transaction = await _transactions.GetLatestByTransactionRefAsync(transactionId.Trim(), ct);
         var clientInfo = new
         {
             FirstName = Masking.MaskName(client.FirstName?.Trim() ?? string.Empty),
             LastName = Masking.MaskName(client.LastName?.Trim() ?? string.Empty),
             Email = Masking.MaskEmail(client.Email?.Trim() ?? string.Empty),
-            PreferredStartUtc = client?.AppointmentDateTime
+            PreferredStartUtc = client?.AppointmentDateTime,
+            TransactionStatus = transaction?.Status.ToString(),
+            IsTransactionClosed = transaction is not null && transaction.Status != BookingTransactionStatus.Open
         };
 
         return await req.OkJsonAsync(clientInfo, ct);

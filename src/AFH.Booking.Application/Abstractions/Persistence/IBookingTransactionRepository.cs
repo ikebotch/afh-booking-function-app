@@ -14,4 +14,7 @@ public interface IBookingTransactionRepository
     Task<BookingTransaction?> GetForUpdateAsync(
     string transactionId,
     CancellationToken ct);
+
+    Task<BookingTransaction?> GetLatestByTransactionRefAsync(string transactionRef, CancellationToken ct)
+        => Task.FromResult<BookingTransaction?>(null);
 }

@@ -5,6 +5,7 @@ using System.Net;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common;
+using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -67,6 +68,14 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
         var hold = await _holds.GetAsync(bookingId, ct);
         if (hold is null)
             return Result<BookingChangeActorContext>.NotFound($"Booking '{bookingId}' was not found.");
+
+        if (hold.Status == BookingHoldStatus.Cancelled)
+        {
+            return Result<BookingChangeActorContext>.Fail(
+                HttpStatusCode.Conflict,
+                "Client access link can no longer be used because the booking has been cancelled.",
+                Errors.Conflict);
+        }
 
         var slot = await _slots.GetAsync(hold.SlotId, ct);
         if (slot is null)

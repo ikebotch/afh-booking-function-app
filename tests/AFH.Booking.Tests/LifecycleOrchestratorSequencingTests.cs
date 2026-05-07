@@ -157,6 +157,10 @@ public sealed class LifecycleOrchestratorSequencingTests
         audit.Setup(x => x.RecordStepAsync(It.IsAny<LifecycleAuditStepEntry>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        var accessLinks = new Mock<IBookingAccessLinkRepository>();
+        accessLinks.Setup(x => x.TransferActiveLinksAsync("booking-old", "booking-new", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         var uow = new Mock<IUnitOfWork>();
         uow.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>())).ReturnsAsync(1);
 
@@ -170,6 +174,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             notifications.Object,
             downstream.Object,
             audit.Object,
+            accessLinks.Object,
             uow.Object,
             new StubClock(DateTime.UtcNow));
 

@@ -56,8 +56,11 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
         if (!TryParseToken(token, out var envelope, out var error))
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Unauthorized, error!, Errors.Unauthorized);
 
-        if (!string.Equals(envelope!.BookingId, bookingId, StringComparison.Ordinal))
+        if (string.IsNullOrWhiteSpace(envelope!.LinkId) &&
+            !string.Equals(envelope.BookingId, bookingId, StringComparison.Ordinal))
+        {
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client token does not match booking.", Errors.Unauthorized);
+        }
 
         if (!string.Equals(envelope.ActorType, LifecycleActors.Client, StringComparison.OrdinalIgnoreCase))
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client token actor is invalid.", Errors.Unauthorized);

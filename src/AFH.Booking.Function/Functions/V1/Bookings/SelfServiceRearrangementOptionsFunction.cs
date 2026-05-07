@@ -34,9 +34,10 @@ public sealed class SelfServiceRearrangementOptionsFunction
             return await req.ProblemAsync(access.StatusCode, access.ErrorMessage ?? "Unauthorized.", ct, access.ErrorCode);
 
         var body = await req.ReadJsonAsync<RearrangementOptionsRequest>(ct);
+        var targetBookingId = access.Value?.CurrentBookingId ?? bookingId.Trim();
         var result = await _handler.HandleAsync(new GetRearrangementOptionsCommand
         {
-            BookingId = bookingId,
+            BookingId = targetBookingId,
             PreferredStartUtc = body?.PreferredStartUtc,
             Duration = body?.Duration,
             IsRemote = body?.IsRemote,

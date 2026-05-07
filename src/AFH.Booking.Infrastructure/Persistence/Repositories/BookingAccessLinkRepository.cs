@@ -51,6 +51,19 @@ public sealed class BookingAccessLinkRepository : IBookingAccessLinkRepository
         }
     }
 
+    public async Task TransferActiveLinksAsync(string fromBookingId, string toBookingId, DateTime updatedUtc, CancellationToken ct)
+    {
+        var rows = await _db.BookingAccessLinks
+            .Where(x =>
+                x.CurrentBookingId == fromBookingId &&
+                x.RevokedUtc == null &&
+                x.ExpiresUtc > updatedUtc)
+            .ToListAsync(ct);
+
+        foreach (var row in rows)
+            row.CurrentBookingId = toBookingId;
+    }
+
     private static BookingAccessLinkRecord ToRecord(BookingAccessLinkModel row) => new()
     {
         Id = row.Id,

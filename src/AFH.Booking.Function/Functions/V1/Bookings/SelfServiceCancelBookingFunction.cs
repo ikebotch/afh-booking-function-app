@@ -34,9 +34,10 @@ public sealed class SelfServiceCancelBookingFunction
             return await req.ProblemAsync(access.StatusCode, access.ErrorMessage ?? "Unauthorized.", ct, access.ErrorCode);
 
         var body = await req.ReadJsonAsync<CancelBookingRequest>(ct) ?? new CancelBookingRequest();
+        var targetBookingId = access.Value.CurrentBookingId ?? bookingId.Trim();
         var result = await _handler.HandleAsync(new CancelBookingCommand
         {
-            BookingId = bookingId.Trim(),
+            BookingId = targetBookingId,
             RequestedBy = LifecycleActors.Client,
             ActorId = access.Value.ActorId,
             ReasonCode = body.ReasonCode,

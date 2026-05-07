@@ -37,9 +37,10 @@ public sealed class SelfServiceRearrangeBookingFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, Errors.Validation);
 
+        var targetBookingId = access.Value.CurrentBookingId ?? bookingId.Trim();
         var result = await _handler.HandleAsync(new RearrangeBookingCommand
         {
-            BookingId = bookingId.Trim(),
+            BookingId = targetBookingId,
             NewSlotId = body.NewSlotId,
             RequestedBy = LifecycleActors.Client,
             ActorId = access.Value.ActorId,

@@ -21,6 +21,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private readonly INotificationService _notifications;
     private readonly IDownstreamUpdateService _downstreamUpdates;
     private readonly ILifecycleAuditService _audit;
+    private readonly IBookingAccessLinkRepository _accessLinks;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
 
@@ -34,6 +35,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         INotificationService notifications,
         IDownstreamUpdateService downstreamUpdates,
         ILifecycleAuditService audit,
+        IBookingAccessLinkRepository accessLinks,
         IUnitOfWork uow,
         IClock clock)
     {
@@ -46,6 +48,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         _notifications = notifications;
         _downstreamUpdates = downstreamUpdates;
         _audit = audit;
+        _accessLinks = accessLinks;
         _uow = uow;
         _clock = clock;
     }
@@ -147,6 +150,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             NewState: LifecycleStates.Rearranged), ct);
 
         var now = _clock.UtcNow;
+        await _accessLinks.TransferActiveLinksAsync(oldHold.Id, newHold.Id, now, ct);
         await _audit.RecordStepAsync(new LifecycleAuditStepEntry(eventId, LifecycleStepNames.Outlook, 1, LifecycleStepStatuses.Succeeded, now, now, null, null, cmd.CorrelationId), ct);
         await _audit.RecordStepAsync(new LifecycleAuditStepEntry(eventId, LifecycleStepNames.SqlAudit, 2, LifecycleStepStatuses.Succeeded, now, now, null, null, cmd.CorrelationId), ct);
         await _uow.SaveChangesAsync(ct);

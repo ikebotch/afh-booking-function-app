@@ -5,6 +5,7 @@ public interface IBookingAccessLinkRepository
     Task AddAsync(BookingAccessLinkRecord link, CancellationToken ct);
     Task<BookingAccessLinkRecord?> GetAsync(string linkId, CancellationToken ct);
     Task RevokeActiveForBookingAsync(string bookingId, DateTime revokedUtc, string reason, CancellationToken ct);
+    Task TransferActiveLinksAsync(string fromBookingId, string toBookingId, DateTime updatedUtc, CancellationToken ct);
 }
 
 public sealed class BookingAccessLinkRecord

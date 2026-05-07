@@ -31,6 +31,7 @@ public class TimeZoneAndRouteTests
     [InlineData("Bookings_SelfServiceRearrange", EndpointAccessPolicy.Public)]
     [InlineData("Bookings_SelfServiceRearrangementOptions", EndpointAccessPolicy.Public)]
     [InlineData("Users_GetCurrentUser", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Bookings_CreateClientLink", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Bookings_CreateHold", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Admin_GetAdviserProjectionFeed", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Bookings_RecordEmailBounce", EndpointAccessPolicy.InternalOnly)]

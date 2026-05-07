@@ -19,6 +19,7 @@ public static class EndpointAccessPolicies
             ["Bookings_CancelBooking"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_ConfirmHold"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_CreateApprovalRequest"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_CreateClientLink"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_CreateHold"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_GetBooking"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_GetRearrangementOptions"] = EndpointAccessPolicy.InternalOnly,

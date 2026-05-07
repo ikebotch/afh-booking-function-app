@@ -13,6 +13,7 @@ public sealed class BookingDbContext : DbContext
     public DbSet<BookingTransactionModel> BookingTransactions => Set<BookingTransactionModel>();
     public DbSet<BookingSlotModel> BookingSlots => Set<BookingSlotModel>();
     public DbSet<BookingHoldModel> Holds => Set<BookingHoldModel>();
+    public DbSet<BookingAccessLinkModel> BookingAccessLinks => Set<BookingAccessLinkModel>();
     public DbSet<ApprovalRequestModel> ApprovalRequests => Set<ApprovalRequestModel>();
     public DbSet<ApprovalHistoryModel> ApprovalHistory => Set<ApprovalHistoryModel>();
     public DbSet<NotificationDispatchModel> NotificationDispatches => Set<NotificationDispatchModel>();

@@ -6,4 +6,6 @@ public sealed class BookingChangeAccessOptions
 
     public string? SigningKey { get; set; }
     public bool AllowUnsignedTokensInDevelopment { get; set; }
+    public int LinkExpiryHours { get; set; } = 720;
+    public string? SelfServiceBaseUrl { get; set; }
 }

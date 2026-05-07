@@ -19,19 +19,22 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
+    private readonly IBookingAccessLinkRepository _links;
 
     public HmacBookingChangeAccessService(
         IOptions<BookingChangeAccessOptions> options,
         IHostEnvironment hostEnvironment,
         IBookingHoldRepository holds,
         IBookingSlotRepository slots,
-        IBookingTransactionRepository transactions)
+        IBookingTransactionRepository transactions,
+        IBookingAccessLinkRepository links)
     {
         _options = options.Value;
         _hostEnvironment = hostEnvironment;
         _holds = holds;
         _slots = slots;
         _transactions = transactions;
+        _links = links;
     }
 
     public async Task<Result<BookingChangeActorContext>> ValidateClientTokenAsync(
@@ -65,9 +68,34 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
         if (!ValidateSignature(token, _options.SigningKey!))
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client token signature is invalid.", Errors.Unauthorized);
 
-        var hold = await _holds.GetAsync(bookingId, ct);
+        var targetBookingId = bookingId;
+        if (!string.IsNullOrWhiteSpace(envelope.LinkId))
+        {
+            var link = await _links.GetAsync(envelope.LinkId, ct);
+            if (link is null)
+                return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client access link is invalid.", Errors.Unauthorized);
+
+            if (!string.Equals(link.TokenHash, HashToken(token), StringComparison.Ordinal))
+                return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client access link is invalid.", Errors.Unauthorized);
+
+            if (link.RevokedUtc.HasValue)
+                return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client access link has been revoked.", Errors.Unauthorized);
+
+            if (DateTime.SpecifyKind(link.ExpiresUtc, DateTimeKind.Utc) <= DateTime.UtcNow)
+                return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Unauthorized, "Client access link has expired.", Errors.Unauthorized);
+
+            if (!string.Equals(link.OriginalBookingId, bookingId, StringComparison.Ordinal) &&
+                !string.Equals(link.CurrentBookingId, bookingId, StringComparison.Ordinal))
+            {
+                return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client token does not match booking.", Errors.Unauthorized);
+            }
+
+            targetBookingId = link.CurrentBookingId;
+        }
+
+        var hold = await _holds.GetAsync(targetBookingId, ct);
         if (hold is null)
-            return Result<BookingChangeActorContext>.NotFound($"Booking '{bookingId}' was not found.");
+            return Result<BookingChangeActorContext>.NotFound($"Booking '{targetBookingId}' was not found.");
 
         if (hold.Status == BookingHoldStatus.Cancelled)
         {
@@ -95,7 +123,87 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
             LifecycleActors.Client,
             envelope.ActorId,
             tx.TransactionRef,
-            envelope.CorrelationId));
+            envelope.CorrelationId,
+            targetBookingId));
+    }
+
+    public async Task<Result<BookingAccessLinkResponse>> CreateClientLinkAsync(
+        CreateBookingAccessLinkRequest request,
+        CancellationToken ct)
+    {
+        return await CreateClientLinkCoreAsync(request, revokeExisting: false, ct);
+    }
+
+    public async Task<Result<BookingAccessLinkResponse>> ResendClientLinkAsync(
+        CreateBookingAccessLinkRequest request,
+        CancellationToken ct)
+    {
+        return await CreateClientLinkCoreAsync(request, revokeExisting: true, ct);
+    }
+
+    private async Task<Result<BookingAccessLinkResponse>> CreateClientLinkCoreAsync(
+        CreateBookingAccessLinkRequest request,
+        bool revokeExisting,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_options.SigningKey))
+            return Result<BookingAccessLinkResponse>.Fail(HttpStatusCode.InternalServerError, "BookingChangeAccess:SigningKey is required.", Errors.ServerError);
+
+        var bookingId = request.BookingId.Trim();
+        var hold = await _holds.GetAsync(bookingId, ct);
+        if (hold is null)
+            return Result<BookingAccessLinkResponse>.NotFound($"Booking '{bookingId}' was not found.");
+
+        if (hold.Status == BookingHoldStatus.Cancelled)
+            return Result<BookingAccessLinkResponse>.Fail(HttpStatusCode.Conflict, "A client link cannot be created for a cancelled booking.", Errors.Conflict);
+
+        var slot = await _slots.GetAsync(hold.SlotId, ct);
+        if (slot is null)
+            return Result<BookingAccessLinkResponse>.Fail(HttpStatusCode.Conflict, $"Slot '{hold.SlotId}' linked to booking was not found.", Errors.Conflict);
+
+        var tx = await _transactions.GetAsync(slot.TransactionId, ct);
+        if (tx is null)
+            return Result<BookingAccessLinkResponse>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' linked to booking was not found.", Errors.Conflict);
+
+        var utcNow = DateTime.UtcNow;
+        if (revokeExisting)
+            await _links.RevokeActiveForBookingAsync(bookingId, utcNow, "Client link resent", ct);
+
+        var linkId = Guid.NewGuid().ToString("N");
+        var expiresUtc = new DateTimeOffset(utcNow).AddHours(ResolveExpiryHours(request.ExpiryHours));
+        var envelope = new BookingChangeAccessTokenEnvelope(
+            bookingId,
+            LifecycleActors.Client,
+            expiresUtc,
+            request.ActorId,
+            tx.TransactionRef,
+            Guid.NewGuid().ToString("N"),
+            LinkId: linkId);
+
+        var token = CreateToken(envelope, _options.SigningKey!);
+        await _links.AddAsync(new BookingAccessLinkRecord
+        {
+            Id = linkId,
+            OriginalBookingId = bookingId,
+            CurrentBookingId = bookingId,
+            TokenHash = HashToken(token),
+            ActorType = LifecycleActors.Client,
+            ActorId = request.ActorId,
+            TransactionRef = tx.TransactionRef,
+            ExpiresUtc = expiresUtc.UtcDateTime,
+            CreatedUtc = utcNow,
+            CreatedBy = request.CreatedBy
+        }, ct);
+
+        return Result<BookingAccessLinkResponse>.Ok(new BookingAccessLinkResponse
+        {
+            LinkId = linkId,
+            BookingId = bookingId,
+            AccessToken = token,
+            AccessUrl = BuildAccessUrl(bookingId, token),
+            ExpiresUtc = expiresUtc,
+            TransactionRef = tx.TransactionRef
+        });
     }
 
     internal static string CreateToken(BookingChangeAccessTokenEnvelope envelope, string signingKey)
@@ -161,6 +269,30 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
         return ToBase64Url(hmac.ComputeHash(Encoding.UTF8.GetBytes(payloadBase64)));
     }
 
+    private int ResolveExpiryHours(int? requested)
+    {
+        if (requested is > 0)
+            return requested.Value;
+
+        return _options.LinkExpiryHours > 0 ? _options.LinkExpiryHours : 720;
+    }
+
+    private string? BuildAccessUrl(string bookingId, string token)
+    {
+        if (string.IsNullOrWhiteSpace(_options.SelfServiceBaseUrl))
+            return null;
+
+        var root = _options.SelfServiceBaseUrl.TrimEnd('/');
+        return $"{root}/bookings/{Uri.EscapeDataString(bookingId)}?token={Uri.EscapeDataString(token)}";
+    }
+
+    private static string HashToken(string token)
+    {
+        var trimmed = token.Trim();
+        using var sha = SHA256.Create();
+        return Convert.ToHexString(sha.ComputeHash(Encoding.UTF8.GetBytes(trimmed)));
+    }
+
     private static string ToBase64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
@@ -181,4 +313,5 @@ public sealed record BookingChangeAccessTokenEnvelope(
     string? ActorId = null,
     string? TransactionRef = null,
     string? CorrelationId = null,
-    string? Signature = null);
+    string? Signature = null,
+    string? LinkId = null);

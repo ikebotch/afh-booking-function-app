@@ -30,6 +30,7 @@ public static class EndpointAccessPolicies
             ["Bookings_RecordEmailBounce"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_ReleaseHold"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_RemediateShowAs"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_ResendClientLink"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_SendNotification"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_SelfServiceCancel"] = EndpointAccessPolicy.Public,
             ["Bookings_SelfServiceRearrange"] = EndpointAccessPolicy.Public,

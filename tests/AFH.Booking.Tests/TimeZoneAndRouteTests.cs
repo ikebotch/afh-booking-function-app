@@ -33,6 +33,7 @@ public class TimeZoneAndRouteTests
     [InlineData("Users_GetCurrentUser", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_CreateClientLink", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Bookings_CreateHold", EndpointAccessPolicy.InternalOnly)]
+    [InlineData("Bookings_ResendClientLink", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Admin_GetAdviserProjectionFeed", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Bookings_RecordEmailBounce", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Client_GetByTransaction_V2", EndpointAccessPolicy.InternalOnly)]

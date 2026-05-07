@@ -33,6 +33,7 @@ public static class EndpointAccessPolicies
             ["Bookings_ResendClientLink"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_SendNotification"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_SelfServiceCancel"] = EndpointAccessPolicy.Public,
+            ["Bookings_SelfServiceGetBooking"] = EndpointAccessPolicy.Public,
             ["Bookings_SelfServiceRearrange"] = EndpointAccessPolicy.Public,
             ["Bookings_SelfServiceRearrangementOptions"] = EndpointAccessPolicy.Public,
             ["CalendarHealthV1"] = EndpointAccessPolicy.Public,

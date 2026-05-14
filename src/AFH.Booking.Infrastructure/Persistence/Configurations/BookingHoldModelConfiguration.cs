@@ -30,7 +30,7 @@ public sealed class BookingHoldModelConfiguration : IEntityTypeConfiguration<Boo
 
         b.HasOne(x => x.Slot)
             .WithMany()
-            .HasForeignKey<BookingHoldModel>(x => x.SlotId)
+            .HasForeignKey(x => x.SlotId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // -----

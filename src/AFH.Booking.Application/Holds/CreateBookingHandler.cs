@@ -68,10 +68,6 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
             return Result<CreateBookingResponse>.Ok(BuildResponse(activeHolds.TransactionHold, slot, tx));
         }
 
-        var releaseExisting = await ReplaceExistingHoldIfNeededAsync(slot, tx, activeHolds.TransactionHold, utcNow, ct);
-        if (!releaseExisting.IsSuccess)
-            return FailFrom<CreateBookingResponse>(releaseExisting);
-
         var holdCheck = EnsureNoActiveHold(activeHolds.TransactionHold, activeHolds.SlotHold);
         if (!holdCheck.IsSuccess)
             return FailFrom<CreateBookingResponse>(holdCheck);
@@ -79,6 +75,15 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         var availabilityCheck = await EnsureFreshAvailabilityAsync(slot, tx, calendarUserId, ct);
         if (!availabilityCheck.IsSuccess)
             return FailFrom<CreateBookingResponse>(availabilityCheck);
+
+        if (activeHolds.TransactionHold is not null)
+        {
+            var moveResult = await MoveExistingHoldAsync(slot, tx, activeHolds.TransactionHold, calendarUserId, utcNow, ct);
+            if (!moveResult.IsSuccess)
+                return moveResult;
+
+            return Result<CreateBookingResponse>.Ok(BuildResponse(activeHolds.TransactionHold, slot, tx));
+        }
 
         var holdCreate = CreateHold(slot, calendarUserId, utcNow);
         if (!holdCreate.IsSuccess)
@@ -160,16 +165,14 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         return Result<(BookingSlot, BookingTransaction)>.Ok((slot, tx));
     }
 
-    private async Task<Result<Unit>> ReplaceExistingHoldIfNeededAsync(
+    private async Task<Result<CreateBookingResponse>> MoveExistingHoldAsync(
         BookingSlot slot,
         BookingTransaction tx,
-        BookingHold? existing,
+        BookingHold existing,
+        string calendarUserId,
         DateTime utcNow,
         CancellationToken ct)
     {
-        if (existing is null)
-            return Result<Unit>.Ok(Unit.Value);
-
         if (!string.IsNullOrWhiteSpace(existing.CalendarProviderEventId))
         {
             try
@@ -191,25 +194,38 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
                     tx.Id,
                     existing.SlotId);
 
-                return Result<Unit>.Fail(
+                return Result<CreateBookingResponse>.Fail(
                     HttpStatusCode.Conflict,
                     "Unable to remove the existing booking hold marker before re-checking availability.",
                     Errors.Conflict);
             }
         }
 
-        existing.Cancel("Superseded by a new hold attempt.", utcNow);
+        try
+        {
+            existing.MoveToSlot(slot.Id, calendarUserId, DefaultHoldWindow, utcNow);
+        }
+        catch (DomainException ex)
+        {
+            return Result<CreateBookingResponse>.Fail(HttpStatusCode.BadRequest, ex.Message, Errors.Validation);
+        }
+
         await _holdRepo.UpdateAsync(existing, ct);
         await _uow.SaveChangesAsync(ct);
 
+        var calendarResult = await TryCreateCalendarHoldEventAsync(slot, tx, existing, calendarUserId, ct);
+        if (!calendarResult.IsSuccess)
+            return FailFrom<CreateBookingResponse>(calendarResult);
+
+        await _uow.SaveChangesAsync(ct);
+
         _logger.LogInformation(
-            "Cancelled existing active hold before creating a fresh replacement. OldHoldId={OldHoldId} TransactionId={TransactionId} OldSlotId={OldSlotId} NewSlotId={NewSlotId}",
+            "Moved existing active hold to a new slot. HoldId={HoldId} TransactionId={TransactionId} NewSlotId={NewSlotId}",
             existing.Id,
             tx.Id,
-            existing.SlotId,
             slot.Id);
 
-        return Result<Unit>.Ok(Unit.Value);
+        return Result<CreateBookingResponse>.Ok(BuildResponse(existing, slot, tx));
     }
 
     private static Result<Unit> EnsureNoActiveHold(BookingHold? transactionHold, BookingHold? slotHold)

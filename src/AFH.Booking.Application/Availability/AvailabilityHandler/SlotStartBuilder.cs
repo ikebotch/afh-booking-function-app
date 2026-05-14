@@ -5,17 +5,21 @@ namespace AFH.Booking.Application.Availability;
 
 public sealed class SlotStartBuilder : ISlotStartBuilder
 {
-    private static readonly TimeSpan SlotSearchStep = TimeSpan.FromMinutes(5);
-    private const int OversampleFactor = 12;
+    private const int SlotSearchStepMinutes = 5;
+    private const int CandidateMultiplier = 6;
+    private const int MaxCandidateTake = 500;
+    private const int DefaultTake = 10;
+    private const int MaxRequestedTake = 100;
+    private static readonly TimeSpan SlotSearchStep = TimeSpan.FromMinutes(SlotSearchStepMinutes);
     private static readonly TimeSpan DefaultDayStart = TimeSpan.FromHours(8);
     private static readonly TimeSpan DefaultDayEnd = TimeSpan.FromHours(17);
 
     public (IReadOnlyList<DateTime> Starts, string? NextCursor) BuildPage(GetAvailabilityQuery query)
     {
         var duration = TimeSpan.FromMinutes(query.Duration);
-        var requestedTake = query.Take <= 0 ? 10 : Math.Min(query.Take, 100);
-        var responseLimit = query.Limit <= 0 ? 10 : Math.Min(query.Limit, 100);
-        var take = Math.Min(Math.Max(requestedTake, responseLimit) * OversampleFactor, 288);
+        var requestedTake = query.Take <= 0 ? DefaultTake : Math.Min(query.Take, MaxRequestedTake);
+        var responseLimit = query.Limit <= 0 ? DefaultTake : Math.Min(query.Limit, MaxRequestedTake);
+        var take = Math.Min(Math.Max(requestedTake, responseLimit) * CandidateMultiplier, MaxCandidateTake);
 
         DateTime? cursor = null;
         if (!string.IsNullOrWhiteSpace(query.Cursor) &&

@@ -42,6 +42,7 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
         DateTime utcNow,
         CancellationToken ct)
     {
+        var started = System.Diagnostics.Stopwatch.StartNew();
         var result = new List<AvailabilitySlotResult>();
         var requestId = query.TransactionId ?? query.ClientId;
         var calendarWindowPassCount = 0;
@@ -52,24 +53,27 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
         var nonPositiveTravelCount = 0;
         var travelFitPassCount = 0;
         var travelFitFailCount = 0;
+        var candidateEvaluationCount = 0;
+
+        var travel = query.IsRemote
+            ? null
+            : CreateTravelResultForAdvisers(advisers, travelByAdviserId);
+
+        var availabilityByAdviserId = await GetAvailabilityByAdviserIdAsync(
+            advisers,
+            slotStarts,
+            query.Duration,
+            query.IsRemote,
+            travel?.Candidates,
+            ct);
 
         foreach (var start in slotStarts)
         {
             var end = start.AddMinutes(query.Duration);
 
-            var travel = query.IsRemote
-                ? null
-                : CreateTravelResultForAdvisers(advisers, travelByAdviserId);
-
-            var availabilityByAdviserId = await GetAvailabilityByAdviserIdAsync(
-                advisers,
-                start,
-                end,
-                travel?.Candidates,
-                ct);
-
             foreach (var adviser in advisers)
             {
+                candidateEvaluationCount++;
                 var adviserId = adviser.AdviserId;
                 if (string.IsNullOrWhiteSpace(adviserId))
                     continue;
@@ -172,18 +176,22 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
             }
         }
 
+        started.Stop();
         _logger.LogInformation(
-            "Booking availability slot filtering complete. IsRemote={IsRemote} TransactionId={TransactionId} AdviserPoolCount={AdviserPoolCount} SlotStartCount={SlotStartCount} CalendarWindowPassCount={CalendarWindowPassCount} MissingTravelCandidateCount={MissingTravelCandidateCount} NonPositiveTravelCount={NonPositiveTravelCount} TravelFitPassCount={TravelFitPassCount} TravelFitFailCount={TravelFitFailCount} FinalSlotCount={FinalSlotCount}",
+            "Booking availability slot filtering complete. IsRemote={IsRemote} TransactionId={TransactionId} AdviserPoolCount={AdviserPoolCount} SlotStartCount={SlotStartCount} CandidateCountBeforeFiltering={CandidateCountBeforeFiltering} CalendarProviderCallCount={CalendarProviderCallCount} CalendarWindowPassCount={CalendarWindowPassCount} MissingTravelCandidateCount={MissingTravelCandidateCount} NonPositiveTravelCount={NonPositiveTravelCount} TravelFitPassCount={TravelFitPassCount} TravelFitFailCount={TravelFitFailCount} CandidateCountAfterFiltering={CandidateCountAfterFiltering} DurationMs={DurationMs}",
             query.IsRemote,
             requestId,
             advisers.Count,
             slotStarts.Count,
+            candidateEvaluationCount,
+            1,
             calendarWindowPassCount,
             missingTravelCandidateCount,
             nonPositiveTravelCount,
             travelFitPassCount,
             travelFitFailCount,
-            result.Count);
+            result.Count,
+            started.ElapsedMilliseconds);
 
         if (workingPatternFailCount > 0 || capacityFailCount > 0 || minimumDurationFailCount > 0)
         {
@@ -200,21 +208,34 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
 
     private async Task<Dictionary<string, CalendarViewDto>> GetAvailabilityByAdviserIdAsync(
         IReadOnlyList<AdviserDirectoryItem> advisers,
-        DateTime start,
-        DateTime end,
+        IReadOnlyList<DateTime> slotStarts,
+        double durationMinutes,
+        bool isRemote,
         IReadOnlyList<LocationCandidate>? travelCandidates,
         CancellationToken ct)
     {
-        var travelWindowPadding = travelCandidates?
-            .Select(x => Math.Max(0, x.TravelMinutes ?? 0) + Math.Max(0, x.CompanyBufferMinutes ?? x.Buffers?.CompanyBufferMinutes ?? 30))
-            .DefaultIfEmpty(0)
-            .Max() ?? 0;
+        var maxPreMeetingPadding = isRemote
+            ? 0
+            : travelCandidates?
+                .Select(x => GetTravelMinutes(x) + GetCompanyBufferMinutes(x))
+                .DefaultIfEmpty(0)
+                .Max() ?? 0;
+
+        var maxPostMeetingPadding = isRemote
+            ? 0
+            : travelCandidates?
+                .Select(GetCompanyBufferMinutes)
+                .DefaultIfEmpty(0)
+                .Max() ?? 0;
+
+        var minStart = slotStarts.Min();
+        var maxEnd = slotStarts.Max().AddMinutes(durationMinutes);
 
         var calResult = await _calendarView.HandleAsync(new CalendarViewQuery
         {
             AdviserList = advisers,
-            StartUtc = start.AddMinutes(-travelWindowPadding),
-            EndUtc = end.AddMinutes(travelWindowPadding),
+            StartUtc = minStart.AddMinutes(-maxPreMeetingPadding),
+            EndUtc = maxEnd.AddMinutes(maxPostMeetingPadding),
             Timezone = _timeZoneProvider.DefaultTimeZoneId
         }, ct);
 
@@ -270,13 +291,19 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
         if (isRemote)
             return (start, end);
 
-        var travelMinutes = Math.Max(0, travelCandidate?.TravelSnapshot?.TravelMinutes ?? travelCandidate?.TravelMinutes ?? 0);
-        var companyBufferMinutes = Math.Max(0, travelCandidate?.CompanyBufferMinutes ?? travelCandidate?.Buffers?.CompanyBufferMinutes ?? 30);
+        var travelMinutes = GetTravelMinutes(travelCandidate);
+        var companyBufferMinutes = GetCompanyBufferMinutes(travelCandidate);
 
         return (
             start.AddMinutes(-(travelMinutes + companyBufferMinutes)),
             end.AddMinutes(companyBufferMinutes));
     }
+
+    private static int GetTravelMinutes(LocationCandidate? travelCandidate)
+        => Math.Max(0, travelCandidate?.TravelSnapshot?.TravelMinutes ?? travelCandidate?.TravelMinutes ?? 0);
+
+    private static int GetCompanyBufferMinutes(LocationCandidate? travelCandidate)
+        => Math.Max(0, travelCandidate?.CompanyBufferMinutes ?? travelCandidate?.Buffers?.CompanyBufferMinutes ?? 30);
 
     private static void AttachTravelSnapshot(
         BookingSlot slot,

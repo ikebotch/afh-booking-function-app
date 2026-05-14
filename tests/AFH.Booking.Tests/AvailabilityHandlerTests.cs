@@ -390,10 +390,27 @@ public sealed class AvailabilityHandlerTests
         Assert.True(result.IsSuccess);
         Assert.NotNull(txRepo.AddedTransaction);
         Assert.Equal(1, travelMatrix.CallCount);
-        Assert.True(calendarView.CallCount > 3);
-        Assert.All(calendarView.BatchSizes, size => Assert.Equal(2, size));
+        Assert.Equal(1, calendarView.CallCount);
+        Assert.Equal([2], calendarView.BatchSizes);
         Assert.True(slotRepo.AddedSlots.Count > 6);
         Assert.All(slotRepo.AddedSlots, slot => Assert.StartsWith("adv-", slot.AdviserId, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SlotStartBuilder_BuildPage_UsesFiveMinuteCandidateIncrements()
+    {
+        var starts = new SlotStartBuilder().BuildPage(new GetAvailabilityQuery
+        {
+            ClientId = "client-1",
+            PreferredStart = new DateTime(2026, 05, 21, 10, 0, 0, DateTimeKind.Utc),
+            Duration = 30,
+            Limit = 10,
+            Take = 3
+        }).Starts;
+
+        Assert.Contains(new DateTime(2026, 05, 21, 10, 0, 0, DateTimeKind.Utc), starts);
+        Assert.Contains(new DateTime(2026, 05, 21, 10, 5, 0, DateTimeKind.Utc), starts);
+        Assert.Contains(new DateTime(2026, 05, 21, 10, 10, 0, DateTimeKind.Utc), starts);
     }
 
     [Fact]
@@ -478,6 +495,80 @@ public sealed class AvailabilityHandlerTests
         Assert.Equal(30, firstValid.CompanyBufferMinutes);
         Assert.Equal("B60 4DJ", firstValid.SourcePostcode);
         Assert.Equal("SW1A 1AA", firstValid.DestinationPostcode);
+    }
+
+    [Fact]
+    public async Task HandleAsync_InPerson_RejectsBoundaryWhenExistingBlockEndsOneMinuteAfterHoldStart()
+    {
+        var slotRepo = new StubSlotRepository();
+        var existingBlock = new CalendarBlock
+        {
+            StartUtc = new DateTime(2026, 05, 21, 07, 30, 0, DateTimeKind.Utc),
+            EndUtc = new DateTime(2026, 05, 21, 09, 31, 0, DateTimeKind.Utc),
+            Subject = "Existing block"
+        };
+
+        var sut = new AvailabilityHandler(
+            new StubSlotScorer(),
+            new StubCalendarViewQueryHandler(conflicts: [existingBlock]),
+            new StubTravelMatrixService(
+            [
+                new AFH.Booking.Domain.Location.LocationCandidate
+                {
+                    AdviserId = "adv-1",
+                    AdviserName = "Adviser One",
+                    MailboxUserId = "adviser.one@tenant.com",
+                    TravelMinutes = 5,
+                    CompanyBufferMinutes = 30,
+                    GoldStar = true,
+                    TravelSnapshot = new AFH.Booking.Domain.Location.TravelSnapshotResult
+                    {
+                        TravelMinutes = 5,
+                        DistanceMiles = 1.2,
+                        Provider = "LocationService",
+                        Confidence = "High",
+                        CalculatedUtc = new DateTime(2026, 05, 14, 12, 0, 0, DateTimeKind.Utc)
+                    }
+                }
+            ]),
+            new StubClientDirectory(new AFH.Booking.Domain.Client.ClientDirectoryItem
+            {
+                StreetName1 = "1 High Street",
+                Town = "London",
+                PostalCode = "SW1A 1AA"
+            }),
+            new StubProfiles(
+            [
+                new AdviserProfileProjectionRecord
+                {
+                    AdviserId = "adv-1",
+                    DisplayName = "Adviser One",
+                    MailboxUserId = "adviser.one@tenant.com",
+                    IsActive = true
+                }
+            ]),
+            new StubTransactionRepository(),
+            slotRepo,
+            new StubUnitOfWork(),
+            new StubClock(new DateTime(2026, 05, 21, 08, 0, 0, DateTimeKind.Utc)),
+            new StubTimeZoneProvider(),
+            new StubAvailabilityRulesService(),
+            NullLogger<AvailabilityHandler>.Instance);
+
+        var result = await sut.HandleAsync(new GetAvailabilityQuery
+        {
+            ClientId = "client-1",
+            IsRemote = false,
+            PreferredStart = new DateTime(2026, 05, 21, 10, 5, 0, DateTimeKind.Utc),
+            Duration = 30,
+            Limit = 10,
+            Take = 3,
+            LocationRef = "loc-1"
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.DoesNotContain(slotRepo.AddedSlots, x => x.StartUtc == new DateTime(2026, 05, 21, 10, 5, 0, DateTimeKind.Utc));
+        Assert.Contains(slotRepo.AddedSlots, x => x.StartUtc == new DateTime(2026, 05, 21, 10, 10, 0, DateTimeKind.Utc));
     }
 
     [Fact]

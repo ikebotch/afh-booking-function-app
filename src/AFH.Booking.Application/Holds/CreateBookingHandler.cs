@@ -61,6 +61,27 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         var (slot, tx) = loadResult.Value;
         var activeHolds = await _holdRepo.GetActiveForCreateHoldAsync(slot.TransactionId, slot.Id, utcNow, ct);
         var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
+        var requestedHoldResult = await LoadRequestedHoldAsync(cmd, utcNow, ct);
+        if (!requestedHoldResult.IsSuccess)
+            return FailFrom<CreateBookingResponse>(requestedHoldResult);
+
+        var requestedHold = requestedHoldResult.Value;
+
+        if (requestedHold is not null)
+        {
+            if (string.Equals(requestedHold.SlotId, slot.Id, StringComparison.OrdinalIgnoreCase))
+                return Result<CreateBookingResponse>.Ok(BuildResponse(requestedHold, slot, tx));
+
+            var requestedHoldCheck = EnsureNoActiveHold(requestedHold, activeHolds.SlotHold);
+            if (!requestedHoldCheck.IsSuccess)
+                return FailFrom<CreateBookingResponse>(requestedHoldCheck);
+
+            var requestedAvailabilityCheck = await EnsureFreshAvailabilityAsync(slot, tx, calendarUserId, ct);
+            if (!requestedAvailabilityCheck.IsSuccess)
+                return FailFrom<CreateBookingResponse>(requestedAvailabilityCheck);
+
+            return await MoveExistingHoldAsync(slot, tx, requestedHold, calendarUserId, utcNow, ct);
+        }
 
         if (activeHolds.TransactionHold is not null &&
             string.Equals(activeHolds.TransactionHold.SlotId, slot.Id, StringComparison.OrdinalIgnoreCase))
@@ -163,6 +184,29 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         }
 
         return Result<(BookingSlot, BookingTransaction)>.Ok((slot, tx));
+    }
+
+    private async Task<Result<BookingHold?>> LoadRequestedHoldAsync(
+        CreateHoldCommand cmd,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(cmd.BookingId))
+            return Result<BookingHold?>.Ok(null);
+
+        var hold = await _holdRepo.GetAsync(cmd.BookingId.Trim(), ct);
+        if (hold is null)
+            return Result<BookingHold?>.NotFound($"Booking hold '{cmd.BookingId}' was not found.");
+
+        if (hold.Status != BookingHoldStatus.Active || hold.ExpiresUtc <= utcNow)
+        {
+            return Result<BookingHold?>.Fail(
+                HttpStatusCode.Conflict,
+                "Only an active, unexpired hold can be moved to a different slot.",
+                Errors.Conflict);
+        }
+
+        return Result<BookingHold?>.Ok(hold);
     }
 
     private async Task<Result<CreateBookingResponse>> MoveExistingHoldAsync(

@@ -68,9 +68,20 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
             return Result<CreateBookingResponse>.Ok(BuildResponse(activeHolds.TransactionHold, slot, tx));
         }
 
-        var holdCheck = EnsureNoActiveHold(activeHolds.TransactionHold, activeHolds.SlotHold);
-        if (!holdCheck.IsSuccess)
-            return FailFrom<CreateBookingResponse>(holdCheck);
+        if (activeHolds.TransactionHold is not null &&
+            activeHolds.SlotHold is not null &&
+            !string.Equals(activeHolds.TransactionHold.Id, activeHolds.SlotHold.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            var staleSlotHoldResult = await CancelStaleSlotHoldAsync(slot, tx, activeHolds.SlotHold, utcNow, ct);
+            if (!staleSlotHoldResult.IsSuccess)
+                return FailFrom<CreateBookingResponse>(staleSlotHoldResult);
+        }
+        else
+        {
+            var holdCheck = EnsureNoActiveHold(activeHolds.TransactionHold, activeHolds.SlotHold);
+            if (!holdCheck.IsSuccess)
+                return FailFrom<CreateBookingResponse>(holdCheck);
+        }
 
         var availabilityCheck = await EnsureFreshAvailabilityAsync(slot, tx, calendarUserId, ct);
         if (!availabilityCheck.IsSuccess)
@@ -226,6 +237,49 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
             slot.Id);
 
         return Result<CreateBookingResponse>.Ok(BuildResponse(existing, slot, tx));
+    }
+
+    private async Task<Result<Unit>> CancelStaleSlotHoldAsync(
+        BookingSlot slot,
+        BookingTransaction tx,
+        BookingHold staleHold,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(staleHold.CalendarProviderEventId))
+        {
+            try
+            {
+                var staleCalendarUserId = staleHold.UserId.Contains('@')
+                    ? staleHold.UserId
+                    : await _profiles.ResolveCalendarUserIdAsync(staleHold.UserId, ct);
+
+                await _calendar.CancelBookingEventAsync(
+                    staleCalendarUserId,
+                    staleHold.CalendarProviderEventId,
+                    ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to remove stale calendar hold marker before moving current hold. StaleHoldId={StaleHoldId} TransactionId={TransactionId} SlotId={SlotId}",
+                    staleHold.Id,
+                    tx.Id,
+                    slot.Id);
+
+                return Result<Unit>.Fail(
+                    HttpStatusCode.Conflict,
+                    "Unable to remove the previous hold marker for this slot before moving the current hold.",
+                    Errors.Conflict);
+            }
+        }
+
+        staleHold.Cancel("Superseded by current hold move.", utcNow);
+        await _holdRepo.UpdateAsync(staleHold, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        return Result<Unit>.Ok(Unit.Value);
     }
 
     private static Result<Unit> EnsureNoActiveHold(BookingHold? transactionHold, BookingHold? slotHold)

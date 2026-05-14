@@ -5,13 +5,17 @@ namespace AFH.Booking.Application.Availability;
 
 public sealed class SlotStartBuilder : ISlotStartBuilder
 {
+    private static readonly TimeSpan SlotSearchStep = TimeSpan.FromMinutes(5);
+    private const int OversampleFactor = 12;
     private static readonly TimeSpan DefaultDayStart = TimeSpan.FromHours(8);
     private static readonly TimeSpan DefaultDayEnd = TimeSpan.FromHours(17);
 
     public (IReadOnlyList<DateTime> Starts, string? NextCursor) BuildPage(GetAvailabilityQuery query)
     {
         var duration = TimeSpan.FromMinutes(query.Duration);
-        var take = query.Take <= 0 ? 10 : Math.Min(query.Take, 100);
+        var requestedTake = query.Take <= 0 ? 10 : Math.Min(query.Take, 100);
+        var responseLimit = query.Limit <= 0 ? 10 : Math.Min(query.Limit, 100);
+        var take = Math.Min(Math.Max(requestedTake, responseLimit) * OversampleFactor, 288);
 
         DateTime? cursor = null;
         if (!string.IsNullOrWhiteSpace(query.Cursor) &&
@@ -35,7 +39,7 @@ public sealed class SlotStartBuilder : ISlotStartBuilder
             ? preferred.Date.Add(DefaultDayEnd)
             : preferred.Add(duration);
 
-        for (var t = start; t.Add(duration) <= end; t = t.Add(duration))
+        for (var t = start; t.Add(duration) <= end; t = t.Add(SlotSearchStep))
         {
             if (!AfterCursor(t, cursor))
                 continue;
@@ -43,7 +47,7 @@ public sealed class SlotStartBuilder : ISlotStartBuilder
             result.Add(t);
 
             if (result.Count == take)
-                return (result, t.Add(duration).ToString("O"));
+                return (result, t.ToString("O"));
         }
 
         return (result, null);

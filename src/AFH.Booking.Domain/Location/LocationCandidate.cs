@@ -26,6 +26,7 @@ public sealed class LocationCandidate
     public TravelToBase TravelToBase { get; set; } = new();
     public TravelToNearestOffice TravelToNearestOffice { get; set; } = new();
     public BufferInfo Buffers { get; set; } = new();
+    public TravelSnapshotResult? TravelSnapshot { get; set; }
     public int? CompanyBufferMinutes { get; set; }
     public List<string> Reasons { get; set; } = new();
     public int Rank { get; set; }

@@ -31,6 +31,14 @@ public sealed class BookingSlotModel
     public int? TravelMinutes { get; set; }
     public int? CompanyBufferMinutes { get; set; }
     public decimal? DistanceMiles { get; set; }
+    public double? TravelDistanceMiles { get; set; }
+    public string? SourceLocationRef { get; set; }
+    public string? SourcePostcode { get; set; }
+    public string? DestinationLocationRef { get; set; }
+    public string? DestinationPostcode { get; set; }
+    public string? TravelProvider { get; set; }
+    public string? TravelConfidence { get; set; }
+    public DateTime? TravelCalculatedUtc { get; set; }
 
 
     public string? TravelStatus { get; set; }

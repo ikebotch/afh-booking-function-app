@@ -435,6 +435,14 @@ namespace AFH.Booking.Infrastructure.Migrations
                     b.Property<decimal?>("DistanceMiles")
                         .HasColumnType("decimal(9,2)");
 
+                    b.Property<string>("DestinationLocationRef")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("DestinationPostcode")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<DateTime>("EndUtc")
                         .HasColumnType("datetime2");
 
@@ -452,10 +460,28 @@ namespace AFH.Booking.Infrastructure.Migrations
                     b.Property<DateTime>("StartUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("SourceLocationRef")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("SourcePostcode")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<string>("TransactionId")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
+
+                    b.Property<DateTime?>("TravelCalculatedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("TravelConfidence")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<double?>("TravelDistanceMiles")
+                        .HasColumnType("float");
 
                     b.Property<string>("TravelMessage")
                         .HasMaxLength(512)
@@ -463,6 +489,10 @@ namespace AFH.Booking.Infrastructure.Migrations
 
                     b.Property<int?>("TravelMinutes")
                         .HasColumnType("int");
+
+                    b.Property<string>("TravelProvider")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("TravelStatus")
                         .HasMaxLength(32)

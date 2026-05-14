@@ -21,6 +21,14 @@ public sealed class BookingSlot
     public int? TravelMinutes { get; private set; }
     public int? CompanyBufferMinutes { get; private set; }
     public decimal? DistanceMiles { get; private set; }
+    public double? TravelDistanceMiles { get; private set; }
+    public string? SourceLocationRef { get; private set; }
+    public string? SourcePostcode { get; private set; }
+    public string? DestinationLocationRef { get; private set; }
+    public string? DestinationPostcode { get; private set; }
+    public string? TravelProvider { get; private set; }
+    public string? TravelConfidence { get; private set; }
+    public DateTime? TravelCalculatedUtc { get; private set; }
     public string? TravelStatus { get; private set; }
     public string? TravelMessage { get; private set; }
 
@@ -77,6 +85,36 @@ public sealed class BookingSlot
             CreatedUtc = utcNow
         };
     }
+
+    public void AttachTravelSnapshot(
+        int? travelMinutes,
+        double? distanceMiles,
+        int? companyBufferMinutes,
+        string? sourceLocationRef,
+        string? sourcePostcode,
+        string? destinationLocationRef,
+        string? destinationPostcode,
+        string? provider,
+        string? confidence,
+        DateTime? calculatedUtc)
+    {
+        TravelMinutes = travelMinutes;
+        TravelDistanceMiles = distanceMiles;
+        DistanceMiles = distanceMiles.HasValue
+            ? Convert.ToDecimal(distanceMiles.Value)
+            : null;
+        CompanyBufferMinutes = companyBufferMinutes;
+
+        SourceLocationRef = sourceLocationRef;
+        SourcePostcode = sourcePostcode;
+        DestinationLocationRef = destinationLocationRef;
+        DestinationPostcode = destinationPostcode;
+
+        TravelProvider = provider;
+        TravelConfidence = confidence;
+        TravelCalculatedUtc = calculatedUtc;
+    }
+
     public static BookingSlot Rehydrate(
         string id,
         string transactionRef,
@@ -90,6 +128,57 @@ public sealed class BookingSlot
         int? travelMinutes,
         int? companyBufferMinutes,
         decimal? distanceMiles,
+        string? travelStatus,
+        string? travelMessage,
+        DateTime createdUtc)
+    {
+        return Rehydrate(
+            id,
+            transactionRef,
+            adviserId,
+            adviserName,
+            startUtc,
+            endUtc,
+            score,
+            scoreBreakdown,
+            locationRef,
+            travelMinutes,
+            companyBufferMinutes,
+            distanceMiles,
+            distanceMiles.HasValue ? Convert.ToDouble(distanceMiles.Value) : null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            travelStatus,
+            travelMessage,
+            createdUtc);
+    }
+
+    public static BookingSlot Rehydrate(
+        string id,
+        string transactionRef,
+        string adviserId,
+        string adviserName,
+        DateTime startUtc,
+        DateTime endUtc,
+        int score,
+        IReadOnlyDictionary<string, int>? scoreBreakdown,
+        string? locationRef,
+        int? travelMinutes,
+        int? companyBufferMinutes,
+        decimal? distanceMiles,
+        double? travelDistanceMiles,
+        string? sourceLocationRef,
+        string? sourcePostcode,
+        string? destinationLocationRef,
+        string? destinationPostcode,
+        string? travelProvider,
+        string? travelConfidence,
+        DateTime? travelCalculatedUtc,
         string? travelStatus,
         string? travelMessage,
         DateTime createdUtc)
@@ -108,6 +197,16 @@ public sealed class BookingSlot
             TravelMinutes = travelMinutes,
             CompanyBufferMinutes = companyBufferMinutes,
             DistanceMiles = distanceMiles,
+            TravelDistanceMiles = travelDistanceMiles,
+            SourceLocationRef = sourceLocationRef,
+            SourcePostcode = sourcePostcode,
+            DestinationLocationRef = destinationLocationRef,
+            DestinationPostcode = destinationPostcode,
+            TravelProvider = travelProvider,
+            TravelConfidence = travelConfidence,
+            TravelCalculatedUtc = travelCalculatedUtc.HasValue
+                ? DateTime.SpecifyKind(travelCalculatedUtc.Value, DateTimeKind.Utc)
+                : null,
             TravelStatus = travelStatus,
             TravelMessage = travelMessage,
             CreatedUtc = DateTime.SpecifyKind(createdUtc, DateTimeKind.Utc)

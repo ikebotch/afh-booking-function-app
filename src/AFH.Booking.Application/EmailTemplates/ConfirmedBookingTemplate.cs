@@ -25,7 +25,7 @@ public static class ConfirmedBookingTemplate
         var travelLine = tx.IsRemote
             ? "Travel: N/A (remote meeting)"
             : windows.TravelApplied
-                ? $"Travel buffer: {windows.TravelBufferMinutesEachSide} mins before + {windows.TravelBufferMinutesEachSide} mins after"
+                ? $"Travel time: {windows.TravelMinutes} mins before"
                 : "Travel buffer: none";
 
         var whereLine = tx.IsRemote

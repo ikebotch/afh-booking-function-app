@@ -28,6 +28,14 @@ internal static class BookingSlotMapping
             travelMinutes: m.TravelMinutes,
             companyBufferMinutes: m.CompanyBufferMinutes,
             distanceMiles: m.DistanceMiles,
+            travelDistanceMiles: m.TravelDistanceMiles,
+            sourceLocationRef: m.SourceLocationRef,
+            sourcePostcode: m.SourcePostcode,
+            destinationLocationRef: m.DestinationLocationRef,
+            destinationPostcode: m.DestinationPostcode,
+            travelProvider: m.TravelProvider,
+            travelConfidence: m.TravelConfidence,
+            travelCalculatedUtc: m.TravelCalculatedUtc,
             travelStatus: m.TravelStatus,
             travelMessage: m.TravelMessage,
             createdUtc: m.CreatedUtc
@@ -55,6 +63,14 @@ internal static class BookingSlotMapping
             TravelMinutes = s.TravelMinutes,
             CompanyBufferMinutes = s.CompanyBufferMinutes,
             DistanceMiles = s.DistanceMiles,
+            TravelDistanceMiles = s.TravelDistanceMiles,
+            SourceLocationRef = s.SourceLocationRef,
+            SourcePostcode = s.SourcePostcode,
+            DestinationLocationRef = s.DestinationLocationRef,
+            DestinationPostcode = s.DestinationPostcode,
+            TravelProvider = s.TravelProvider,
+            TravelConfidence = s.TravelConfidence,
+            TravelCalculatedUtc = s.TravelCalculatedUtc,
             TravelStatus = s.TravelStatus,
             TravelMessage = s.TravelMessage,
 
@@ -89,6 +105,14 @@ internal static class BookingSlotMapping
         m.TravelMinutes = s.TravelMinutes;
         m.CompanyBufferMinutes = s.CompanyBufferMinutes;
         m.DistanceMiles = s.DistanceMiles;
+        m.TravelDistanceMiles = s.TravelDistanceMiles;
+        m.SourceLocationRef = s.SourceLocationRef;
+        m.SourcePostcode = s.SourcePostcode;
+        m.DestinationLocationRef = s.DestinationLocationRef;
+        m.DestinationPostcode = s.DestinationPostcode;
+        m.TravelProvider = s.TravelProvider;
+        m.TravelConfidence = s.TravelConfidence;
+        m.TravelCalculatedUtc = s.TravelCalculatedUtc;
         m.TravelStatus = s.TravelStatus;
         m.TravelMessage = s.TravelMessage;
 

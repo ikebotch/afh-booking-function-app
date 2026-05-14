@@ -41,6 +41,36 @@ public sealed class BookingCalendarService : IBookingCalendarService
 
         var windows = _holdWindowFactory.Create(slot, tx);
 
+        var availability = await _calendar.CheckAvailabilityAsync(
+            calendarUserId,
+            windows.HoldStartUtc,
+            windows.HoldEndUtc,
+            tx.Timezone,
+            "ForceRefresh",
+            ct);
+
+        if (availability.MailboxUnavailable)
+        {
+            return Result<Unit>.Fail(
+                HttpStatusCode.Conflict,
+                "Adviser calendar availability could not be resolved.",
+                Errors.Conflict);
+        }
+
+        var overlappingConflict = availability.Conflicts.FirstOrDefault(conflict =>
+            (string.IsNullOrWhiteSpace(hold.CalendarProviderEventId) ||
+             !string.Equals(conflict.ProviderEventId, hold.CalendarProviderEventId, StringComparison.OrdinalIgnoreCase)) &&
+            conflict.StartUtc < windows.HoldEndUtc &&
+            conflict.EndUtc > windows.HoldStartUtc);
+
+        if (overlappingConflict is not null)
+        {
+            return Result<Unit>.Fail(
+                HttpStatusCode.Conflict,
+                $"Adviser {slot.AdviserId} has an Outlook conflict for the requested hold window.",
+                Errors.BookingConflictBufferViolation);
+        }
+
         var subject = string.IsNullOrWhiteSpace(tx.MeetingType)
             ? "AFH Booking"
             : $"AFH Booking - {tx.MeetingType}";

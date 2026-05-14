@@ -108,14 +108,6 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
                 var travelCandidate = travel?.Candidates
                     .FirstOrDefault(x => string.Equals(x.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase));
 
-                if (!availabilityByAdviserId.TryGetValue(adviserId, out var availability) ||
-                    !IsWindowFree(availability, start, end))
-                {
-                    continue;
-                }
-
-                calendarWindowPassCount++;
-
                 if (!query.IsRemote)
                 {
                     if (travel is not null && travelCandidate is null)
@@ -123,22 +115,23 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
                         missingTravelCandidateCount++;
                         continue;
                     }
-
-                    var t = Math.Max(0, travelCandidate?.TravelMinutes ?? 0);
-
-                    var fitsTravel = IsWindowFree(
-                        availability,
-                        start.AddMinutes(-t),
-                        end.AddMinutes(t));
-
-                    if (!fitsTravel)
-                    {
-                        travelFitFailCount++;
-                        continue;
-                    }
-
-                    travelFitPassCount++;
                 }
+
+                var holdWindow = CreateCandidateHoldWindow(start, end, query.IsRemote, travelCandidate);
+
+                if (!availabilityByAdviserId.TryGetValue(adviserId, out var availability) ||
+                    !IsWindowFree(availability, holdWindow.StartUtc, holdWindow.EndUtc))
+                {
+                    if (!query.IsRemote)
+                        travelFitFailCount++;
+
+                    continue;
+                }
+
+                calendarWindowPassCount++;
+
+                if (!query.IsRemote)
+                    travelFitPassCount++;
 
                 var score = _scorer.Score(new SlotScoringContext
                 {
@@ -165,6 +158,8 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
                     travel: travelCandidate,
                     locationRef: query.LocationRef,
                     utcNow: utcNow);
+
+                AttachTravelSnapshot(slot, query, travelCandidate);
 
                 await _slotRepo.AddAsync(slot, ct);
 
@@ -211,7 +206,7 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
         CancellationToken ct)
     {
         var travelWindowPadding = travelCandidates?
-            .Select(x => Math.Max(0, x.TravelMinutes ?? 0))
+            .Select(x => Math.Max(0, x.TravelMinutes ?? 0) + Math.Max(0, x.CompanyBufferMinutes ?? x.Buffers?.CompanyBufferMinutes ?? 30))
             .DefaultIfEmpty(0)
             .Max() ?? 0;
 
@@ -265,6 +260,63 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
         return availability.Conflicts.All(conflict =>
             conflict.EndUtc <= windowStartUtc || conflict.StartUtc >= windowEndUtc);
     }
+
+    private static (DateTime StartUtc, DateTime EndUtc) CreateCandidateHoldWindow(
+        DateTime start,
+        DateTime end,
+        bool isRemote,
+        LocationCandidate? travelCandidate)
+    {
+        if (isRemote)
+            return (start, end);
+
+        var travelMinutes = Math.Max(0, travelCandidate?.TravelSnapshot?.TravelMinutes ?? travelCandidate?.TravelMinutes ?? 0);
+        var companyBufferMinutes = Math.Max(0, travelCandidate?.CompanyBufferMinutes ?? travelCandidate?.Buffers?.CompanyBufferMinutes ?? 30);
+
+        return (
+            start.AddMinutes(-(travelMinutes + companyBufferMinutes)),
+            end.AddMinutes(companyBufferMinutes));
+    }
+
+    private static void AttachTravelSnapshot(
+        BookingSlot slot,
+        GetAvailabilityQuery query,
+        LocationCandidate? travelCandidate)
+    {
+        if (query.IsRemote)
+        {
+            slot.AttachTravelSnapshot(
+                travelMinutes: 0,
+                distanceMiles: null,
+                companyBufferMinutes: 0,
+                sourceLocationRef: null,
+                sourcePostcode: null,
+                destinationLocationRef: query.LocationRef,
+                destinationPostcode: query.DestinationAddress?.Postcode,
+                provider: null,
+                confidence: null,
+                calculatedUtc: null);
+            return;
+        }
+
+        var snapshot = travelCandidate?.TravelSnapshot;
+        var companyBufferMinutes = travelCandidate?.CompanyBufferMinutes ?? travelCandidate?.Buffers?.CompanyBufferMinutes;
+
+        slot.AttachTravelSnapshot(
+            travelMinutes: snapshot?.TravelMinutes ?? travelCandidate?.TravelMinutes,
+            distanceMiles: snapshot?.DistanceMiles ?? ConvertDistanceMiles(travelCandidate?.DistanceMiles),
+            companyBufferMinutes: companyBufferMinutes,
+            sourceLocationRef: snapshot?.SourceLocationRef ?? travelCandidate?.AdviserId,
+            sourcePostcode: snapshot?.SourcePostcode,
+            destinationLocationRef: snapshot?.DestinationLocationRef ?? query.LocationRef,
+            destinationPostcode: snapshot?.DestinationPostcode ?? query.DestinationAddress?.Postcode,
+            provider: snapshot?.Provider ?? "LocationService",
+            confidence: snapshot?.Confidence ?? travelCandidate?.TravelToClient?.Confidence,
+            calculatedUtc: snapshot?.CalculatedUtc);
+    }
+
+    private static double? ConvertDistanceMiles(decimal? distanceMiles)
+        => distanceMiles.HasValue ? Convert.ToDouble(distanceMiles.Value) : null;
 
     private static IReadOnlyDictionary<string, int> MergeAudit(
         IReadOnlyDictionary<string, int>? scoreBreakdown,

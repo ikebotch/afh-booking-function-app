@@ -1,27 +1,29 @@
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Application.Holds;
 
 namespace AFH.Booking.Application.Governance;
 
 public sealed class BookingConflictService : IBookingConflictService
 {
-    private const int DefaultCompanyBufferMinutes = 30;
-
     private readonly ICalendarGateway _calendar;
     private readonly IOperationalIssueRepository _issues;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
+    private readonly IHoldWindowFactory _holdWindowFactory;
 
     public BookingConflictService(
         ICalendarGateway calendar,
         IOperationalIssueRepository issues,
         IUnitOfWork uow,
-        IClock clock)
+        IClock clock,
+        IHoldWindowFactory? holdWindowFactory = null)
     {
         _calendar = calendar;
         _issues = issues;
         _uow = uow;
         _clock = clock;
+        _holdWindowFactory = holdWindowFactory ?? new HoldWindowFactory();
     }
 
     public async Task<BookingConflictCheckResult> EvaluateConfirmationConflictsAsync(
@@ -31,13 +33,12 @@ public sealed class BookingConflictService : IBookingConflictService
         string calendarUserId,
         CancellationToken ct)
     {
-        var bufferStartUtc = slot.StartUtc.AddMinutes(-(transaction.IsRemote ? 0 : GetBufferMinutes(slot)));
-        var bufferEndUtc = slot.EndUtc.AddMinutes(transaction.IsRemote ? 0 : Math.Max(0, slot.CompanyBufferMinutes ?? DefaultCompanyBufferMinutes));
+        var windows = _holdWindowFactory.Create(slot, transaction);
 
         var liveAvailability = await _calendar.CheckAvailabilityAsync(
             calendarUserId,
-            bufferStartUtc,
-            bufferEndUtc,
+            windows.HoldStartUtc,
+            windows.HoldEndUtc,
             transaction.Timezone,
             "ForceRefresh",
             ct);
@@ -104,12 +105,5 @@ public sealed class BookingConflictService : IBookingConflictService
 
         var first = details[0];
         return new BookingConflictCheckResult(true, first.Code, first.Message, details);
-    }
-
-    private static int GetBufferMinutes(BookingSlot slot)
-    {
-        var travelMinutes = Math.Max(0, slot.TravelMinutes ?? 0);
-        var companyBufferMinutes = Math.Max(0, slot.CompanyBufferMinutes ?? DefaultCompanyBufferMinutes);
-        return travelMinutes + companyBufferMinutes;
     }
 }

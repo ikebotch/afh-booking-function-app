@@ -62,6 +62,8 @@ public sealed class BookingHoldService : IBookingHoldService
                 await _holdRepo.UpdateAsync(existingHold, ct);
             }
 
+            await CancelCalendarEventIfExistsAsync(slotHold, ct);
+
             slotHold.Reopen(
                 utcNow,
                 DefaultHoldWindow,

@@ -1,0 +1,2 @@
+src> dotnet ef migrations add AddMeetingTypes   --project AFH.Booking.Infrastructure --startup-project AFH.Booking.Function --context BookingDbContext
+src> dotnet ef database update AddMeetingTypes  --project AFH.Booking.Infrastructure

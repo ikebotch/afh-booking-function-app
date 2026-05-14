@@ -1,0 +1,33 @@
+﻿namespace AFH.Booking.Application.Abstractions.Persistence;
+
+public interface IBookingHoldRepository
+{
+    Task AddAsync(BookingHold hold, CancellationToken ct);
+
+    Task<BookingHold?> GetAsync(string holdId, CancellationToken ct);
+
+    Task<BookingHold?> GetForUpdateAsync(string holdId, CancellationToken ct);
+
+    Task<BookingHold?> GetBySlotIdAsync(string slotId, CancellationToken ct);
+    Task<BookingHold?> GetByCalendarEventIdAsync(string providerEventId, CancellationToken ct);
+    Task<BookingHold?> GetActiveBySlotIdAsync(string slotId, DateTime utcNow, CancellationToken ct);
+    Task<BookingHold?> GetActiveByTransactionIdAsync(string transactionId, DateTime utcNow, CancellationToken ct);
+    Task<ActiveHoldLookupResult> GetActiveForCreateHoldAsync(string transactionId, string slotId, DateTime utcNow, CancellationToken ct);
+
+    Task UpdateAsync(BookingHold hold, CancellationToken ct);
+
+
+    Task<BookingHold?> GetTrackedAsync(string holdId, CancellationToken ct);
+
+    Task<IReadOnlyList<BookingHold>> GetExpiredActiveAsync(DateTime utcNow, int take, CancellationToken ct);
+    Task<int> CountActiveOrConfirmedByAdviserAsync(string adviserId, DateTime fromUtc, DateTime toUtc, DateTime utcNow, CancellationToken ct);
+    Task<IReadOnlyList<BookingHold>> GetAllActiveByTransactionIdAsync(
+        string transactionId,
+        DateTime utcNow,
+        CancellationToken ct);
+
+}
+
+public sealed record ActiveHoldLookupResult(
+    BookingHold? TransactionHold,
+    BookingHold? SlotHold);

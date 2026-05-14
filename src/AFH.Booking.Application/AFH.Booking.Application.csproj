@@ -1,0 +1,28 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\AFH.Booking.Domain\AFH.Booking.Domain.csproj" />
+		<ProjectReference Include="..\AFH.Booking.Contract\AFH.Booking.Contract.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+		<PackageReference Include="Microsoft.Extensions.Options" Version="10.0.5" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<InternalsVisibleTo Include="AFH.Booking.Infrastructure" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Availability\Queries\" />
+	</ItemGroup>
+
+</Project>

@@ -1,9 +1,9 @@
 # =============================
-# ACS Function App CI
+# Booking App CI
 # =============================
 
 # Build number format (appears as $(Build.BuildNumber))
-name: ACSApp_$(Date:yyyyMMdd).$(Rev:r)
+name: BookingApp_$(Date:yyyyMMdd).$(Rev:r)
 
 trigger:
 - main
@@ -21,28 +21,20 @@ steps:
 # NuGet
 # - task: NuGetToolInstaller@1
 
-# - task: NuGetCommand@2
-#   inputs:
-#     command: 'restore'
-#     restoreSolution: '$(solution)'
-#     feedsToUse: 'select'
-#     vstsFeed: '$(vstsFeed)'
+- task: NuGetCommand@2
+  inputs:
+    command: 'restore'
+    restoreSolution: '$(solution)'
+    feedsToUse: 'select'
+    vstsFeed: '$(vstsFeed)'
+
 
 - task: DotNetCoreCLI@2
   displayName: 'Build .NET'
   inputs:
-    command: 'publish'
-    publishWebProjects: false
-    projects: 'src/AFH.Acs.Function/AFH.Acs.Function.csproj'
+    command: 'build'
+    projects: 'src/AFH.Booking.Function/AFH.Booking.Function.csproj'
     arguments: '--output $(Build.BinariesDirectory)/publish_output --configuration $(buildConfiguration)'
-
-- task: DotNetCoreCLI@2
-  displayName: 'Test .NET'
-  inputs:
-    command: 'test'
-    publishTestResults: true
-    projects: 'tests/AFH.Acs.Tests/AFH.Acs.Tests.csproj'
-    arguments: '--configuration $(buildConfiguration)'
 
 
 # ------------------------
@@ -55,7 +47,7 @@ steps:
     rootFolderOrFile: '$(Build.BinariesDirectory)/publish_output'
     includeRootFolder: false
     archiveType: 'zip'
-    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId)-ACSApp-staging.zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId)-BookingApp-staging.zip'
     replaceExistingArchive: true
 
 - task: PublishBuildArtifacts@1
@@ -85,7 +77,7 @@ steps:
     rootFolderOrFile: '$(Build.BinariesDirectory)/publish_output'
     includeRootFolder: false
     archiveType: 'zip'
-    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId)-ACSApp-prod.zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId)-BookingApp-prod.zip'
     replaceExistingArchive: true
 
 - task: PublishBuildArtifacts@1

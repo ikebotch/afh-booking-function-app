@@ -23,14 +23,13 @@ public sealed class BookingHoldModelConfiguration : IEntityTypeConfiguration<Boo
             .HasMaxLength(64)
             .IsRequired();
 
-        // Only live holds block a slot. Historical cancelled/released/expired rows remain for audit.
+        // Enforce 1:1 (unique hold per slot)
         b.HasIndex(x => x.SlotId)
-            .IsUnique()
-            .HasFilter("[Status] IN (0, 1)");
+            .IsUnique();
 
         b.HasOne(x => x.Slot)
-            .WithMany()
-            .HasForeignKey(x => x.SlotId)
+            .WithOne(s => s.Hold)
+            .HasForeignKey<BookingHoldModel>(x => x.SlotId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // -----

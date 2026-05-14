@@ -22,6 +22,7 @@ public sealed class BookingSlotRepository : IBookingSlotRepository
     public async Task<BookingSlot?> GetAsync(string slotId, CancellationToken ct)
     {
         var m = await _db.BookingSlots
+            .Include(x => x.Hold)
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == slotId, ct);
 
@@ -36,6 +37,7 @@ public sealed class BookingSlotRepository : IBookingSlotRepository
     {
         var models = await _db.BookingSlots
             .Where(x => x.TransactionId == transactionId)
+            .Include(x => x.Hold)
             .AsNoTracking()
             .ToListAsync(ct);
 

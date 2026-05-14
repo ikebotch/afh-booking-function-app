@@ -1,4 +1,6 @@
-﻿using AFH.Booking.Domain.Bookings;
+﻿using AFH.Booking.Domain.Availability;
+using AFH.Booking.Domain.Bookings;
+using AFH.Booking.Domain.ValueObjects;
 using AFH.Booking.Infrastructure.Persistence.Models;
 
 namespace AFH.Booking.Infrastructure.Persistence.Mapping;
@@ -36,7 +38,8 @@ public static class BookingHoldMapping
             releasedUtc: AsUtcNullable(m.ReleasedUtc),
             cancelledUtc: AsUtcNullable(m.CancelledUtc),
             cancelReason: m.CancelReason,
-            providerEventId: m.CalendarProviderEventId
+            providerEventId: m.CalendarProviderEventId,
+            bookingId: m.Slot?.TransactionId
         );
 
     private static HoldStatus ToModelStatus(BookingHoldStatus s) => s switch
@@ -64,8 +67,8 @@ public static class BookingHoldMapping
         if (h is null) throw new ArgumentNullException(nameof(h));
         if (m is null) throw new ArgumentNullException(nameof(m));
 
-        m.SlotId = h.SlotId;
-        m.UserId = h.UserId;
+        // SlotId should not change for a hold
+        // m.SlotId = h.SlotId;
 
         m.Status = (Models.HoldStatus)h.Status;
 

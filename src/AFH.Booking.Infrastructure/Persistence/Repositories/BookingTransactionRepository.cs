@@ -36,6 +36,7 @@ public sealed class BookingTransactionRepository : IBookingTransactionRepository
 
         var model = await _db.BookingTransactions
             .Include(x => x.Slots)
+                .ThenInclude(s => s.Hold)
             .SingleOrDefaultAsync(x => x.Id == transactionId, ct);
 
         return model?.ToDomain(includeSlots: true);
@@ -45,6 +46,7 @@ public sealed class BookingTransactionRepository : IBookingTransactionRepository
     {
         var m = await _db.BookingTransactions
             .Include(x => x.Slots)
+            .ThenInclude(s => s.Hold)
             .FirstOrDefaultAsync(x => x.Id == transactionId, ct);
 
         return m?.ToDomain(includeSlots: true);

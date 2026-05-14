@@ -1,4 +1,6 @@
-﻿namespace AFH.Booking.Domain.Bookings;
+﻿using AFH.Booking.Domain.Availability;
+
+namespace AFH.Booking.Domain.Bookings;
 
 public enum BookingHoldStatus
 {
@@ -25,8 +27,21 @@ public sealed class BookingHold
     public DateTime? ReleasedUtc { get; private set; }
     public DateTime? CancelledUtc { get; private set; }
     public string? CancelReason { get; private set; }
+    public string? BookingId { get; private set; }
 
     public string? CalendarProviderEventId { get; private set; }
+    public void Reopen(
+    DateTime utcNow,
+    TimeSpan holdDuration,
+    string userId)
+    {
+        Status = BookingHoldStatus.Active; 
+        UserId = userId;
+        ExpiresUtc = utcNow.Add(holdDuration);
+        ConfirmedUtc = null;
+        CalendarProviderEventId = null;
+    }
+
 
     public static BookingHold Create(
         string slotId,
@@ -68,7 +83,7 @@ public sealed class BookingHold
         ConfirmedUtc = utcNow;
     }
 
-    public void Release(DateTime utcNow)
+    public void Release(DateTime utcNow, string reason)
     {
         if (Status == BookingHoldStatus.Released)
             return;
@@ -77,6 +92,7 @@ public sealed class BookingHold
             throw new DomainException("Cannot release confirmed hold.");
 
         Status = BookingHoldStatus.Released;
+        CancelReason = reason;
         ReleasedUtc = utcNow;
     }
 
@@ -102,31 +118,6 @@ public sealed class BookingHold
             Status = BookingHoldStatus.Expired;
     }
 
-    public void MoveToSlot(
-        string slotId,
-        string userId,
-        TimeSpan holdDuration,
-        DateTime utcNow)
-    {
-        EnsureActive();
-
-        if (string.IsNullOrWhiteSpace(slotId))
-            throw new DomainException("slotId required.");
-
-        if (string.IsNullOrWhiteSpace(userId))
-            throw new DomainException("userId required.");
-
-        if (holdDuration <= TimeSpan.Zero)
-            throw new DomainException("holdDuration must be > 0.");
-
-        utcNow = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
-
-        SlotId = slotId;
-        UserId = userId;
-        ExpiresUtc = utcNow.Add(holdDuration);
-        CalendarProviderEventId = null;
-    }
-
     private void EnsureActive()
     {
         if (Status != BookingHoldStatus.Active)
@@ -139,22 +130,24 @@ public sealed class BookingHold
     }
 
     public static BookingHold Rehydrate(
-        string id,
-        string slotId,
-        string userid,
-        BookingHoldStatus status,
-        DateTime createdUtc,
-        DateTime expiresUtc,
-        DateTime? confirmedUtc,
-        DateTime? releasedUtc,
-        DateTime? cancelledUtc,
-        string? cancelReason,
-        string? providerEventId)
+       string id,
+       string slotId,
+       string userid,
+       BookingHoldStatus status,
+       DateTime createdUtc,
+       DateTime expiresUtc,
+       DateTime? confirmedUtc,
+       DateTime? releasedUtc,
+       DateTime? cancelledUtc,
+       string? cancelReason,
+       string? providerEventId,
+       string? bookingId)
     {
         return new BookingHold
         {
             Id = id,
             SlotId = slotId,
+            UserId = userid,
             Status = status,
             CreatedUtc = createdUtc,
             ExpiresUtc = expiresUtc,
@@ -163,7 +156,12 @@ public sealed class BookingHold
             CancelledUtc = cancelledUtc,
             CancelReason = cancelReason,
             CalendarProviderEventId = providerEventId,
-            UserId = userid
+            BookingId = bookingId
         };
+    }
+
+    public void ClearCalendarEvent()
+    {
+        CalendarProviderEventId = null;
     }
 }

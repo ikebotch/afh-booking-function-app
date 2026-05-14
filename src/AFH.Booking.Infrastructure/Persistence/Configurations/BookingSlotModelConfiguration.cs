@@ -59,7 +59,12 @@ public sealed class BookingSlotModelConfiguration : IEntityTypeConfiguration<Boo
             .IsRequired()
             .HasDefaultValueSql("SYSUTCDATETIME()");
 
-        b.Ignore(x => x.Hold);
+        // Relationship: Slot -> Hold (1-0/1)
+        // Hold has FK SlotId -> Slot.Id, unique.
+        b.HasOne(x => x.Hold)
+            .WithOne(x => x.Slot)
+            .HasForeignKey<BookingHoldModel>(x => x.SlotId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Helpful indexes
         b.HasIndex(x => new { x.TransactionId, x.StartUtc });

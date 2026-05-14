@@ -11,7 +11,7 @@ namespace AFH.Booking.Tests;
 public sealed class CreateBookingHandlerTests
 {
     [Fact]
-    public async Task HandleAsync_SameTransactionRehold_CancelsExistingHold_ChecksFreshAvailability_AndCreatesNewHold()
+    public async Task HandleAsync_SameTransactionRehold_ChecksFreshAvailability_AndMovesExistingHold()
     {
         var now = new DateTime(2026, 03, 25, 10, 0, 0, DateTimeKind.Utc);
         var transaction = CreateTransaction(now);
@@ -53,12 +53,12 @@ public sealed class CreateBookingHandlerTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(
-            new[] { "cancel-calendar", "update-old-hold", "check-availability", "add-new-hold", "create-calendar" },
+            new[] { "check-availability", "cancel-calendar", "update-old-hold", "create-calendar", "update-old-hold" },
             recorder.Events.Select(x => x.Name).ToArray());
-        Assert.Equal(BookingHoldStatus.Cancelled, oldHold.Status);
-        Assert.Equal("Superseded by a new hold attempt.", oldHold.CancelReason);
-        Assert.NotNull(holdRepo.AddedHold);
-        Assert.NotEqual(oldHold.Id, holdRepo.AddedHold!.Id);
+        Assert.Equal(BookingHoldStatus.Active, oldHold.Status);
+        Assert.Equal(newSlot.Id, oldHold.SlotId);
+        Assert.Equal("evt-new", oldHold.CalendarProviderEventId);
+        Assert.Null(holdRepo.AddedHold);
         Assert.Equal("evt-old", calendar.CancelledEventId);
         Assert.Equal("adviser.one@tenant.com", calendar.LastAvailabilityUserId);
         Assert.Equal("adviser.one@tenant.com", calendar.LastCreatedUserId);
@@ -66,6 +66,70 @@ public sealed class CreateBookingHandlerTests
         Assert.DoesNotContain("<html", calendar.LastCreatedBody ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(1, holdRepo.ActiveLookupCallCount);
         Assert.Equal(1, profiles.ResolveCallCount);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenMovingExistingHold_IgnoresOwnCalendarConflict()
+    {
+        var now = new DateTime(2026, 03, 25, 10, 0, 0, DateTimeKind.Utc);
+        var transaction = CreateTransaction(now);
+        var oldSlot = CreateSlot("slot-old", transaction.Id, now.AddHours(2), now.AddHours(3), travelMinutes: 10, companyBufferMinutes: 20);
+        var newSlot = CreateSlot("slot-new", transaction.Id, now.AddHours(4), now.AddHours(5), travelMinutes: 15, companyBufferMinutes: 30);
+        var oldHold = BookingHold.Rehydrate(
+            id: "hold-old",
+            slotId: oldSlot.Id,
+            userid: "adviser.one@tenant.com",
+            status: BookingHoldStatus.Active,
+            createdUtc: now.AddMinutes(-2),
+            expiresUtc: now.AddMinutes(2),
+            confirmedUtc: null,
+            releasedUtc: null,
+            cancelledUtc: null,
+            cancelReason: null,
+            providerEventId: "evt-old");
+
+        var recorder = new EventRecorder();
+        var holdRepo = new TrackingHoldRepository(oldHold, recorder);
+        var calendar = new TrackingCalendarGateway(recorder)
+        {
+            AvailabilityToReturn = new AdviserAvailabilityResult
+            {
+                IsFree = false,
+                MailboxUnavailable = false,
+                StatusMessage = "Conflicts found",
+                Conflicts = [new CalendarConflictBlock
+                {
+                    StartUtc = newSlot.StartUtc,
+                    EndUtc = newSlot.EndUtc,
+                    Subject = "AFH Booking Hold",
+                    ProviderEventId = "evt-old"
+                }]
+            }
+        };
+
+        var sut = new CreateBookingHandler(
+            new StubTransactionRepository(transaction),
+            new StubSlotRepository(newSlot),
+            holdRepo,
+            new StubUnitOfWork(),
+            calendar,
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            new StubClientDirectory(),
+            new StubClock(now),
+            NullLogger<CreateBookingHandler>.Instance);
+
+        var result = await sut.HandleAsync(new CreateHoldCommand
+        {
+            SlotId = newSlot.Id,
+            TransactionRef = transaction.TransactionRef
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(oldHold.Id, result.Value.BookingId);
+        Assert.Equal(newSlot.Id, oldHold.SlotId);
+        Assert.Equal("evt-new", oldHold.CalendarProviderEventId);
+        Assert.Null(holdRepo.AddedHold);
+        Assert.True(calendar.CreatedBookingEvent);
     }
 
     [Fact]
@@ -162,7 +226,8 @@ public sealed class CreateBookingHandlerTests
 
         Assert.False(result.IsSuccess);
         Assert.Equal(Errors.BookingConflictDoubleBooked, result.ErrorCode);
-        Assert.Equal(BookingHoldStatus.Cancelled, oldHold.Status);
+        Assert.Equal(BookingHoldStatus.Active, oldHold.Status);
+        Assert.Equal(oldSlot.Id, oldHold.SlotId);
         Assert.Null(holdRepo.AddedHold);
         Assert.False(calendar.CreatedBookingEvent);
         Assert.Equal(1, holdRepo.ActiveLookupCallCount);

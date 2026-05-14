@@ -83,7 +83,12 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
                 return FailFrom<CreateBookingResponse>(holdCheck);
         }
 
-        var availabilityCheck = await EnsureFreshAvailabilityAsync(slot, tx, calendarUserId, ct);
+        var availabilityCheck = await EnsureFreshAvailabilityAsync(
+            slot,
+            tx,
+            calendarUserId,
+            activeHolds.TransactionHold,
+            ct);
         if (!availabilityCheck.IsSuccess)
             return FailFrom<CreateBookingResponse>(availabilityCheck);
 
@@ -300,6 +305,7 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         BookingSlot slot,
         BookingTransaction tx,
         string calendarUserId,
+        BookingHold? movingHold,
         CancellationToken ct)
     {
         var windows = BuildHoldWindows(slot, tx);
@@ -331,7 +337,11 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
                 Errors.Conflict);
         }
 
-        if (!availability.IsFree)
+        var relevantConflicts = availability.Conflicts
+            .Where(conflict => IsRelevantCalendarConflict(conflict, movingHold))
+            .ToList();
+
+        if (!availability.IsFree && (availability.Conflicts.Count == 0 || relevantConflicts.Count > 0))
         {
             return Result<Unit>.Fail(
                 HttpStatusCode.Conflict,
@@ -342,6 +352,17 @@ public sealed class CreateBookingHandler : ICreateBookingHandler
         }
 
         return Result<Unit>.Ok(Unit.Value);
+    }
+
+    private static bool IsRelevantCalendarConflict(CalendarConflictBlock conflict, BookingHold? movingHold)
+    {
+        if (movingHold is null || string.IsNullOrWhiteSpace(movingHold.CalendarProviderEventId))
+            return true;
+
+        return !string.Equals(
+            conflict.ProviderEventId,
+            movingHold.CalendarProviderEventId,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     // -------------------------

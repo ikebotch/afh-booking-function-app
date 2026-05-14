@@ -98,7 +98,6 @@ public static class ContractMappingExtensions
         => new()
         {
             SlotId = req.SlotId,
-            BookingId = req.BookingId,
             TransactionRef = req.TransactionId,
         };
 }

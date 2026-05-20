@@ -1,4 +1,4 @@
-﻿namespace AFH.Booking.Domain.Options;
+namespace AFH.Booking.Domain.Options;
 
 public sealed class LocationServiceOptions
 {
@@ -6,4 +6,5 @@ public sealed class LocationServiceOptions
     public string BaseUrl { get; set; } = default!;
     public string? FunctionKey { get; set; }
     public string? InternalToken { get; set; }
+    public bool UseTimeDependentEvaluation { get; set; }
 }

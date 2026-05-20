@@ -8,12 +8,19 @@ using Microsoft.Extensions.Options;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace AFH.Booking.Infrastructure.Location;
 
 public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters =
+        {
+            new JsonStringEnumConverter()
+        }
+    };
 
     private readonly HttpClient _http;
     private readonly LocationServiceOptions _options;
@@ -39,11 +46,20 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         if (string.IsNullOrWhiteSpace(_options.BaseUrl))
             throw new InvalidOperationException($"{LocationServiceOptions.SectionName}:BaseUrl is required.");
 
+        bool useTimeDependent = request.TimingMode == LocationTravelTimingMode.DepartureTime || _options.UseTimeDependentEvaluation;
+        var contractRequest = ToContractRequest(request, useTimeDependent);
+
+        _logger.LogInformation(
+            "Sending travel coverage request. TravelEvaluationMode={TravelEvaluationMode} SlotResponseMode={SlotResponseMode} CorrelationId={CorrelationId}",
+            contractRequest.TimeContext.TravelEvaluationMode,
+            contractRequest.TimeContext.SlotResponseMode,
+            contractRequest.RequestContext.CorrelationId);
+
         using var httpRequest = new HttpRequestMessage(
             HttpMethod.Post,
             $"{_options.BaseUrl.TrimEnd('/')}/api/v1/location/travel-coverage")
         {
-            Content = JsonContent.Create(ToContractRequest(request), options: JsonOptions)
+            Content = JsonContent.Create(contractRequest, options: JsonOptions)
         };
 
         if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
@@ -70,17 +86,16 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         return new LocationTravelCoverageResult();
     }
 
-    private static TravelCoverageRequestDto ToContractRequest(LocationTravelCoverageRequest request)
+    private static TravelCoverageRequestDto ToContractRequest(LocationTravelCoverageRequest request, bool useTimeDependent)
     {
         return new TravelCoverageRequestDto
         {
             SourcePostcode = request.SourcePostcode,
             TimeContext = new TravelCoverageTimeContextDto
             {
-                RequestedDepartureTime = request.RequestedDepartureTime,
-                TimingMode = request.TimingMode == LocationTravelTimingMode.DepartureTime
-                    ? TravelCoverageTimingModeDto.DepartureTime
-                    : TravelCoverageTimingModeDto.TimeIndependent
+                TravelEvaluationMode = useTimeDependent ? TravelEvaluationModeDto.TimeDependent : TravelEvaluationModeDto.TimeIndependent,
+                SlotResponseMode = SlotResponseModeDto.Summary,
+                StartTime = request.RequestedDepartureTime
             },
             Destinations = request.Destinations.Select(destination => new TravelCoverageDestinationRequestDto
             {
@@ -89,15 +104,9 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
                 MaxTravelTimeMinutes = destination.MaxTravelTimeMinutes,
                 MaxDistanceMiles = destination.MaxDistanceMiles
             }).ToList(),
-            Metadata = new TravelCoverageRequestMetadataDto
-            {
-                AppointmentType = request.AppointmentType,
-                Channel = request.Channel
-            },
             RequestContext = new LocationRequestContextDto
             {
-                CorrelationId = request.CorrelationId,
-                RequestedBy = request.RequestedBy
+                CorrelationId = request.CorrelationId
             }
         };
     }
@@ -108,29 +117,34 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         {
             SourcePostcode = response.SourcePostcode,
             SourceCoordinates = ToDomainCoordinates(response.SourceCoordinates),
-            Destinations = response.Destinations.Select(destination => new LocationTravelCoverageOutcome
+            Destinations = response.Destinations.Select(destination =>
             {
-                CorrelationId = destination.CorrelationId,
-                Postcode = destination.Postcode,
-                Status = ToDomainStatus(destination.Status),
-                Coordinates = ToDomainCoordinates(destination.Coordinates),
-                Route = destination.Route is null
-                    ? null
-                    : new LocationTravelRouteOutcome
-                    {
-                        TravelTimeMinutes = destination.Route.TravelTimeMinutes,
-                        TravelDistanceMiles = destination.Route.TravelDistanceMiles,
-                        Confidence = destination.Route.Confidence,
-                        ResolutionSource = ToDomainResolutionSource(destination.Route.ResolutionSource)
-                    },
-                Coverage = destination.Coverage is null
-                    ? null
-                    : new LocationCoverageOutcome
-                    {
-                        IsWithinCoverage = destination.Coverage.IsWithinCoverage,
-                        MaxTravelTimeMinutes = destination.Coverage.MaxTravelTimeMinutes,
-                        MaxDistanceMiles = destination.Coverage.MaxDistanceMiles
-                    }
+                var firstSlot = destination.Slots?.FirstOrDefault();
+
+                return new LocationTravelCoverageOutcome
+                {
+                    CorrelationId = destination.CorrelationId,
+                    Postcode = destination.Postcode,
+                    Status = ToDomainStatus(destination.Status),
+                    Coordinates = ToDomainCoordinates(destination.Coordinates),
+                    Route = firstSlot is null
+                        ? null
+                        : new LocationTravelRouteOutcome
+                        {
+                            TravelTimeMinutes = firstSlot.TravelTimeMinutes,
+                            TravelDistanceMiles = firstSlot.TravelDistanceMiles,
+                            Confidence = "High",
+                            ResolutionSource = LocationTravelResolutionSource.Unknown
+                        },
+                    Coverage = firstSlot is null
+                        ? null
+                        : new LocationCoverageOutcome
+                        {
+                            IsWithinCoverage = firstSlot.IsWithinCoverage,
+                            MaxTravelTimeMinutes = null,
+                            MaxDistanceMiles = null
+                        }
+                };
             }).ToList()
         };
     }
@@ -158,16 +172,6 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         };
     }
 
-    private static LocationTravelResolutionSource ToDomainResolutionSource(TravelRouteResolutionSourceDto source)
-    {
-        return source switch
-        {
-            TravelRouteResolutionSourceDto.Cache => LocationTravelResolutionSource.Cache,
-            TravelRouteResolutionSourceDto.Database => LocationTravelResolutionSource.Database,
-            TravelRouteResolutionSourceDto.AzureMaps => LocationTravelResolutionSource.AzureMaps,
-            _ => LocationTravelResolutionSource.Unknown
-        };
-    }
 
     private static async Task<T?> ReadEnvelopedOrRawAsync<T>(HttpResponseMessage response, CancellationToken ct)
         where T : class
@@ -200,20 +204,28 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         public string SourcePostcode { get; set; } = string.Empty;
         public TravelCoverageTimeContextDto TimeContext { get; set; } = new();
         public List<TravelCoverageDestinationRequestDto> Destinations { get; set; } = new();
-        public TravelCoverageRequestMetadataDto Metadata { get; set; } = new();
         public LocationRequestContextDto RequestContext { get; set; } = new();
     }
 
     private sealed class TravelCoverageTimeContextDto
     {
-        public DateTimeOffset? RequestedDepartureTime { get; set; }
-        public TravelCoverageTimingModeDto TimingMode { get; set; }
+        public TravelEvaluationModeDto TravelEvaluationMode { get; set; } = TravelEvaluationModeDto.TimeIndependent;
+        public SlotResponseModeDto SlotResponseMode { get; set; } = SlotResponseModeDto.Summary;
+        public DateTimeOffset? StartTime { get; set; }
+        public DateTimeOffset? EndTime { get; set; }
     }
 
-    private enum TravelCoverageTimingModeDto
+    private enum TravelEvaluationModeDto
     {
         TimeIndependent = 0,
-        DepartureTime = 1
+        TimeDependent = 1
+    }
+
+    private enum SlotResponseModeDto
+    {
+        Grouped = 0,
+        Expanded = 1,
+        Summary = 2
     }
 
     private sealed class TravelCoverageDestinationRequestDto
@@ -224,16 +236,9 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         public double? MaxDistanceMiles { get; set; }
     }
 
-    private sealed class TravelCoverageRequestMetadataDto
-    {
-        public string? AppointmentType { get; set; }
-        public string? Channel { get; set; }
-    }
-
     private sealed class LocationRequestContextDto
     {
         public string? CorrelationId { get; set; }
-        public string? RequestedBy { get; set; }
     }
 
     private sealed class TravelCoverageResponseDto
@@ -249,8 +254,23 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         public string Postcode { get; set; } = string.Empty;
         public TravelCoverageStatusDto Status { get; set; }
         public LocationCoordinatesDto? Coordinates { get; set; }
-        public TravelRouteOutcomeDto? Route { get; set; }
-        public CoverageOutcomeDto? Coverage { get; set; }
+        public List<TravelCoverageSlotDto>? Slots { get; set; }
+        public List<ApiWarningDto>? Warnings { get; set; }
+    }
+
+    private sealed class TravelCoverageSlotDto
+    {
+        public DateTimeOffset? StartTime { get; set; }
+        public DateTimeOffset? EndTime { get; set; }
+        public int TravelTimeMinutes { get; set; }
+        public double TravelDistanceMiles { get; set; }
+        public bool IsWithinCoverage { get; set; }
+    }
+
+    private sealed class ApiWarningDto
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
     }
 
     private enum TravelCoverageStatusDto
@@ -260,29 +280,6 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         DestinationPostcodeUnresolved = 2,
         RouteUnavailable = 3,
         Failed = 4
-    }
-
-    private sealed class TravelRouteOutcomeDto
-    {
-        public int TravelTimeMinutes { get; set; }
-        public double TravelDistanceMiles { get; set; }
-        public string Confidence { get; set; } = string.Empty;
-        public TravelRouteResolutionSourceDto ResolutionSource { get; set; }
-    }
-
-    private enum TravelRouteResolutionSourceDto
-    {
-        Unknown = 0,
-        Cache = 1,
-        Database = 2,
-        AzureMaps = 3
-    }
-
-    private sealed class CoverageOutcomeDto
-    {
-        public bool IsWithinCoverage { get; set; }
-        public int? MaxTravelTimeMinutes { get; set; }
-        public double? MaxDistanceMiles { get; set; }
     }
 
     private sealed class LocationCoordinatesDto

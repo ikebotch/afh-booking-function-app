@@ -13,16 +13,16 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
 {
     private static readonly char[] SkillWhitespaceSeparators = [' ', '\t', '\r', '\n'];
 
-    private readonly ITravelMatrixService _travelMatrix;
+    private readonly ILocationTravelCoverageClient _travelCoverageClient;
     private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly ILogger<AdviserPoolBuilder> _logger;
 
     public AdviserPoolBuilder(
-        ITravelMatrixService travelMatrix,
+        ILocationTravelCoverageClient travelCoverageClient,
         IAdviserProfileProjectionRepository profiles,
         ILogger<AdviserPoolBuilder> logger)
     {
-        _travelMatrix = travelMatrix;
+        _travelCoverageClient = travelCoverageClient;
         _profiles = profiles;
         _logger = logger;
     }
@@ -88,7 +88,9 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
             {
                 AdviserId = x.AdviserId,
                 Name = string.IsNullOrWhiteSpace(x.DisplayName) ? x.AdviserId : x.DisplayName,
-                Email = string.IsNullOrWhiteSpace(x.MailboxUserId) ? x.AdviserId : x.MailboxUserId
+                Email = string.IsNullOrWhiteSpace(x.MailboxUserId) ? x.AdviserId : x.MailboxUserId,
+                Region = x.Region,
+                HomePostcode = x.HomePostcode
             })
             .DistinctBy(x => x.AdviserId, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -104,7 +106,7 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
         IReadOnlyList<string> normalizedRequiredSkills,
         CancellationToken ct)
     {
-        var travel = await GetTravelIfRequired(query, prospect, query.PreferredAdviserIds, normalizedRequiredSkills, ct);
+        var travel = await GetTravelIfRequired(query, prospect, normalizedRequiredSkills, ct);
         if (travel is null || travel.Candidates.Count == 0)
             return (new AdviserPoolResult([], new Dictionary<string, LocationCandidate>(StringComparer.OrdinalIgnoreCase)), null);
 
@@ -116,7 +118,8 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
             {
                 AdviserId = c.AdviserId,
                 Name = string.IsNullOrWhiteSpace(c.AdviserName) ? c.AdviserId : c.AdviserName,
-                Email = string.IsNullOrWhiteSpace(c.MailboxUserId) ? c.AdviserId : c.MailboxUserId
+                Email = string.IsNullOrWhiteSpace(c.MailboxUserId) ? c.AdviserId : c.MailboxUserId,
+                HomePostcode = c.TravelSnapshot?.SourcePostcode
             })
             .DistinctBy(x => x.AdviserId, StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -132,7 +135,6 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
     private async Task<TravelMatrixResult?> GetTravelIfRequired(
         GetAvailabilityQuery query,
         Domain.Client.ClientDirectoryItem? prospect,
-        IEnumerable<string> adviserIds,
         IReadOnlyList<string> normalizedRequiredSkills,
         CancellationToken ct)
     {
@@ -148,16 +150,17 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
         };
 
         var requestKey = query.TransactionId ?? query.ClientId ?? "n/a";
+        var profiles = await BuildCandidateProfilesAsync(query, normalizedRequiredSkills, ct);
 
         _logger.LogInformation(
-            "Booking availability location request built. RequestKey={RequestKey} IsRemote={IsRemote} HasLine1={HasLine1} HasTown={HasTown} HasPostcode={HasPostcode} RequiredSkillsCount={RequiredSkillsCount} PreferredAdviserIdsCount={PreferredAdviserIdsCount}",
+            "Booking availability location request built. RequestKey={RequestKey} IsRemote={IsRemote} HasLine1={HasLine1} HasTown={HasTown} HasPostcode={HasPostcode} RequiredSkillsCount={RequiredSkillsCount} CandidateProfileCount={CandidateProfileCount}",
             requestKey,
             query.IsRemote,
             !string.IsNullOrWhiteSpace(destination.Line1),
             !string.IsNullOrWhiteSpace(destination.Town),
             !string.IsNullOrWhiteSpace(destination.Postcode),
             normalizedRequiredSkills.Count,
-            adviserIds.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).Count());
+            profiles.Count);
 
         if (string.IsNullOrWhiteSpace(destination.Line1) ||
             string.IsNullOrWhiteSpace(destination.Town) ||
@@ -170,15 +173,39 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
             return null;
         }
 
-        var req = query.ToTravelMatrixRequest(
-            query.TransactionId ?? query.ClientId!,
-            destination,
-            adviserIds);
+        var request = new LocationTravelCoverageRequest
+        {
+            SourcePostcode = destination.Postcode,
+            RequestedDepartureTime = DateTime.SpecifyKind(query.PreferredStart, DateTimeKind.Utc),
+            TimingMode = LocationTravelTimingMode.TimeIndependent,
+            AppointmentType = query.MeetingType,
+            Channel = "BookingAvailability",
+            CorrelationId = query.TransactionId ?? query.ClientId,
+            RequestedBy = "booking-service",
+            // TODO: Confirm travel directionality with the business before evolving this contract.
+            // Travel time and distance are currently treated as scalar planning inputs for coverage,
+            // calendar padding, and scoring. This one-source/many-destinations batching shape assumes
+            // direction is effectively symmetric by using the client postcode as source and adviser
+            // home postcodes as destinations. If adviser-to-client routing is required operationally,
+            // evolve Location explicitly, likely via many-origins/one-destination, a general
+            // origins/destinations matrix contract, or explicit travel direction metadata.
+            Destinations = profiles
+                .Where(profile => !string.IsNullOrWhiteSpace(profile.HomePostcode))
+                .Select(profile => new LocationTravelCoverageDestination
+                {
+                    CorrelationId = profile.AdviserId,
+                    Postcode = profile.HomePostcode,
+                    MaxTravelTimeMinutes = profile.MaxTravelTimeMinutes,
+                    MaxDistanceMiles = profile.CoverageRadiusMiles
+                })
+                .ToList()
+        };
 
-        if (normalizedRequiredSkills.Count > 0)
-            req.Filters.RequiredSkills = normalizedRequiredSkills.ToList();
+        if (request.Destinations.Count == 0)
+            return null;
 
-        var result = await _travelMatrix.GetAsync(req, ct);
+        var coverage = await _travelCoverageClient.EvaluateAsync(request, ct);
+        var result = MapTravelCoverageResult(destination, profiles, coverage);
 
         _logger.LogInformation(
             "Booking availability location response received. RequestKey={RequestKey} CandidateCount={CandidateCount} CandidateAdviserIds={CandidateAdviserIds}",
@@ -191,6 +218,93 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
                 .ToArray());
 
         return result;
+    }
+
+    private async Task<List<AdviserProfileProjectionRecord>> BuildCandidateProfilesAsync(
+        GetAvailabilityQuery query,
+        IReadOnlyList<string> normalizedRequiredSkills,
+        CancellationToken ct)
+    {
+        var activeProfiles = await _profiles.ListActiveAsync(ct);
+        var profileById = activeProfiles.ToDictionary(x => x.AdviserId, StringComparer.OrdinalIgnoreCase);
+
+        var preferredIds = query.PreferredAdviserIds
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Where(x => !query.ExcludeAdviserIds.Contains(x, StringComparer.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var profiles = preferredIds.Count > 0
+            ? preferredIds
+                .Select(id => profileById.TryGetValue(id, out var profile) ? profile : null)
+                .Where(profile => profile is not null)
+                .Cast<AdviserProfileProjectionRecord>()
+            : activeProfiles.Where(x => !query.ExcludeAdviserIds.Contains(x.AdviserId, StringComparer.OrdinalIgnoreCase));
+
+        return profiles
+            .Where(profile => profile.IsActive)
+            .Where(profile => HasAllRequiredSkills(profile.Skills, normalizedRequiredSkills))
+            .Where(profile => !string.IsNullOrWhiteSpace(profile.HomePostcode))
+            .ToList();
+    }
+
+    private static TravelMatrixResult MapTravelCoverageResult(
+        LocationAddress clientDestination,
+        IReadOnlyList<AdviserProfileProjectionRecord> profiles,
+        LocationTravelCoverageResult coverage)
+    {
+        var profileById = profiles.ToDictionary(x => x.AdviserId, StringComparer.OrdinalIgnoreCase);
+
+        return new TravelMatrixResult
+        {
+            Candidates = coverage.Destinations
+                .Where(outcome => outcome.Status == LocationTravelCoverageStatus.Succeeded)
+                .Where(outcome => outcome.Coverage?.IsWithinCoverage == true)
+                .Where(outcome => profileById.ContainsKey(outcome.CorrelationId))
+                .Select(outcome =>
+                {
+                    var profile = profileById[outcome.CorrelationId];
+                    return new LocationCandidate
+                    {
+                        AdviserId = profile.AdviserId,
+                        AdviserName = string.IsNullOrWhiteSpace(profile.DisplayName) ? profile.AdviserId : profile.DisplayName,
+                        MailboxUserId = string.IsNullOrWhiteSpace(profile.MailboxUserId) ? profile.AdviserId : profile.MailboxUserId,
+                        Region = profile.Region,
+                        TravelMinutes = outcome.Route?.TravelTimeMinutes ?? 0,
+                        DistanceMiles = outcome.Route is null ? null : Convert.ToDecimal(outcome.Route.TravelDistanceMiles),
+                        Coverage = new CoverageInfo
+                        {
+                            WithinCoverage = outcome.Coverage?.IsWithinCoverage == true,
+                            AnchorPostcode = profile.HomePostcode,
+                            DistanceMiles = outcome.Route is null ? 0m : Convert.ToDecimal(outcome.Route.TravelDistanceMiles)
+                        },
+                        TravelToClient = new TravelToClient
+                        {
+                            EtaMinutes = outcome.Route?.TravelTimeMinutes,
+                            DistanceMiles = outcome.Route is null ? null : Convert.ToDecimal(outcome.Route.TravelDistanceMiles),
+                            Confidence = outcome.Route?.Confidence ?? "Low"
+                        },
+                        Buffers = new BufferInfo
+                        {
+                            MaxTravelTimeMinutes = outcome.Coverage?.MaxTravelTimeMinutes ?? profile.MaxTravelTimeMinutes ?? 0
+                        },
+                        TravelSnapshot = new TravelSnapshotResult
+                        {
+                            SourceLocationRef = profile.AdviserId,
+                            SourcePostcode = profile.HomePostcode,
+                            DestinationLocationRef = null,
+                            DestinationPostcode = clientDestination.Postcode,
+                            TravelMinutes = outcome.Route?.TravelTimeMinutes,
+                            DistanceMiles = outcome.Route?.TravelDistanceMiles,
+                            Provider = outcome.Route?.ResolutionSource.ToString(),
+                            Confidence = outcome.Route?.Confidence,
+                            CalculatedUtc = DateTime.UtcNow
+                        }
+                    };
+                })
+                .ToList()
+        };
     }
 
     private static IReadOnlyList<string> NormalizeSkills(IEnumerable<string>? skills)

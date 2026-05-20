@@ -103,7 +103,7 @@ public static class ServiceCollectionExtensions
             http.Timeout = TimeSpan.FromSeconds(30);
         });
 
-        services.AddHttpClient<ITravelMatrixService, TravelMatrixService>((sp, http) =>
+        services.AddHttpClient<ILocationTravelCoverageClient, LocationTravelCoverageClient>((sp, http) =>
         {
             var opt = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
 

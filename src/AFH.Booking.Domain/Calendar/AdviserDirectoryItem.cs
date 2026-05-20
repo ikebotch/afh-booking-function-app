@@ -7,4 +7,5 @@
     public string Name { get; set; } = default!;
     public string? Email { get; set; }
     public string? Region { get; set; }
+    public string? HomePostcode { get; set; }
 }

@@ -1,3 +1,6 @@
+using AFH.Booking.Application.EmailTemplates;
+using Moq;
+
 ﻿using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Bookings;
@@ -37,23 +40,74 @@ public sealed class BookingTransactionRehydrationTests
     [Fact]
     public async Task ConfirmBookingHandler_HandleAsync_DoesNotBlowUpWhenCompletedTransactionIsRehydrated()
     {
+        // This test verifies that rehydrating a completed transaction via EF does not
+        // throw an exception inside the handler (the transaction is already Completed,
+        // so MarkCompleted is a no-op and the handler should short-circuit to success).
         var db = CreateDbContext();
         var now = DateTime.UtcNow;
 
         SeedCompletedTransactionGraph(db, now);
 
+        // Use real EF-backed repositories so the handler can actually find the seeded hold/slot/tx
+        var holdRepo = new BookingHoldRepository(db);
+        var slotRepo = new BookingSlotRepository(db);
+        var txRepo = new BookingTransactionRepository(db);
+
+        var holdWindowFactory = new Mock<IHoldWindowFactory>();
+        holdWindowFactory
+            .Setup(f => f.Create(It.IsAny<BookingSlot>(), It.IsAny<BookingTransaction>()))
+            .Returns(new HoldWindows(now.AddMinutes(-45), now.AddMinutes(60), 0, 0, false));
+
+        var clock = new Mock<IClock>();
+        clock.Setup(c => c.UtcNow).Returns(now);
+
+        var calendarGateway = new Mock<ICalendarGateway>();
+        calendarGateway
+            .Setup(c => c.UpdateBookingEventAsync(It.IsAny<BookingCalendarEvent>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((string?)null);
+
+        var profiles = new Mock<IAdviserProfileProjectionRepository>();
+        profiles
+            .Setup(p => p.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AdviserProfileProjectionRecord { AdviserId = "adv-1", DisplayName = "Adviser One", MailboxUserId = "user-1" });
+
+        var conflicts = new Mock<IBookingConflictService>();
+        conflicts
+            .Setup(c => c.EvaluateConfirmationConflictsAsync(
+                It.IsAny<BookingHold>(), It.IsAny<BookingSlot>(), It.IsAny<BookingTransaction>(),
+                It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>()));
+
+        var audit = new Mock<ILifecycleAuditService>();
+        audit.Setup(a => a.RecordEventAsync(It.IsAny<LifecycleAuditEntry>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("event-1");
+        audit.Setup(a => a.RecordStepAsync(It.IsAny<LifecycleAuditStepEntry>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var notifications = new Mock<INotificationService>();
+        notifications
+            .Setup(n => n.SendBookingNotificationAsync(It.IsAny<NotificationDispatchRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotificationDispatchResponse
+            {
+                DispatchId = "d-1", BookingId = "hold-1", EventType = "Confirmed",
+                SmsRequested = false, EmailRequested = false, SmsStatus = "Skipped",
+                EmailStatus = "Skipped", ProviderMessageId = "p-1", CreatedUtc = now
+            });
+
         var sut = new ConfirmBookingHandler(
-            new BookingHoldRepository(db),
-            new BookingSlotRepository(db),
-            new BookingTransactionRepository(db),
-            new UnitOfWork(db),
-            new StubClock(now),
-            new StubCalendarGateway(),
-            new StubProfiles("adv-1", "adviser.one@tenant.com"),
-            new StubMeetingLinkFactory(),
-            new StubConflictService(),
-            new StubLifecycleAuditService(),
-            new StubNotificationService());
+            holdRepo,
+            slotRepo,
+            txRepo,
+            new Mock<IUnitOfWork>().Object,
+            clock.Object,
+            calendarGateway.Object,
+            profiles.Object,
+            new Mock<IMeetingLinkFactory>().Object,
+            conflicts.Object,
+            audit.Object,
+            notifications.Object,
+            holdWindowFactory.Object
+        );
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = "hold-1" }, CancellationToken.None);
 

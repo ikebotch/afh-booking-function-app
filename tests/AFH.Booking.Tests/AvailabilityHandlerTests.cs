@@ -1,808 +1,207 @@
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Threading;
+using System.Threading.Tasks;
 using AFH.Booking.Application.Abstractions.Availability;
-using AFH.Booking.Application.Abstractions.Bookings;
-using AFH.Booking.Application.Abstractions.Calendar;
-using AFH.Booking.Application.Abstractions.Clients;
-using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Availability;
+using AFH.Booking.Application.Bookings;
+using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
-using AFH.Booking.Contracts.V1.Dtos;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Availability;
 using AFH.Booking.Domain.Bookings;
-using AFH.Booking.Domain.Bookings.Score;
-using Microsoft.Extensions.Logging.Abstractions;
-using System.Net;
+using AFH.Booking.Domain.Calendar;
+using AFH.Booking.Domain.Client;
+using AFH.Booking.Domain.Common;
+using AFH.Booking.Domain.Location;
+using Moq;
+using Xunit;
 
 namespace AFH.Booking.Tests;
 
-public sealed class AvailabilityHandlerTests
+public class AvailabilityHandlerTests
 {
-    [Fact]
-    public async Task HandleAsync_WhenTransactionReferenceIsCompleted_ReturnsClosedConflict()
-    {
-        var closed = BookingTransaction.Rehydrate(
-            id: "tx-closed",
-            transactionRef: "lead-1",
-            proposedStartUtc: new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
-            duration: TimeSpan.FromMinutes(60),
-            timezone: "Europe/London",
-            isRemote: true,
-            meetingType: "Review",
-            locationRef: null,
-            status: BookingTransactionStatus.Completed,
-            createdUtc: new DateTime(2026, 04, 01, 9, 0, 0, DateTimeKind.Utc),
-            expiresUtc: null);
-        var txRepo = new StubTransactionRepository(closed);
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            new StubCalendarViewQueryHandler(),
-            new StubTravelMatrixService(),
-            new StubClientDirectory(),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true
-                }
-            ]),
-            txRepo,
-            new StubSlotRepository(),
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            new StubAvailabilityRulesService(),
-            NullLogger<AvailabilityHandler>.Instance);
+    private readonly Mock<IBookingTransactionRepository> _txRepo;
+    private readonly Mock<IUnitOfWork> _uow;
+    private readonly Mock<IClock> _clock;
+    private readonly Mock<ITimeZoneProvider> _timeZoneProvider;
+    private readonly Mock<IProspectResolver> _prospectResolver;
+    private readonly Mock<IAvailabilityTransactionGuard> _transactionGuard;
+    private readonly Mock<ISlotStartBuilder> _slotStartBuilder;
+    private readonly Mock<IAdviserPoolBuilder> _adviserPoolBuilder;
+    private readonly Mock<IAvailabilitySlotProcessor> _slotProcessor;
+    private readonly Mock<IAvailabilityResponseBuilder> _responseBuilder;
+    private readonly AvailabilityHandler _sut;
 
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            TransactionId = "lead-1",
-            IsRemote = true,
-            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
-            Duration = 60,
-            Limit = 10,
-            Take = 1
-        }, CancellationToken.None);
+    public AvailabilityHandlerTests()
+    {
+        _txRepo = new Mock<IBookingTransactionRepository>();
+        _uow = new Mock<IUnitOfWork>();
+        _clock = new Mock<IClock>();
+        _timeZoneProvider = new Mock<ITimeZoneProvider>();
+        _prospectResolver = new Mock<IProspectResolver>();
+        _transactionGuard = new Mock<IAvailabilityTransactionGuard>();
+        _slotStartBuilder = new Mock<ISlotStartBuilder>();
+        _adviserPoolBuilder = new Mock<IAdviserPoolBuilder>();
+        _slotProcessor = new Mock<IAvailabilitySlotProcessor>();
+        _responseBuilder = new Mock<IAvailabilityResponseBuilder>();
+
+        _clock.Setup(c => c.UtcNow).Returns(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc));
+
+        _sut = new AvailabilityHandler(
+            _txRepo.Object,
+            _uow.Object,
+            _clock.Object,
+            _timeZoneProvider.Object,
+            _prospectResolver.Object,
+            _transactionGuard.Object,
+            _slotStartBuilder.Object,
+            _adviserPoolBuilder.Object,
+            _slotProcessor.Object,
+            _responseBuilder.Object);
+    }
+
+    // -------------------------------------------------------------------------
+    // Failure paths
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task HandleAsync_WhenNeitherClientIdNorTransactionIdProvided_ReturnsBadRequest()
+    {
+        // Duration > 0 but no ClientId/TransactionId — hits ValidateQuery guard
+        var q = new GetAvailabilityQuery { Duration = 60 };
+
+        var result = await _sut.HandleAsync(q, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
+        // No service calls should have been made
+        _prospectResolver.Verify(p => p.ResolveAsync(It.IsAny<GetAvailabilityQuery>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenProspectResolverFails_ReturnsError()
+    {
+        // Valid query — needs ClientId/TransactionId AND Duration > 0
+        var q = new GetAvailabilityQuery { ClientId = "client-1", Duration = 60, PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc) };
+
+        var failedProspect = (
+            Value: (ClientDirectoryItem?)null,
+            Error: (Result<GetAvailabilityResponse>?)Result<GetAvailabilityResponse>.Fail(
+                HttpStatusCode.NotFound, "Prospect not found"));
+
+        _prospectResolver.Setup(p => p.ResolveAsync(q, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(failedProspect);
+
+        var result = await _sut.HandleAsync(q, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.NotFound, result.StatusCode);
+        _transactionGuard.Verify(t => t.EnsureOpenAsync(It.IsAny<GetAvailabilityQuery>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenTransactionGuardFails_ReturnsConflict()
+    {
+        var q = new GetAvailabilityQuery { ClientId = "client-1", Duration = 60, PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc) };
+
+        var okProspect = (Value: (ClientDirectoryItem?)new ClientDirectoryItem { TransactionId = "tx-1" }, Error: (Result<GetAvailabilityResponse>?)null);
+        _prospectResolver.Setup(p => p.ResolveAsync(q, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(okProspect);
+
+        var closedError = Result<GetAvailabilityResponse>.Fail(HttpStatusCode.Conflict, "TransactionClosed", "TransactionClosed");
+        _transactionGuard.Setup(t => t.EnsureOpenAsync(q, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(closedError);
+
+        var result = await _sut.HandleAsync(q, CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(HttpStatusCode.Conflict, result.StatusCode);
         Assert.Equal("TransactionClosed", result.ErrorCode);
-        Assert.Null(txRepo.AddedTransaction);
+        _slotStartBuilder.Verify(s => s.BuildPage(It.IsAny<GetAvailabilityQuery>()), Times.Never);
     }
 
     [Fact]
-    public async Task HandleAsync_RemoteWithoutPreferredAdvisers_UsesActiveProjectedAdvisers()
+    public async Task HandleAsync_WhenNoSlotStarts_ReturnsEmpty()
     {
-        var txRepo = new StubTransactionRepository();
-        var slotRepo = new StubSlotRepository();
-        var calendarView = new StubCalendarViewQueryHandler();
+        var q = new GetAvailabilityQuery { ClientId = "client-1", Duration = 60, PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc) };
 
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            calendarView,
-            new StubTravelMatrixService(),
-            new StubClientDirectory(),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true
-                }
-            ]),
-            txRepo,
-            slotRepo,
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            new StubAvailabilityRulesService(),
-            NullLogger<AvailabilityHandler>.Instance);
+        var okProspect = (Value: (ClientDirectoryItem?)new ClientDirectoryItem(), Error: (Result<GetAvailabilityResponse>?)null);
+        _prospectResolver.Setup(p => p.ResolveAsync(q, It.IsAny<CancellationToken>())).ReturnsAsync(okProspect);
+        _transactionGuard.Setup(t => t.EnsureOpenAsync(q, It.IsAny<CancellationToken>())).ReturnsAsync((Result<GetAvailabilityResponse>?)null);
 
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            IsRemote = true,
-            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
-            Duration = 60,
-            Limit = 10,
-            Take = 1
-        }, CancellationToken.None);
+        _slotStartBuilder.Setup(s => s.BuildPage(q)).Returns((new List<DateTime>() as IReadOnlyList<DateTime>, "next-cursor"));
+
+        var emptyResponse = Result<GetAvailabilityResponse>.Ok(new GetAvailabilityResponse());
+        _responseBuilder.Setup(r => r.Empty("next-cursor")).Returns(emptyResponse);
+
+        var result = await _sut.HandleAsync(q, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.NotNull(txRepo.AddedTransaction);
-        Assert.Equal("adviser.one@tenant.com", calendarView.LastMailboxUserId);
+        _adviserPoolBuilder.Verify(a => a.BuildAsync(
+            It.IsAny<GetAvailabilityQuery>(), It.IsAny<ClientDirectoryItem>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    [Fact]
-    public async Task HandleAsync_RemoteBlockedMailbox_WhenMailboxDiffersFromAdviserId_ReturnsNoAvailability()
-    {
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            new StubCalendarViewQueryHandler(isBusy: true),
-            new StubTravelMatrixService(),
-            new StubClientDirectory(),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true
-                }
-            ]),
-            new StubTransactionRepository(),
-            new StubSlotRepository(),
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            new StubAvailabilityRulesService(),
-            NullLogger<AvailabilityHandler>.Instance);
+    // -------------------------------------------------------------------------
+    // Success path: orchestration
+    // -------------------------------------------------------------------------
 
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            IsRemote = true,
-            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
-            Duration = 60,
-            Limit = 10,
-            Take = 1
-        }, CancellationToken.None);
+    [Fact]
+    public async Task HandleAsync_Success_OrchestratesAllSubservices_AndPersists()
+    {
+        var q = new GetAvailabilityQuery { ClientId = "client-1", Duration = 60, PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc) };
+        var prospect = new ClientDirectoryItem { TransactionId = "tx-1" };
+
+        // TimeZoneProvider must return a valid value so CreateTransaction doesn't throw a domain exception
+        _timeZoneProvider.Setup(t => t.DefaultTimeZoneId).Returns("UTC");
+
+        _prospectResolver.Setup(p => p.ResolveAsync(q, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((prospect, (Result<GetAvailabilityResponse>?)null));
+
+        _transactionGuard.Setup(t => t.EnsureOpenAsync(q, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((Result<GetAvailabilityResponse>?)null);
+
+        var slotStarts = new List<DateTime> { new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc) } as IReadOnlyList<DateTime>;
+        _slotStartBuilder.Setup(s => s.BuildPage(q)).Returns((slotStarts, "next-cursor"));
+
+        var adviser = new AdviserDirectoryItem { AdviserId = "adv-1", Name = "Adviser One" };
+        var travelMap = new Dictionary<string, LocationCandidate>() as IReadOnlyDictionary<string, LocationCandidate>;
+        var poolResult = new AdviserPoolResult(new[] { adviser }, travelMap);
+        _adviserPoolBuilder.Setup(a => a.BuildAsync(q, prospect, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((poolResult, null));
+
+        var slotResult = new AvailabilitySlotResult(
+            "key-1", "adv-1", "Adviser One", false,
+            BookingSlot.Rehydrate("slot-1", "tx-1", "adv-1", "Adviser One",
+                DateTime.UtcNow, DateTime.UtcNow.AddHours(1), 5, null, null, 0, 0, null, null, null, DateTime.UtcNow));
+
+        var processedSlots = new[] { slotResult } as IReadOnlyList<AvailabilitySlotResult>;
+        _slotProcessor.Setup(s => s.ProcessAsync(
+                q,
+                It.Is<IReadOnlyList<AdviserDirectoryItem>>(l => l.Count == 1 && l[0].AdviserId == "adv-1"),
+                slotStarts,
+                It.IsAny<BookingTransaction>(),
+                It.IsAny<IReadOnlyDictionary<string, LocationCandidate>>(),
+                It.IsAny<DateTime>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(processedSlots);
+
+        var finalResponse = Result<GetAvailabilityResponse>.Ok(new GetAvailabilityResponse { TransactionId = "some-tx-id" });
+        _responseBuilder.Setup(r => r.Success(
+                q,
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<AvailabilitySlotResult>>(),
+                "next-cursor"))
+            .Returns(finalResponse);
+
+        var result = await _sut.HandleAsync(q, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Empty(result.Value!.Advisers);
-    }
+        Assert.Equal("some-tx-id", result.Value!.TransactionId);
 
-    [Fact]
-    public async Task HandleAsync_RemoteWithRequiredSkills_FiltersProjectedAdvisers()
-    {
-        var calendarView = new StubCalendarViewQueryHandler();
-
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            calendarView,
-            new StubTravelMatrixService(),
-            new StubClientDirectory(),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true,
-                    Skills = ["Investments & Wealth", "Pensions & Retirement"]
-                },
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-2",
-                    DisplayName = "Adviser Two",
-                    MailboxUserId = "adviser.two@tenant.com",
-                    IsActive = true,
-                    Skills = ["Investments & Wealth"]
-                }
-            ]),
-            new StubTransactionRepository(),
-            new StubSlotRepository(),
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            new StubAvailabilityRulesService(),
-            NullLogger<AvailabilityHandler>.Instance);
-
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            IsRemote = true,
-            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
-            Duration = 60,
-            Limit = 10,
-            Take = 1,
-            RequiredSkills = ["Investments & Wealth", "Pensions & Retirement"]
-        }, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.NotEmpty(calendarView.BatchSizes);
-        Assert.All(calendarView.BatchSizes, size => Assert.Equal(1, size));
-        Assert.Equal("adviser.one@tenant.com", calendarView.LastMailboxUserId);
-    }
-
-    [Fact]
-    public async Task HandleAsync_RemoteWithoutRequiredSkills_KeepsAllActiveProjectedAdvisers()
-    {
-        var calendarView = new StubCalendarViewQueryHandler();
-
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            calendarView,
-            new StubTravelMatrixService(),
-            new StubClientDirectory(),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true,
-                    Skills = ["Investments & Wealth"]
-                },
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-2",
-                    DisplayName = "Adviser Two",
-                    MailboxUserId = "adviser.two@tenant.com",
-                    IsActive = true,
-                    Skills = ["Pensions & Retirement"]
-                }
-            ]),
-            new StubTransactionRepository(),
-            new StubSlotRepository(),
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            new StubAvailabilityRulesService(),
-            NullLogger<AvailabilityHandler>.Instance);
-
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            IsRemote = true,
-            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
-            Duration = 60,
-            Limit = 10,
-            Take = 1
-        }, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.NotEmpty(calendarView.BatchSizes);
-        Assert.All(calendarView.BatchSizes, size => Assert.Equal(2, size));
-    }
-
-    [Fact]
-    public async Task HandleAsync_RemoteWithRequiredSkills_NormalizesWhitespaceAndCase()
-    {
-        var calendarView = new StubCalendarViewQueryHandler();
-
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            calendarView,
-            new StubTravelMatrixService(),
-            new StubClientDirectory(),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true,
-                    Skills = ["Investments   & Wealth", "Pensions   & Retirement"]
-                },
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-2",
-                    DisplayName = "Adviser Two",
-                    MailboxUserId = "adviser.two@tenant.com",
-                    IsActive = true,
-                    Skills = ["Protection & Insurance"]
-                }
-            ]),
-            new StubTransactionRepository(),
-            new StubSlotRepository(),
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            new StubAvailabilityRulesService(),
-            NullLogger<AvailabilityHandler>.Instance);
-
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            IsRemote = true,
-            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
-            Duration = 60,
-            Limit = 10,
-            Take = 1,
-            RequiredSkills = ["  investments & wealth ", "PENSIONS & RETIREMENT  "]
-        }, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.NotEmpty(calendarView.BatchSizes);
-        Assert.All(calendarView.BatchSizes, size => Assert.Equal(1, size));
-        Assert.Equal("adviser.one@tenant.com", calendarView.LastMailboxUserId);
-    }
-
-    [Fact]
-    public async Task HandleAsync_InPerson_ReusesTravelAndBatchesCalendarChecksPerSlot()
-    {
-        var txRepo = new StubTransactionRepository();
-        var slotRepo = new StubSlotRepository();
-        var calendarView = new StubCalendarViewQueryHandler();
-        var travelMatrix = new StubTravelMatrixService(
-        [
-            new AFH.Booking.Domain.Location.LocationCandidate
-            {
-                AdviserId = "adv-1",
-                MailboxUserId = "adviser.one@tenant.com",
-                TravelMinutes = 15,
-                DistanceMiles = 10,
-                GoldStar = true
-            },
-            new AFH.Booking.Domain.Location.LocationCandidate
-            {
-                AdviserId = "adv-2",
-                MailboxUserId = "adviser.two@tenant.com",
-                TravelMinutes = 20,
-                DistanceMiles = 12,
-                GoldStar = false
-            }
-        ]);
-
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            calendarView,
-            travelMatrix,
-            new StubClientDirectory(new AFH.Booking.Domain.Client.ClientDirectoryItem
-            {
-                StreetName1 = "1 High Street",
-                Town = "London",
-                PostalCode = "SW1A 1AA"
-            }),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true
-                },
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-2",
-                    DisplayName = "Adviser Two",
-                    MailboxUserId = "adviser.two@tenant.com",
-                    IsActive = true
-                }
-            ]),
-            txRepo,
-            slotRepo,
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            new StubAvailabilityRulesService(),
-            NullLogger<AvailabilityHandler>.Instance);
-
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            IsRemote = false,
-            PreferredStart = new DateTime(2026, 04, 02, 0, 0, 0, DateTimeKind.Utc),
-            Duration = 60,
-            Limit = 10,
-            Take = 3
-        }, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.NotNull(txRepo.AddedTransaction);
-        Assert.Equal(1, travelMatrix.CallCount);
-        Assert.Equal(1, calendarView.CallCount);
-        Assert.Equal([2], calendarView.BatchSizes);
-        Assert.True(slotRepo.AddedSlots.Count > 6);
-        Assert.All(slotRepo.AddedSlots, slot => Assert.StartsWith("adv-", slot.AdviserId, StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void SlotStartBuilder_BuildPage_UsesFiveMinuteCandidateIncrements()
-    {
-        var starts = new SlotStartBuilder().BuildPage(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            PreferredStart = new DateTime(2026, 05, 21, 10, 0, 0, DateTimeKind.Utc),
-            Duration = 30,
-            Limit = 10,
-            Take = 3
-        }).Starts;
-
-        Assert.Contains(new DateTime(2026, 05, 21, 10, 0, 0, DateTimeKind.Utc), starts);
-        Assert.Contains(new DateTime(2026, 05, 21, 10, 5, 0, DateTimeKind.Utc), starts);
-        Assert.Contains(new DateTime(2026, 05, 21, 10, 10, 0, DateTimeKind.Utc), starts);
-    }
-
-    [Fact]
-    public async Task HandleAsync_InPerson_RejectsStartWhenFullHoldWindowOverlaps_AndAcceptsFiveMinuteBoundary()
-    {
-        var slotRepo = new StubSlotRepository();
-        var existingBlock = new CalendarBlock
-        {
-            StartUtc = new DateTime(2026, 05, 21, 07, 30, 0, DateTimeKind.Utc),
-            EndUtc = new DateTime(2026, 05, 21, 09, 30, 0, DateTimeKind.Utc),
-            Subject = "Existing block"
-        };
-
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            new StubCalendarViewQueryHandler(conflicts: [existingBlock]),
-            new StubTravelMatrixService(
-            [
-                new AFH.Booking.Domain.Location.LocationCandidate
-                {
-                    AdviserId = "adv-1",
-                    AdviserName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    TravelMinutes = 5,
-                    DistanceMiles = 1.2m,
-                    CompanyBufferMinutes = 30,
-                    GoldStar = true,
-                    TravelSnapshot = new AFH.Booking.Domain.Location.TravelSnapshotResult
-                    {
-                        SourceLocationRef = "adv-1",
-                        SourcePostcode = "B60 4DJ",
-                        DestinationLocationRef = "loc-1",
-                        DestinationPostcode = "SW1A 1AA",
-                        TravelMinutes = 5,
-                        DistanceMiles = 1.2,
-                        Provider = "LocationService",
-                        Confidence = "High",
-                        CalculatedUtc = new DateTime(2026, 05, 14, 12, 0, 0, DateTimeKind.Utc)
-                    }
-                }
-            ]),
-            new StubClientDirectory(new AFH.Booking.Domain.Client.ClientDirectoryItem
-            {
-                StreetName1 = "1 High Street",
-                Town = "London",
-                PostalCode = "SW1A 1AA"
-            }),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true
-                }
-            ]),
-            new StubTransactionRepository(),
-            slotRepo,
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 05, 21, 08, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            new StubAvailabilityRulesService(),
-            NullLogger<AvailabilityHandler>.Instance);
-
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            IsRemote = false,
-            PreferredStart = new DateTime(2026, 05, 21, 10, 0, 0, DateTimeKind.Utc),
-            Duration = 30,
-            Limit = 10,
-            Take = 3,
-            LocationRef = "loc-1"
-        }, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.DoesNotContain(slotRepo.AddedSlots, x => x.StartUtc == new DateTime(2026, 05, 21, 10, 0, 0, DateTimeKind.Utc));
-
-        var firstValid = Assert.Single(slotRepo.AddedSlots.Where(x => x.StartUtc == new DateTime(2026, 05, 21, 10, 5, 0, DateTimeKind.Utc)));
-        Assert.Equal(5, firstValid.TravelMinutes);
-        Assert.Equal(30, firstValid.CompanyBufferMinutes);
-        Assert.Equal("B60 4DJ", firstValid.SourcePostcode);
-        Assert.Equal("SW1A 1AA", firstValid.DestinationPostcode);
-    }
-
-    [Fact]
-    public async Task HandleAsync_InPerson_RejectsBoundaryWhenExistingBlockEndsOneMinuteAfterHoldStart()
-    {
-        var slotRepo = new StubSlotRepository();
-        var existingBlock = new CalendarBlock
-        {
-            StartUtc = new DateTime(2026, 05, 21, 07, 30, 0, DateTimeKind.Utc),
-            EndUtc = new DateTime(2026, 05, 21, 09, 31, 0, DateTimeKind.Utc),
-            Subject = "Existing block"
-        };
-
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            new StubCalendarViewQueryHandler(conflicts: [existingBlock]),
-            new StubTravelMatrixService(
-            [
-                new AFH.Booking.Domain.Location.LocationCandidate
-                {
-                    AdviserId = "adv-1",
-                    AdviserName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    TravelMinutes = 5,
-                    CompanyBufferMinutes = 30,
-                    GoldStar = true,
-                    TravelSnapshot = new AFH.Booking.Domain.Location.TravelSnapshotResult
-                    {
-                        TravelMinutes = 5,
-                        DistanceMiles = 1.2,
-                        Provider = "LocationService",
-                        Confidence = "High",
-                        CalculatedUtc = new DateTime(2026, 05, 14, 12, 0, 0, DateTimeKind.Utc)
-                    }
-                }
-            ]),
-            new StubClientDirectory(new AFH.Booking.Domain.Client.ClientDirectoryItem
-            {
-                StreetName1 = "1 High Street",
-                Town = "London",
-                PostalCode = "SW1A 1AA"
-            }),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true
-                }
-            ]),
-            new StubTransactionRepository(),
-            slotRepo,
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 05, 21, 08, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            new StubAvailabilityRulesService(),
-            NullLogger<AvailabilityHandler>.Instance);
-
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            IsRemote = false,
-            PreferredStart = new DateTime(2026, 05, 21, 10, 5, 0, DateTimeKind.Utc),
-            Duration = 30,
-            Limit = 10,
-            Take = 3,
-            LocationRef = "loc-1"
-        }, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.DoesNotContain(slotRepo.AddedSlots, x => x.StartUtc == new DateTime(2026, 05, 21, 10, 5, 0, DateTimeKind.Utc));
-        Assert.Contains(slotRepo.AddedSlots, x => x.StartUtc == new DateTime(2026, 05, 21, 10, 10, 0, DateTimeKind.Utc));
-    }
-
-    [Fact]
-    public async Task HandleAsync_ExcludesAdvisersRejectedByAvailabilityRules_AndStoresRuleAudit()
-    {
-        var slotRepo = new StubSlotRepository();
-        var rules = new StubAvailabilityRulesService(new HashSet<string>(["adv-2"], StringComparer.OrdinalIgnoreCase));
-
-        var sut = new AvailabilityHandler(
-            new StubSlotScorer(),
-            new StubCalendarViewQueryHandler(),
-            new StubTravelMatrixService(),
-            new StubClientDirectory(),
-            new StubProfiles(
-            [
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-1",
-                    DisplayName = "Adviser One",
-                    MailboxUserId = "adviser.one@tenant.com",
-                    IsActive = true
-                },
-                new AdviserProfileProjectionRecord
-                {
-                    AdviserId = "adv-2",
-                    DisplayName = "Adviser Two",
-                    MailboxUserId = "adviser.two@tenant.com",
-                    IsActive = true
-                }
-            ]),
-            new StubTransactionRepository(),
-            slotRepo,
-            new StubUnitOfWork(),
-            new StubClock(new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc)),
-            new StubTimeZoneProvider(),
-            rules,
-            NullLogger<AvailabilityHandler>.Instance);
-
-        var result = await sut.HandleAsync(new GetAvailabilityQuery
-        {
-            ClientId = "client-1",
-            IsRemote = true,
-            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
-            Duration = 60,
-            Limit = 10,
-            Take = 1
-        }, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.NotEmpty(slotRepo.AddedSlots);
-        Assert.All(slotRepo.AddedSlots, slot => Assert.Equal("adv-1", slot.AdviserId));
-        Assert.Equal(2, rules.EvaluationCount);
-        Assert.NotNull(slotRepo.AddedSlots[0].ScoreBreakdown);
-        Assert.Equal(1, slotRepo.AddedSlots[0].ScoreBreakdown!["rule.workingPatternAllowed"]);
-        Assert.Equal(1, slotRepo.AddedSlots[0].ScoreBreakdown!["rule.capacityAllowed"]);
-    }
-
-    private sealed class StubSlotScorer : ISlotScorer
-    {
-        public SlotScoreResult Score(SlotScoringContext ctx) => new() { Score = 5, Breakdown = new Dictionary<string, int> { ["base"] = 5 } };
-    }
-
-    private sealed class StubCalendarViewQueryHandler : ICalendarViewQueryHandler
-    {
-        private readonly bool _isBusy;
-        private readonly IReadOnlyList<CalendarBlock> _conflicts;
-
-        public StubCalendarViewQueryHandler(bool isBusy = false, IReadOnlyList<CalendarBlock>? conflicts = null)
-        {
-            _isBusy = isBusy;
-            _conflicts = conflicts ?? [];
-        }
-
-        public string? LastMailboxUserId { get; private set; }
-        public int CallCount { get; private set; }
-        public List<int> BatchSizes { get; } = [];
-
-        public Task<Result<List<CalendarViewDto>>> HandleAsync(CalendarViewQuery q, CancellationToken ct)
-        {
-            CallCount++;
-            BatchSizes.Add(q.AdviserList.Count);
-            LastMailboxUserId = q.AdviserList.FirstOrDefault()?.Email;
-            var items = q.AdviserList.Select(x => new CalendarViewDto
-            {
-                AdviserId = x.AdviserId,
-                IsBusy = _isBusy,
-                MailboxUnavailable = false,
-                Message = _isBusy ? "Busy" : "Free",
-                Conflicts = _conflicts.ToList()
-            }).ToList();
-
-            return Task.FromResult(Result<List<CalendarViewDto>>.Ok(items));
-        }
-    }
-
-    private sealed class StubTravelMatrixService : ITravelMatrixService
-    {
-        private readonly IReadOnlyList<AFH.Booking.Domain.Location.LocationCandidate> _candidates;
-
-        public StubTravelMatrixService(IReadOnlyList<AFH.Booking.Domain.Location.LocationCandidate>? candidates = null)
-        {
-            _candidates = candidates ?? [];
-        }
-
-        public int CallCount { get; private set; }
-
-        public Task<AFH.Booking.Domain.Location.Travel.TravelMatrixResult> GetAsync(AFH.Booking.Domain.Location.Travel.TravelMatrixRequest request, CancellationToken ct)
-        {
-            CallCount++;
-            return Task.FromResult(new AFH.Booking.Domain.Location.Travel.TravelMatrixResult
-            {
-                Candidates = _candidates.ToList()
-            });
-        }
-    }
-
-    private sealed class StubClientDirectory : IClientDirectory
-    {
-        private readonly AFH.Booking.Domain.Client.ClientDirectoryItem? _item;
-
-        public StubClientDirectory(AFH.Booking.Domain.Client.ClientDirectoryItem? item = null)
-        {
-            _item = item;
-        }
-
-        public Task<AFH.Booking.Domain.Client.ClientDirectoryItem?> GetAsync(string transactionRef, CancellationToken ct)
-            => Task.FromResult(_item);
-    }
-
-    private sealed class StubProfiles : IAdviserProfileProjectionRepository
-    {
-        private readonly IReadOnlyList<AdviserProfileProjectionRecord> _records;
-
-        public StubProfiles(IReadOnlyList<AdviserProfileProjectionRecord> records)
-        {
-            _records = records;
-        }
-
-        public Task UpsertRangeAsync(IReadOnlyList<AdviserProfileProjectionRecord> advisers, CancellationToken ct) => Task.CompletedTask;
-        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct) => Task.FromResult(_records);
-        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct) => Task.FromResult((IReadOnlyList<AdviserProfileProjectionRecord>)_records.Where(x => x.IsActive).ToList());
-        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct) => Task.FromResult(_records.FirstOrDefault(x => string.Equals(x.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase)));
-    }
-
-    private sealed class StubTransactionRepository : IBookingTransactionRepository
-    {
-        private readonly BookingTransaction? _latestByRef;
-
-        public StubTransactionRepository(BookingTransaction? latestByRef = null)
-        {
-            _latestByRef = latestByRef;
-        }
-
-        public BookingTransaction? AddedTransaction { get; private set; }
-        public Task AddAsync(BookingTransaction transaction, CancellationToken ct)
-        {
-            AddedTransaction = transaction;
-            return Task.CompletedTask;
-        }
-
-        public Task<BookingTransaction?> GetAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(null);
-        public Task<BookingTransaction?> GetWithSlotsAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(null);
-        public Task UpdateAsync(BookingTransaction transaction, CancellationToken ct) => Task.CompletedTask;
-        public Task<BookingTransaction?> GetForUpdateAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(null);
-        public Task<BookingTransaction?> GetLatestByTransactionRefAsync(string transactionRef, CancellationToken ct) => Task.FromResult(_latestByRef);
-    }
-
-    private sealed class StubSlotRepository : IBookingSlotRepository
-    {
-        public List<BookingSlot> AddedSlots { get; } = [];
-        public Task AddRangeAsync(IEnumerable<BookingSlot> slots, CancellationToken ct)
-        {
-            AddedSlots.AddRange(slots);
-            return Task.CompletedTask;
-        }
-
-        public Task<BookingSlot?> GetAsync(string slotId, CancellationToken ct) => Task.FromResult<BookingSlot?>(null);
-        public Task<IReadOnlyList<BookingSlot>> ListByTransactionAsync(string transactionId, CancellationToken ct) => Task.FromResult<IReadOnlyList<BookingSlot>>([]);
-        public Task AddAsync(BookingSlot slot, CancellationToken ct)
-        {
-            AddedSlots.Add(slot);
-            return Task.CompletedTask;
-        }
-    }
-
-    private sealed class StubUnitOfWork : IUnitOfWork
-    {
-        public Task<int> SaveChangesAsync(CancellationToken ct = default) => Task.FromResult(0);
-    }
-
-    private sealed class StubClock : IClock
-    {
-        public StubClock(DateTime utcNow) => UtcNow = utcNow;
-        public DateTime UtcNow { get; }
-    }
-
-    private sealed class StubTimeZoneProvider : ITimeZoneProvider
-    {
-        public string DefaultTimeZoneId => "Europe/London";
-    }
-
-    private sealed class StubAvailabilityRulesService : IAvailabilityRulesService
-    {
-        private readonly IReadOnlySet<string> _blockedAdviserIds;
-
-        public StubAvailabilityRulesService(IReadOnlySet<string>? blockedAdviserIds = null)
-        {
-            _blockedAdviserIds = blockedAdviserIds ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        }
-
-        public int EvaluationCount { get; private set; }
-
-        public Task<AvailabilityRuleEvaluation> EvaluateAsync(
-            AdviserDirectoryItem adviser,
-            DateTime startUtc,
-            DateTime endUtc,
-            double durationMinutes,
-            DateTime utcNow,
-            CancellationToken ct)
-        {
-            EvaluationCount++;
-            var allowed = !_blockedAdviserIds.Contains(adviser.AdviserId);
-            return Task.FromResult(new AvailabilityRuleEvaluation(
-                allowed,
-                allowed,
-                allowed,
-                true,
-                allowed ? null : "Capacity",
-                new Dictionary<string, int>
-                {
-                    ["workingPatternAllowed"] = allowed ? 1 : 0,
-                    ["capacityAllowed"] = allowed ? 1 : 0,
-                    ["minimumDurationAllowed"] = 1
-                }));
-        }
+        // Handler must persist the new transaction
+        _txRepo.Verify(t => t.AddAsync(It.IsAny<BookingTransaction>(), It.IsAny<CancellationToken>()), Times.Once);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 }

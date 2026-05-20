@@ -25,7 +25,7 @@ public sealed class NoShowBookingHandlerTests
             null,
             null,
             null,
-            "event-1");
+            "event-1", null);
         var slot = BookingSlot.Rehydrate(
             "slot-1",
             "tx-1",
@@ -114,7 +114,7 @@ public sealed class NoShowBookingHandlerTests
             null,
             null,
             null,
-            null);
+            null, null);
         var holds = new Mock<IBookingHoldRepository>();
         holds.Setup(x => x.GetAsync("booking-1", It.IsAny<CancellationToken>())).ReturnsAsync(hold);
         var audit = new Mock<ILifecycleAuditService>();

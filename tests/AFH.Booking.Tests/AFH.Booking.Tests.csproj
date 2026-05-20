@@ -25,4 +25,5 @@
     <ProjectReference Include="..\..\src\AFH.Booking.Infrastructure\AFH.Booking.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\AFH.Booking.Function\AFH.Booking.Function.csproj" />
   </ItemGroup>
+
 </Project>

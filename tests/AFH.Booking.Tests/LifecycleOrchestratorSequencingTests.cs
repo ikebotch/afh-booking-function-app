@@ -27,7 +27,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             null,
             null,
             null,
-            "provider-1");
+            "provider-1", null);
         var slot = BookingSlot.Rehydrate("slot-1", "tx-1", "adviser-1", "Adviser", DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1), 10, null, null, null, null, null, null, null, DateTime.UtcNow);
         var tx = BookingTransaction.Rehydrate("tx-1", "txn-ref", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Open, DateTime.UtcNow, null);
 
@@ -106,9 +106,9 @@ public sealed class LifecycleOrchestratorSequencingTests
     public async Task RearrangementOrchestrator_SequencesCreateConfirmCancelAuditThenNotification()
     {
         var order = new List<string>();
-        var oldHold = BookingHold.Rehydrate("booking-old", "slot-old", "user-1", BookingHoldStatus.Confirmed, DateTime.UtcNow.AddHours(-2), DateTime.UtcNow.AddHours(1), DateTime.UtcNow.AddHours(-1), null, null, null, "provider-old");
+        var oldHold = BookingHold.Rehydrate("booking-old", "slot-old", "user-1", BookingHoldStatus.Confirmed, DateTime.UtcNow.AddHours(-2), DateTime.UtcNow.AddHours(1), DateTime.UtcNow.AddHours(-1), null, null, null, "provider-old", null);
         var oldSlot = BookingSlot.Rehydrate("slot-old", "tx-1", "adviser-old", "Old Adviser", DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1), 5, null, null, null, null, null, null, null, DateTime.UtcNow);
-        var newHold = BookingHold.Rehydrate("booking-new", "slot-new", "user-2", BookingHoldStatus.Confirmed, DateTime.UtcNow, DateTime.UtcNow.AddMinutes(3), DateTime.UtcNow, null, null, null, "provider-new");
+        var newHold = BookingHold.Rehydrate("booking-new", "slot-new", "user-2", BookingHoldStatus.Confirmed, DateTime.UtcNow, DateTime.UtcNow.AddMinutes(3), DateTime.UtcNow, null, null, null, "provider-new", null);
         var newSlot = BookingSlot.Rehydrate("slot-new", "tx-1", "adviser-new", "New Adviser", DateTime.UtcNow.AddDays(2), DateTime.UtcNow.AddDays(2).AddHours(1), 7, null, null, null, null, null, null, null, DateTime.UtcNow);
         var tx = BookingTransaction.Rehydrate("tx-1", "txn-ref", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Completed, DateTime.UtcNow, null);
 

@@ -1,3 +1,5 @@
+using AFH.Booking.Application.EmailTemplates;
+
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common.Clock;
@@ -25,7 +27,7 @@ public class ConfirmBookingHandlerTests
             releasedUtc: null,
             cancelledUtc: DateTime.UtcNow.AddMinutes(-1),
             cancelReason: "User cancelled",
-            providerEventId: null);
+            providerEventId: null, null);
 
         var sut = NewHandler(hold);
 
@@ -49,7 +51,7 @@ public class ConfirmBookingHandlerTests
             releasedUtc: null,
             cancelledUtc: null,
             cancelReason: null,
-            providerEventId: null);
+            providerEventId: null, null);
 
         var sut = NewHandler(hold);
 
@@ -73,7 +75,7 @@ public class ConfirmBookingHandlerTests
             releasedUtc: null,
             cancelledUtc: null,
             cancelReason: null,
-            providerEventId: null);
+            providerEventId: null, null);
 
         var sut = NewHandler(hold);
 
@@ -98,7 +100,7 @@ public class ConfirmBookingHandlerTests
             releasedUtc: null,
             cancelledUtc: null,
             cancelReason: null,
-            providerEventId: "evt-1");
+            providerEventId: "evt-1", null);
 
         var slot = BookingSlot.Rehydrate(
             id: "slot-1",
@@ -148,7 +150,7 @@ public class ConfirmBookingHandlerTests
             new StubMeetingLinkFactory(),
             conflicts,
             new StubLifecycleAuditService(),
-            new StubNotificationService());
+            new StubNotificationService(), new StubHoldWindowFactory());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -174,7 +176,7 @@ public class ConfirmBookingHandlerTests
             releasedUtc: null,
             cancelledUtc: null,
             cancelReason: null,
-            providerEventId: "evt-1");
+            providerEventId: "evt-1", null);
 
         var slot = BookingSlot.Rehydrate(
             id: "slot-1",
@@ -220,7 +222,7 @@ public class ConfirmBookingHandlerTests
             meetingLinks,
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
             new StubLifecycleAuditService(),
-            new StubNotificationService());
+            new StubNotificationService(), new StubHoldWindowFactory());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -253,7 +255,7 @@ public class ConfirmBookingHandlerTests
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
             audit,
-            notifications);
+            notifications, new StubHoldWindowFactory());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -285,7 +287,7 @@ public class ConfirmBookingHandlerTests
             releasedUtc: null,
             cancelledUtc: null,
             cancelReason: null,
-            providerEventId: null);
+            providerEventId: null, null);
 
         var slot = BookingSlot.Rehydrate(
             id: "slot-1",
@@ -331,7 +333,7 @@ public class ConfirmBookingHandlerTests
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
             new StubLifecycleAuditService(),
-            new StubNotificationService());
+            new StubNotificationService(), new StubHoldWindowFactory());
 
         var handleTask = sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -383,7 +385,7 @@ public class ConfirmBookingHandlerTests
             new StubMeetingLinkFactory(),
             new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
             new StubLifecycleAuditService(),
-            new StubNotificationService());
+            new StubNotificationService(), new StubHoldWindowFactory());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -426,7 +428,7 @@ public class ConfirmBookingHandlerTests
             new StubMeetingLinkFactory(),
             new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
             new StubLifecycleAuditService(),
-            new StubNotificationService());
+            new StubNotificationService(), new StubHoldWindowFactory());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -470,7 +472,7 @@ public class ConfirmBookingHandlerTests
             new StubMeetingLinkFactory(),
             new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
             new StubLifecycleAuditService(),
-            new StubNotificationService());
+            new StubNotificationService(), new StubHoldWindowFactory());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -492,7 +494,7 @@ public class ConfirmBookingHandlerTests
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
             new StubLifecycleAuditService(),
-            new StubNotificationService());
+            new StubNotificationService(), new StubHoldWindowFactory());
     }
 
     private static BookingHold ActiveHold(DateTime now, string? providerEventId)
@@ -507,7 +509,7 @@ public class ConfirmBookingHandlerTests
             releasedUtc: null,
             cancelledUtc: null,
             cancelReason: null,
-            providerEventId: providerEventId);
+            providerEventId: providerEventId, null);
 
     private static BookingSlot InPersonSlot(DateTime now)
         => BookingSlot.Rehydrate(
@@ -771,5 +773,11 @@ public class ConfirmBookingHandlerTests
             => Task.FromResult<OperationalIssueRecord?>(null);
         public Task<int> CountRecentAsync(string adviserId, string code, DateTime sinceUtc, CancellationToken ct) => Task.FromResult(0);
         public Task UpdateAsync(OperationalIssueRecord record, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class StubHoldWindowFactory : IHoldWindowFactory
+    {
+        public HoldWindows Create(BookingSlot slot, BookingTransaction transaction)
+            => new HoldWindows(slot.StartUtc, slot.EndUtc, 0, 0, false);
     }
 }

@@ -1,420 +1,164 @@
-using AFH.Booking.Application.Abstractions.Clients;
+using System;
+using System.Net;
+using System.Threading;
+using System.Threading.Tasks;
+using AFH.Booking.Application.Abstractions.Bookings.Holds;
+using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Holds;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
-using AFH.Booking.Domain.Client;
-using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
+using Xunit;
 
 namespace AFH.Booking.Tests;
 
-public sealed class CreateBookingHandlerTests
+public class CreateBookingHandlerTests
 {
-    [Fact]
-    public async Task HandleAsync_SameTransactionRehold_CancelsExistingHold_ChecksFreshAvailability_AndCreatesNewHold()
+    private readonly Mock<IBookingContextLoader> _loader;
+    private readonly Mock<IBookingHoldService> _holdService;
+    private readonly Mock<IBookingCalendarService> _calendarService;
+    private readonly Mock<IUnitOfWork> _uow;
+    private readonly Mock<IClock> _clock;
+    private readonly CreateBookingHandler _sut;
+
+    private static readonly DateTime FixedNow = new DateTime(2026, 03, 25, 10, 0, 0, DateTimeKind.Utc);
+
+    public CreateBookingHandlerTests()
     {
-        var now = new DateTime(2026, 03, 25, 10, 0, 0, DateTimeKind.Utc);
-        var transaction = CreateTransaction(now);
-        var oldSlot = CreateSlot("slot-old", transaction.Id, now.AddHours(2), now.AddHours(3), travelMinutes: 10, companyBufferMinutes: 20);
-        var newSlot = CreateSlot("slot-new", transaction.Id, now.AddHours(4), now.AddHours(5), travelMinutes: 15, companyBufferMinutes: 30);
-        var oldHold = BookingHold.Rehydrate(
-            id: "hold-old",
-            slotId: oldSlot.Id,
-            userid: "adviser.one@tenant.com",
-            status: BookingHoldStatus.Active,
-            createdUtc: now.AddMinutes(-2),
-            expiresUtc: now.AddMinutes(2),
-            confirmedUtc: null,
-            releasedUtc: null,
-            cancelledUtc: null,
-            cancelReason: null,
-            providerEventId: "evt-old");
+        _loader = new Mock<IBookingContextLoader>();
+        _holdService = new Mock<IBookingHoldService>();
+        _calendarService = new Mock<IBookingCalendarService>();
+        _uow = new Mock<IUnitOfWork>();
+        _clock = new Mock<IClock>();
 
-        var recorder = new EventRecorder();
-        var holdRepo = new TrackingHoldRepository(oldHold, recorder);
-        var calendar = new TrackingCalendarGateway(recorder);
-        var profiles = new StubProfiles("adv-1", "adviser.one@tenant.com");
-        var sut = new CreateBookingHandler(
-            new StubTransactionRepository(transaction),
-            new StubSlotRepository(newSlot),
-            holdRepo,
-            new StubUnitOfWork(),
-            calendar,
-            profiles,
-            new StubClientDirectory(),
-            new StubClock(now),
-            NullLogger<CreateBookingHandler>.Instance);
+        _clock.Setup(c => c.UtcNow).Returns(FixedNow);
 
-        var result = await sut.HandleAsync(new CreateHoldCommand
-        {
-            SlotId = newSlot.Id,
-            TransactionRef = transaction.TransactionRef
-        }, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.Equal(
-            new[] { "cancel-calendar", "update-old-hold", "check-availability", "add-new-hold", "create-calendar" },
-            recorder.Events.Select(x => x.Name).ToArray());
-        Assert.Equal(BookingHoldStatus.Cancelled, oldHold.Status);
-        Assert.Equal("Superseded by a new hold attempt.", oldHold.CancelReason);
-        Assert.NotNull(holdRepo.AddedHold);
-        Assert.NotEqual(oldHold.Id, holdRepo.AddedHold!.Id);
-        Assert.Equal("evt-old", calendar.CancelledEventId);
-        Assert.Equal("adviser.one@tenant.com", calendar.LastAvailabilityUserId);
-        Assert.Equal("adviser.one@tenant.com", calendar.LastCreatedUserId);
-        Assert.Equal("ForceRefresh", calendar.LastFreshnessMode);
-        Assert.DoesNotContain("<html", calendar.LastCreatedBody ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, holdRepo.ActiveLookupCallCount);
-        Assert.Equal(1, profiles.ResolveCallCount);
+        _sut = new CreateBookingHandler(
+            _loader.Object,
+            _holdService.Object,
+            _calendarService.Object,
+            _uow.Object,
+            _clock.Object);
     }
 
-    [Fact]
-    public async Task HandleAsync_UsesEffectiveHoldWindow_ForFreshAvailabilityValidation()
+    private static BookingContext MakeContext(string slotId = "slot-1", string txId = "tx-1")
     {
-        var now = new DateTime(2026, 03, 25, 10, 0, 0, DateTimeKind.Utc);
-        var transaction = CreateTransaction(now);
-        var slot = CreateSlot("slot-1", transaction.Id, now.AddHours(2), now.AddHours(3), travelMinutes: 15, companyBufferMinutes: 30);
-
-        var recorder = new EventRecorder();
-        var holdRepo = new TrackingHoldRepository(existingActiveHold: null, recorder);
-        var calendar = new TrackingCalendarGateway(recorder);
-        var profiles = new StubProfiles("adv-1", "adviser.one@tenant.com");
-        var sut = new CreateBookingHandler(
-            new StubTransactionRepository(transaction),
-            new StubSlotRepository(slot),
-            holdRepo,
-            new StubUnitOfWork(),
-            calendar,
-            profiles,
-            new StubClientDirectory(),
-            new StubClock(now),
-            NullLogger<CreateBookingHandler>.Instance);
-
-        var result = await sut.HandleAsync(new CreateHoldCommand
-        {
-            SlotId = slot.Id,
-            TransactionRef = transaction.TransactionRef
-        }, CancellationToken.None);
-
-        Assert.True(result.IsSuccess);
-        Assert.Equal("adviser.one@tenant.com", calendar.LastAvailabilityUserId);
-        Assert.Equal(slot.StartUtc.AddMinutes(-45), calendar.LastAvailabilityStartUtc);
-        Assert.Equal(slot.EndUtc.AddMinutes(30), calendar.LastAvailabilityEndUtc);
-        Assert.Equal("ForceRefresh", calendar.LastFreshnessMode);
-        Assert.Equal(1, holdRepo.ActiveLookupCallCount);
-        Assert.Equal(1, profiles.ResolveCallCount);
+        var tx = BookingTransaction.Rehydrate(txId, txId, DateTime.UtcNow.AddHours(2),
+            TimeSpan.FromHours(1), "UTC", false, "Meeting", null,
+            BookingTransactionStatus.Open, DateTime.UtcNow, DateTime.UtcNow.AddHours(2));
+        var slot = BookingSlot.Rehydrate(slotId, txId, "adv", "Adviser Name",
+            DateTime.UtcNow.AddHours(2), DateTime.UtcNow.AddHours(3),
+            5, null, null, 0, 0, null, null, null, DateTime.UtcNow);
+        return new BookingContext(slot, tx, "cal-user@tenant.com");
     }
 
+    private static BookingHold MakeHold(string id = "hold-1", string slotId = "slot-1")
+        => BookingHold.Rehydrate(id, slotId, "adv", BookingHoldStatus.Active,
+            DateTime.UtcNow, DateTime.UtcNow.AddHours(1), null, null, null, null, null, null);
+
+    // -------------------------------------------------------------------------
+    // Happy path
+    // -------------------------------------------------------------------------
+
     [Fact]
-    public async Task HandleAsync_WhenFreshAvailabilityFails_DoesNotCreateReplacementHold()
+    public async Task HandleAsync_Success_LoadsContext_CreatesHold_SendsCalendarEvent_SavesAndReturnsBookingId()
     {
-        var now = new DateTime(2026, 03, 25, 10, 0, 0, DateTimeKind.Utc);
-        var transaction = CreateTransaction(now);
-        var oldSlot = CreateSlot("slot-old", transaction.Id, now.AddHours(1), now.AddHours(2), travelMinutes: 0, companyBufferMinutes: 30);
-        var newSlot = CreateSlot("slot-new", transaction.Id, now.AddHours(3), now.AddHours(4), travelMinutes: 15, companyBufferMinutes: 30);
-        var oldHold = BookingHold.Rehydrate(
-            id: "hold-old",
-            slotId: oldSlot.Id,
-            userid: "adviser.one@tenant.com",
-            status: BookingHoldStatus.Active,
-            createdUtc: now.AddMinutes(-2),
-            expiresUtc: now.AddMinutes(2),
-            confirmedUtc: null,
-            releasedUtc: null,
-            cancelledUtc: null,
-            cancelReason: null,
-            providerEventId: "evt-old");
+        var cmd = new CreateHoldCommand { SlotId = "slot-1", TransactionRef = "tx-1" };
+        var context = MakeContext();
+        var hold = MakeHold();
 
-        var recorder = new EventRecorder();
-        var holdRepo = new TrackingHoldRepository(oldHold, recorder);
-        var calendar = new TrackingCalendarGateway(recorder)
-        {
-            AvailabilityToReturn = new AdviserAvailabilityResult
-            {
-                IsFree = false,
-                MailboxUnavailable = false,
-                StatusMessage = "Conflicts found",
-                Conflicts = [new CalendarConflictBlock
-                {
-                    StartUtc = newSlot.StartUtc,
-                    EndUtc = newSlot.EndUtc,
-                    Subject = "Busy"
-                }]
-            }
-        };
+        _loader.Setup(l => l.LoadAsync(cmd, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingContext>.Ok(context));
 
-        var sut = new CreateBookingHandler(
-            new StubTransactionRepository(transaction),
-            new StubSlotRepository(newSlot),
-            holdRepo,
-            new StubUnitOfWork(),
-            calendar,
-            new StubProfiles("adv-1", "adviser.one@tenant.com"),
-            new StubClientDirectory(),
-            new StubClock(now),
-            NullLogger<CreateBookingHandler>.Instance);
+        _holdService.Setup(h => h.CreateOrReplaceAsync(context, FixedNow, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingHold>.Ok(hold));
 
-        var result = await sut.HandleAsync(new CreateHoldCommand
-        {
-            SlotId = newSlot.Id,
-            TransactionRef = transaction.TransactionRef
-        }, CancellationToken.None);
+        _calendarService.Setup(c => c.CreateHoldEventAsync(context, hold, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<Unit>.Ok(Unit.Value));
+
+        var result = await _sut.HandleAsync(cmd, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        // BookingId is the hold's Id (not HoldId — the response property is BookingId)
+        Assert.Equal("hold-1", result.Value!.BookingId);
+        Assert.Equal("slot-1", result.Value!.SlotId);
+
+        _loader.Verify(l => l.LoadAsync(cmd, It.IsAny<CancellationToken>()), Times.Once);
+        _holdService.Verify(h => h.CreateOrReplaceAsync(context, FixedNow, It.IsAny<CancellationToken>()), Times.Once);
+        _calendarService.Verify(c => c.CreateHoldEventAsync(context, hold, It.IsAny<CancellationToken>()), Times.Once);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    // -------------------------------------------------------------------------
+    // Failure paths — each short-circuits without calling downstream services
+    // -------------------------------------------------------------------------
+
+    [Fact]
+    public async Task HandleAsync_WhenContextLoadFails_ReturnsFailureAndDoesNotCreateHold()
+    {
+        var cmd = new CreateHoldCommand { SlotId = "slot-1", TransactionRef = "tx-1" };
+
+        _loader.Setup(l => l.LoadAsync(cmd, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingContext>.Fail(HttpStatusCode.NotFound, "Slot not found"));
+
+        var result = await _sut.HandleAsync(cmd, CancellationToken.None);
 
         Assert.False(result.IsSuccess);
-        Assert.Equal(Errors.BookingConflictDoubleBooked, result.ErrorCode);
-        Assert.Equal(BookingHoldStatus.Cancelled, oldHold.Status);
-        Assert.Null(holdRepo.AddedHold);
-        Assert.False(calendar.CreatedBookingEvent);
-        Assert.Equal(1, holdRepo.ActiveLookupCallCount);
+        Assert.Equal(HttpStatusCode.NotFound, result.StatusCode);
+        Assert.Equal("Slot not found", result.ErrorMessage);
+
+        _holdService.Verify(h => h.CreateOrReplaceAsync(
+            It.IsAny<BookingContext>(), It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private static BookingTransaction CreateTransaction(DateTime now) =>
-        BookingTransaction.Rehydrate(
-            id: "tx-1",
-            transactionRef: "TRX-1",
-            proposedStartUtc: now.AddHours(2),
-            duration: TimeSpan.FromHours(1),
-            timezone: "Europe/London",
-            isRemote: false,
-            meetingType: "Review",
-            locationRef: null,
-            status: BookingTransactionStatus.Open,
-            createdUtc: now.AddHours(-1),
-            expiresUtc: now.AddHours(2));
-
-    private static BookingSlot CreateSlot(
-        string id,
-        string transactionId,
-        DateTime startUtc,
-        DateTime endUtc,
-        int travelMinutes,
-        int companyBufferMinutes) =>
-        BookingSlot.Rehydrate(
-            id: id,
-            transactionRef: transactionId,
-            adviserId: "adv-1",
-            adviserName: "Adviser One",
-            startUtc: startUtc,
-            endUtc: endUtc,
-            score: 5,
-            scoreBreakdown: null,
-            locationRef: "loc-1",
-            travelMinutes: travelMinutes,
-            companyBufferMinutes: companyBufferMinutes,
-            distanceMiles: 12,
-            travelStatus: "Eligible",
-            travelMessage: null,
-            createdUtc: startUtc.AddHours(-1));
-
-    private sealed class EventRecorder
+    [Fact]
+    public async Task HandleAsync_WhenHoldServiceFails_ReturnsFailureAndDoesNotSave()
     {
-        private int _sequence;
-        public List<(int Index, string Name)> Events { get; } = [];
-        public void Record(string name) => Events.Add((++_sequence, name));
+        var cmd = new CreateHoldCommand { SlotId = "slot-1", TransactionRef = "tx-1" };
+        var context = MakeContext();
+
+        _loader.Setup(l => l.LoadAsync(cmd, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingContext>.Ok(context));
+
+        _holdService.Setup(h => h.CreateOrReplaceAsync(context, FixedNow, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingHold>.Fail(HttpStatusCode.Conflict, "Slot already held"));
+
+        var result = await _sut.HandleAsync(cmd, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.Conflict, result.StatusCode);
+        Assert.Equal("Slot already held", result.ErrorMessage);
+
+        _calendarService.Verify(c => c.CreateHoldEventAsync(
+            It.IsAny<BookingContext>(), It.IsAny<BookingHold>(), It.IsAny<CancellationToken>()), Times.Never);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private sealed class TrackingHoldRepository : IBookingHoldRepository
+    [Fact]
+    public async Task HandleAsync_WhenCalendarServiceFails_ReturnsFailureAndDoesNotSave()
     {
-        private readonly BookingHold? _existingActiveHold;
-        private readonly EventRecorder _recorder;
+        var cmd = new CreateHoldCommand { SlotId = "slot-1", TransactionRef = "tx-1" };
+        var context = MakeContext();
+        var hold = MakeHold();
 
-        public TrackingHoldRepository(BookingHold? existingActiveHold, EventRecorder recorder)
-        {
-            _existingActiveHold = existingActiveHold;
-            _recorder = recorder;
-        }
+        _loader.Setup(l => l.LoadAsync(cmd, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingContext>.Ok(context));
 
-        public BookingHold? AddedHold { get; private set; }
-        public int ActiveLookupCallCount { get; private set; }
+        _holdService.Setup(h => h.CreateOrReplaceAsync(context, FixedNow, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingHold>.Ok(hold));
 
-        public Task AddAsync(BookingHold hold, CancellationToken ct)
-        {
-            AddedHold = hold;
-            _recorder.Record("add-new-hold");
-            return Task.CompletedTask;
-        }
+        _calendarService.Setup(c => c.CreateHoldEventAsync(context, hold, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<Unit>.Fail(HttpStatusCode.BadGateway, "Calendar unavailable"));
 
-        public Task<BookingHold?> GetAsync(string holdId, CancellationToken ct) => Task.FromResult<BookingHold?>(_existingActiveHold);
-        public Task<BookingHold?> GetForUpdateAsync(string holdId, CancellationToken ct) => Task.FromResult<BookingHold?>(_existingActiveHold);
-        public Task<BookingHold?> GetBySlotIdAsync(string slotId, CancellationToken ct) => Task.FromResult<BookingHold?>(null);
-        public Task<BookingHold?> GetByCalendarEventIdAsync(string providerEventId, CancellationToken ct) => Task.FromResult<BookingHold?>(null);
+        var result = await _sut.HandleAsync(cmd, CancellationToken.None);
 
-        public Task<BookingHold?> GetActiveBySlotIdAsync(string slotId, DateTime utcNow, CancellationToken ct)
-        {
-            if (_existingActiveHold is not null &&
-                _existingActiveHold.Status == BookingHoldStatus.Active &&
-                _existingActiveHold.SlotId == slotId &&
-                _existingActiveHold.ExpiresUtc > utcNow)
-            {
-                return Task.FromResult<BookingHold?>(_existingActiveHold);
-            }
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.BadGateway, result.StatusCode);
+        Assert.Equal("Calendar unavailable", result.ErrorMessage);
 
-            return Task.FromResult<BookingHold?>(null);
-        }
-
-        public Task<BookingHold?> GetActiveByTransactionIdAsync(string transactionId, DateTime utcNow, CancellationToken ct)
-        {
-            if (_existingActiveHold is not null &&
-                _existingActiveHold.Status == BookingHoldStatus.Active &&
-                _existingActiveHold.ExpiresUtc > utcNow)
-            {
-                return Task.FromResult<BookingHold?>(_existingActiveHold);
-            }
-
-            return Task.FromResult<BookingHold?>(null);
-        }
-
-        public Task<ActiveHoldLookupResult> GetActiveForCreateHoldAsync(string transactionId, string slotId, DateTime utcNow, CancellationToken ct)
-        {
-            ActiveLookupCallCount++;
-            var transactionHold = _existingActiveHold is not null &&
-                                  _existingActiveHold.Status == BookingHoldStatus.Active &&
-                                  _existingActiveHold.ExpiresUtc > utcNow
-                ? _existingActiveHold
-                : null;
-
-            var slotHold = transactionHold is not null &&
-                           string.Equals(transactionHold.SlotId, slotId, StringComparison.OrdinalIgnoreCase)
-                ? transactionHold
-                : null;
-
-            return Task.FromResult(new ActiveHoldLookupResult(transactionHold, slotHold));
-        }
-
-        public Task UpdateAsync(BookingHold hold, CancellationToken ct)
-        {
-            if (ReferenceEquals(hold, _existingActiveHold))
-                _recorder.Record("update-old-hold");
-
-            return Task.CompletedTask;
-        }
-
-        public Task<BookingHold?> GetTrackedAsync(string holdId, CancellationToken ct) => Task.FromResult<BookingHold?>(_existingActiveHold);
-        public Task<IReadOnlyList<BookingHold>> GetExpiredActiveAsync(DateTime utcNow, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<BookingHold>>([]);
-        public Task<int> CountActiveOrConfirmedByAdviserAsync(string adviserId, DateTime fromUtc, DateTime toUtc, DateTime utcNow, CancellationToken ct) => Task.FromResult(0);
-        public Task<IReadOnlyList<BookingHold>> GetAllActiveByTransactionIdAsync(string transactionId, DateTime utcNow, CancellationToken ct) => Task.FromResult<IReadOnlyList<BookingHold>>([]);
-    }
-
-    private sealed class StubSlotRepository : IBookingSlotRepository
-    {
-        private readonly BookingSlot _slot;
-        public StubSlotRepository(BookingSlot slot) => _slot = slot;
-        public Task AddRangeAsync(IEnumerable<BookingSlot> slots, CancellationToken ct) => Task.CompletedTask;
-        public Task<BookingSlot?> GetAsync(string slotId, CancellationToken ct) => Task.FromResult<BookingSlot?>(_slot);
-        public Task<IReadOnlyList<BookingSlot>> ListByTransactionAsync(string transactionId, CancellationToken ct) => Task.FromResult<IReadOnlyList<BookingSlot>>([_slot]);
-        public Task AddAsync(BookingSlot slot, CancellationToken ct) => Task.CompletedTask;
-    }
-
-    private sealed class StubTransactionRepository : IBookingTransactionRepository
-    {
-        private readonly BookingTransaction _transaction;
-        public StubTransactionRepository(BookingTransaction transaction) => _transaction = transaction;
-        public Task AddAsync(BookingTransaction transaction, CancellationToken ct) => Task.CompletedTask;
-        public Task<BookingTransaction?> GetAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(_transaction);
-        public Task<BookingTransaction?> GetWithSlotsAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(_transaction);
-        public Task UpdateAsync(BookingTransaction transaction, CancellationToken ct) => Task.CompletedTask;
-        public Task<BookingTransaction?> GetForUpdateAsync(string transactionId, CancellationToken ct) => Task.FromResult<BookingTransaction?>(_transaction);
-    }
-
-    private sealed class StubUnitOfWork : IUnitOfWork
-    {
-        public Task<int> SaveChangesAsync(CancellationToken ct = default) => Task.FromResult(0);
-    }
-
-    private sealed class StubClientDirectory : IClientDirectory
-    {
-        public Task<ClientDirectoryItem?> GetAsync(string transactionRef, CancellationToken ct) => Task.FromResult<ClientDirectoryItem?>(null);
-    }
-
-    private sealed class StubProfiles : IAdviserProfileProjectionRepository
-    {
-        private readonly AdviserProfileProjectionRecord? _record;
-
-        public StubProfiles(string adviserId, string mailboxUserId)
-        {
-            _record = new AdviserProfileProjectionRecord
-            {
-                AdviserId = adviserId,
-                DisplayName = adviserId,
-                MailboxUserId = mailboxUserId,
-                IsActive = true
-            };
-        }
-
-        public int ResolveCallCount { get; private set; }
-
-        public Task UpsertRangeAsync(IReadOnlyList<AdviserProfileProjectionRecord> advisers, CancellationToken ct) => Task.CompletedTask;
-        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>(_record is null ? [] : [_record]);
-        public Task<IReadOnlyList<AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<AdviserProfileProjectionRecord>>(_record is null ? [] : [_record]);
-        public Task<AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct)
-        {
-            ResolveCallCount++;
-            return Task.FromResult(_record is not null && string.Equals(_record.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase) ? _record : null);
-        }
-    }
-
-    private sealed class StubClock : IClock
-    {
-        public StubClock(DateTime utcNow) => UtcNow = utcNow;
-        public DateTime UtcNow { get; }
-    }
-
-    private sealed class TrackingCalendarGateway : ICalendarGateway
-    {
-        private readonly EventRecorder _recorder;
-
-        public TrackingCalendarGateway(EventRecorder recorder) => _recorder = recorder;
-
-        public AdviserAvailabilityResult AvailabilityToReturn { get; set; } = new()
-        {
-            IsFree = true,
-            MailboxUnavailable = false,
-            StatusMessage = "Free",
-            Conflicts = []
-        };
-
-        public DateTime LastAvailabilityStartUtc { get; private set; }
-        public DateTime LastAvailabilityEndUtc { get; private set; }
-        public string? LastAvailabilityUserId { get; private set; }
-        public string? LastFreshnessMode { get; private set; }
-        public string? CancelledEventId { get; private set; }
-        public string? LastCreatedUserId { get; private set; }
-        public bool CreatedBookingEvent { get; private set; }
-        public string? LastCreatedBody { get; private set; }
-
-        public Task<string?> CreateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct)
-        {
-            CreatedBookingEvent = true;
-            LastCreatedUserId = ev.UserId;
-            LastCreatedBody = ev.Body;
-            _recorder.Record("create-calendar");
-            return Task.FromResult<string?>("evt-new");
-        }
-
-        public Task CancelBookingEventAsync(string userId, string providerEventId, CancellationToken ct)
-        {
-            CancelledEventId = providerEventId;
-            _recorder.Record("cancel-calendar");
-            return Task.CompletedTask;
-        }
-
-        public Task<string?> UpdateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct) => Task.FromResult<string?>(null);
-        public Task<CalendarEventDetails?> GetEventAsync(string userId, string eventId, CancellationToken ct = default) => Task.FromResult<CalendarEventDetails?>(null);
-
-        public Task<AdviserAvailabilityResult> CheckAvailabilityAsync(
-            string userId,
-            DateTime startUtc,
-            DateTime endUtc,
-            string timezone,
-            string? freshnessMode,
-            CancellationToken ct)
-        {
-            LastAvailabilityUserId = userId;
-            LastAvailabilityStartUtc = startUtc;
-            LastAvailabilityEndUtc = endUtc;
-            LastFreshnessMode = freshnessMode;
-            _recorder.Record("check-availability");
-            return Task.FromResult(AvailabilityToReturn);
-        }
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
 }

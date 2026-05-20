@@ -15,18 +15,7 @@ public sealed class ClientNotificationServiceTests
     [Fact]
     public async Task SendBookingNotificationAsync_SendsHtmlAndTextBodiesSeparately()
     {
-        var hold = BookingHold.Rehydrate(
-            id: "hold-1",
-            slotId: "slot-1",
-            userid: "adv-1",
-            status: BookingHoldStatus.Active,
-            createdUtc: new DateTime(2026, 03, 26, 9, 0, 0, DateTimeKind.Utc),
-            expiresUtc: new DateTime(2026, 03, 26, 9, 10, 0, DateTimeKind.Utc),
-            confirmedUtc: null,
-            releasedUtc: null,
-            cancelledUtc: null,
-            cancelReason: null,
-            providerEventId: null);
+        var hold = BookingHold.Rehydrate("hold-1", "slot-1", "client-1", BookingHoldStatus.Confirmed, System.DateTime.UtcNow, System.DateTime.UtcNow.AddHours(1), null, null, null, null, null, null);
 
         var slot = BookingSlot.Rehydrate(
             id: "slot-1",

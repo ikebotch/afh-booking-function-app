@@ -219,7 +219,7 @@ public class InternalOutboundAuthTests
                 releasedUtc: null,
                 cancelledUtc: null,
                 cancelReason: null,
-                providerEventId: null));
+                providerEventId: null, null));
     }
 
     private sealed class StubSlotRepo : IBookingSlotRepository

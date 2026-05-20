@@ -33,6 +33,7 @@ public static class EndpointAccessPolicies
             ["Bookings_LeadTechRearrangementOptions"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_Rearrange"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_RecordEmailBounce"] = EndpointAccessPolicy.InternalOnly,
+            ["Bookings_RecordNoShow"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_ReleaseHold"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_RemediateShowAs"] = EndpointAccessPolicy.InternalOnly,
             ["Bookings_SendNotification"] = EndpointAccessPolicy.InternalOnly,

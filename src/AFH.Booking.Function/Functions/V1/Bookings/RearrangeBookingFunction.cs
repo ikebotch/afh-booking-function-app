@@ -1,4 +1,3 @@
-using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
@@ -13,14 +12,10 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 public sealed class RearrangeBookingFunction
 {
     private readonly IRearrangeBookingService _service;
-    private readonly IApprovalWorkflowService _approvals;
 
-    public RearrangeBookingFunction(
-        IRearrangeBookingService service,
-        IApprovalWorkflowService approvals)
+    public RearrangeBookingFunction(IRearrangeBookingService service)
     {
         _service = service;
-        _approvals = approvals;
     }
 
     [Function("Bookings_Rearrange")]
@@ -44,34 +39,6 @@ public sealed class RearrangeBookingFunction
 
         var requestedBy = string.IsNullOrWhiteSpace(body.RequestedBy) ? "Client" : body.RequestedBy.Trim();
 
-        if (string.Equals(requestedBy, "Adviser", StringComparison.OrdinalIgnoreCase))
-        {
-            if (string.IsNullOrWhiteSpace(body.ApprovalRequestId))
-            {
-                return await req.ProblemAsync(
-                    HttpStatusCode.Forbidden,
-                    "Adviser rearrangement requires an approved approvalRequestId.",
-                    ct,
-                    "ApprovalRequired");
-            }
-
-            var approved = await _approvals.IsApprovedAsync(
-                body.ApprovalRequestId.Trim(),
-                bookingId.Trim(),
-                changeType: "Rearrange",
-                requestedBy: "Adviser",
-                ct: ct);
-
-            if (!approved)
-            {
-                return await req.ProblemAsync(
-                    HttpStatusCode.Forbidden,
-                    "Approval request is not approved for this booking rearrangement.",
-                    ct,
-                    "ApprovalRequired");
-            }
-        }
-
         var cmd = new RearrangeBookingCommand
         {
             BookingId = bookingId.Trim(),
@@ -79,6 +46,7 @@ public sealed class RearrangeBookingFunction
             RequestedBy = requestedBy,
             ReasonCode = body.ReasonCode,
             ReasonDetail = body.ReasonDetail,
+            ApprovalRequestId = body.ApprovalRequestId,
             CorrelationId = req.Headers.TryGetValues("x-correlation-id", out var values) ? values.FirstOrDefault() : null
         };
 

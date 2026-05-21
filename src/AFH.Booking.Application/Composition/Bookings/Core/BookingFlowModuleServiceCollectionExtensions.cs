@@ -1,8 +1,10 @@
+using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Abstractions.Availability;
+using AFH.Booking.Application.Approvals;
 using AFH.Booking.Application.Availability;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Governance;
@@ -26,6 +28,7 @@ internal static class BookingFlowModuleServiceCollectionExtensions
         services.AddScoped<ISelectedSlotRouteTimeGuard, SelectedSlotRouteTimeGuard>();
         services.AddScoped<ILifecycleAuditService, LifecycleAuditService>();
         services.AddScoped<IAvailabilityRulesService, AvailabilityRulesService>();
+        services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
 
         return services;
     }

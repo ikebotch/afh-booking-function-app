@@ -172,7 +172,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBookingChangeAccessService, HmacBookingChangeAccessService>();
         services.AddScoped<IApprovalRoutingService, ConfigurationApprovalRoutingService>();
         services.AddScoped<IApprovalNotificationService, ApprovalNotificationService>();
-        services.AddScoped<IApprovalWorkflowService, DbApprovalWorkflowService>();
+        services.AddScoped<IApprovalWorkflowStore, DbApprovalWorkflowStore>();
         services.AddScoped<IEmailBounceService, EmailBounceService>();
         services.AddHttpClient<IAdviserProjectionSyncService, AdviserProjectionSyncService>((sp, http) =>
         {

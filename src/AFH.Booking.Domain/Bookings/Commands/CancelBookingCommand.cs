@@ -8,5 +8,6 @@ public sealed class CancelBookingCommand
     public string? ActorId { get; set; }
     public string? ReasonCode { get; set; }
     public string? ReasonDetail { get; set; }
+    public string? ApprovalRequestId { get; set; }
     public string? CorrelationId { get; set; }
 }

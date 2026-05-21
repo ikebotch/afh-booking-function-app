@@ -8,5 +8,6 @@ public sealed class RearrangeBookingCommand
     public string? ActorId { get; init; }
     public string? ReasonCode { get; init; }
     public string? ReasonDetail { get; init; }
+    public string? ApprovalRequestId { get; init; }
     public string? CorrelationId { get; init; }
 }

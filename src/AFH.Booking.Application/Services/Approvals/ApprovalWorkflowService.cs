@@ -1,22 +1,16 @@
 using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Bookings;
-using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Abstractions.Lifecycle;
-using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
-using AFH.Booking.Infrastructure.Persistence;
-using AFH.Booking.Infrastructure.Persistence.Mapping;
-using AFH.Booking.Infrastructure.Persistence.Models;
-using Microsoft.EntityFrameworkCore;
 
-namespace AFH.Booking.Infrastructure.Approvals;
+namespace AFH.Booking.Application.Approvals;
 
-public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
+public sealed class ApprovalWorkflowService : IApprovalWorkflowService
 {
-    private readonly BookingDbContext _db;
+    private readonly IApprovalWorkflowStore _store;
     private readonly IApprovalRoutingService _routing;
     private readonly ICancellationOrchestrator _cancellation;
     private readonly IRearrangementOrchestrator _rearrangement;
@@ -25,8 +19,8 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
     private readonly IUnitOfWork _uow;
     private readonly JsonSerializerOptions _jsonOptions;
 
-    public DbApprovalWorkflowService(
-        BookingDbContext db,
+    public ApprovalWorkflowService(
+        IApprovalWorkflowStore store,
         IApprovalRoutingService routing,
         ICancellationOrchestrator cancellation,
         IRearrangementOrchestrator rearrangement,
@@ -35,7 +29,7 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
         IUnitOfWork uow,
         JsonSerializerOptions jsonOptions)
     {
-        _db = db;
+        _store = store;
         _routing = routing;
         _cancellation = cancellation;
         _rearrangement = rearrangement;
@@ -45,11 +39,13 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
         _jsonOptions = jsonOptions;
     }
 
-    public async Task<ApprovalRequestResponse> CreateAsync(CreateApprovalWorkflowRequest request, CancellationToken ct)
+    public async Task<ApprovalRequestResponse> CreateAsync(
+        CreateApprovalWorkflowRequest request,
+        CancellationToken ct)
     {
         ValidateCreate(request);
 
-        var booking = await LoadBookingAsync(request.BookingId, ct);
+        var booking = await _store.LoadBookingAsync(request.BookingId, ct);
         var lifecycleState = ResolveLifecycleState(booking.Hold.Status) ?? LifecycleStates.Booked;
         var routeTarget = await _routing.ResolveAsync(ct);
         var payloadJson = JsonSerializer.Serialize(new
@@ -61,7 +57,7 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
             request.RequesterId
         }, _jsonOptions);
 
-        var model = new ApprovalRequestModel
+        var model = new ApprovalWorkflowRecord
         {
             Id = Guid.NewGuid().ToString("N"),
             BookingId = booking.Hold.Id,
@@ -79,18 +75,20 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
             ApproverTargetDisplayName = routeTarget.DisplayName
         };
 
-        _db.ApprovalRequests.Add(model);
-        _db.ApprovalHistory.Add(new ApprovalHistoryModel
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            ApprovalRequestId = model.Id,
-            EventType = "Requested",
-            ActorType = request.RequestedBy.Trim(),
-            ActorId = request.RequesterId,
-            Outcome = "Pending",
-            Comments = request.ReasonDetail,
-            OccurredUtc = model.RequestedUtc
-        });
+        await _store.AddRequestAsync(
+            model,
+            new ApprovalHistoryRecord
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ApprovalRequestId = model.Id,
+                EventType = "Requested",
+                ActorType = request.RequestedBy.Trim(),
+                ActorId = request.RequesterId,
+                Outcome = "Pending",
+                Comments = request.ReasonDetail,
+                OccurredUtc = model.RequestedUtc
+            },
+            ct);
 
         await _audit.RecordEventAsync(new LifecycleAuditEntry(
             BookingId: model.BookingId,
@@ -137,24 +135,21 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
 
     public async Task<IReadOnlyList<ApprovalRequestResponse>> ListPendingAsync(CancellationToken ct)
     {
-        var rows = await _db.ApprovalRequests
-            .AsNoTracking()
-            .Where(x => x.Status == "Pending")
-            .OrderByDescending(x => x.RequestedUtc)
-            .ToListAsync(ct);
-
+        var rows = await _store.ListPendingAsync(ct);
         return rows.Select(ToResponse).ToList();
     }
 
     public async Task<ApprovalRequestResponse?> GetAsync(string requestId, CancellationToken ct)
     {
-        var row = await _db.ApprovalRequests.AsNoTracking().SingleOrDefaultAsync(x => x.Id == requestId, ct);
+        var row = await _store.GetAsync(requestId, ct);
         return row is null ? null : ToResponse(row);
     }
 
-    public async Task<ApprovalRequestResponse?> ReviewAsync(ReviewApprovalWorkflowRequest request, CancellationToken ct)
+    public async Task<ApprovalRequestResponse?> ReviewAsync(
+        ReviewApprovalWorkflowRequest request,
+        CancellationToken ct)
     {
-        var row = await _db.ApprovalRequests.SingleOrDefaultAsync(x => x.Id == request.RequestId, ct);
+        var row = await _store.GetForUpdateAsync(request.RequestId, ct);
         if (row is null)
             return null;
 
@@ -165,10 +160,12 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
         row.Reviewer = request.Reviewer.Trim();
         row.ReviewNotes = request.Notes?.Trim();
         row.ReviewedUtc = DateTime.UtcNow;
-        var bookingBeforeDecision = await LoadBookingAsync(row.BookingId, ct);
+
+        var bookingBeforeDecision = await _store.LoadBookingAsync(row.BookingId, ct);
         var beforeDecisionState = ResolveLifecycleState(bookingBeforeDecision.Hold.Status) ?? LifecycleStates.Booked;
 
-        _db.ApprovalHistory.Add(new ApprovalHistoryModel
+        await _store.UpdateAsync(row, ct);
+        await _store.AddHistoryAsync(new ApprovalHistoryRecord
         {
             Id = Guid.NewGuid().ToString("N"),
             ApprovalRequestId = row.Id,
@@ -178,7 +175,7 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
             Outcome = row.Status,
             Comments = row.ReviewNotes,
             OccurredUtc = row.ReviewedUtc.Value
-        });
+        }, ct);
 
         await _audit.RecordEventAsync(new LifecycleAuditEntry(
             BookingId: row.BookingId,
@@ -212,64 +209,7 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
             ct);
 
         if (request.Approved)
-        {
-            var payload = JsonSerializer.Deserialize<ApprovalPayload>(row.RequestedPayloadJson ?? "{}", _jsonOptions) ?? new ApprovalPayload();
-            var execution = await ExecuteApprovedRequestAsync(row, payload, request.CorrelationId, ct);
-            if (!execution.IsSuccess)
-            {
-                row.ExecutionError = execution.ErrorMessage;
-            }
-            else
-            {
-                row.ExecutedUtc = DateTime.UtcNow;
-            }
-
-            _db.ApprovalHistory.Add(new ApprovalHistoryModel
-            {
-                Id = Guid.NewGuid().ToString("N"),
-                ApprovalRequestId = row.Id,
-                EventType = "Execution",
-                ActorType = "System",
-                ActorId = "BookingService",
-                Outcome = execution.IsSuccess ? "Completed" : "Failed",
-                Comments = execution.ErrorMessage,
-                OccurredUtc = DateTime.UtcNow
-            });
-
-            var executionState = execution.IsSuccess
-                ? ResolveExecutionState(row.ChangeType)
-                : beforeDecisionState;
-
-            await _audit.RecordEventAsync(new LifecycleAuditEntry(
-                BookingId: row.BookingId,
-                TransactionId: row.TransactionId,
-                EventType: execution.IsSuccess ? "ApprovalExecutionCompleted" : "ApprovalExecutionFailed",
-                ActorType: LifecycleActors.System,
-                ActorId: "BookingService",
-                ReasonCode: row.ReasonCode,
-                ReasonNotes: execution.ErrorMessage ?? row.ReviewNotes,
-                Before: new
-                {
-                    approvalStatus = row.Status,
-                    changeType = row.ChangeType,
-                    lifecycleState = beforeDecisionState
-                },
-                After: new
-                {
-                    approvalExecution = execution.IsSuccess ? "Completed" : "Failed",
-                    changeType = row.ChangeType,
-                    lifecycleState = executionState
-                },
-                OccurredUtc: DateTime.UtcNow,
-                CorrelationId: request.CorrelationId,
-                SourceSystem: "BookingService",
-                RelatedBookingId: row.BookingId,
-                PreviousState: beforeDecisionState,
-                NewState: executionState,
-                TriggerReason: "ApprovedAdviserRequestExecution"), ct);
-
-            await _uow.SaveChangesAsync(ct);
-        }
+            await ExecuteApprovedWorkflowAsync(request, row, beforeDecisionState, ct);
 
         return ToResponse(row);
     }
@@ -281,19 +221,76 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
         string requestedBy,
         CancellationToken ct)
     {
-        return await _db.ApprovalRequests
-            .AsNoTracking()
-            .AnyAsync(
-                x => x.Id == requestId &&
-                     x.BookingId == bookingId &&
-                     x.ChangeType == changeType &&
-                     x.RequestedBy == requestedBy &&
-                     x.Status == "Approved",
-                ct);
+        return await _store.IsApprovedAsync(requestId, bookingId, changeType, requestedBy, ct);
+    }
+
+    private async Task ExecuteApprovedWorkflowAsync(
+        ReviewApprovalWorkflowRequest review,
+        ApprovalWorkflowRecord row,
+        string beforeDecisionState,
+        CancellationToken ct)
+    {
+        var payload = JsonSerializer.Deserialize<ApprovalPayload>(row.RequestedPayloadJson ?? "{}", _jsonOptions) ?? new ApprovalPayload();
+        var execution = await ExecuteApprovedRequestAsync(row, payload, review.CorrelationId, ct);
+        if (!execution.IsSuccess)
+        {
+            row.ExecutionError = execution.ErrorMessage;
+        }
+        else
+        {
+            row.ExecutedUtc = DateTime.UtcNow;
+        }
+
+        await _store.UpdateAsync(row, ct);
+        await _store.AddHistoryAsync(new ApprovalHistoryRecord
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ApprovalRequestId = row.Id,
+            EventType = "Execution",
+            ActorType = "System",
+            ActorId = "BookingService",
+            Outcome = execution.IsSuccess ? "Completed" : "Failed",
+            Comments = execution.ErrorMessage,
+            OccurredUtc = DateTime.UtcNow
+        }, ct);
+
+        var executionState = execution.IsSuccess
+            ? ResolveExecutionState(row.ChangeType)
+            : beforeDecisionState;
+
+        await _audit.RecordEventAsync(new LifecycleAuditEntry(
+            BookingId: row.BookingId,
+            TransactionId: row.TransactionId,
+            EventType: execution.IsSuccess ? "ApprovalExecutionCompleted" : "ApprovalExecutionFailed",
+            ActorType: LifecycleActors.System,
+            ActorId: "BookingService",
+            ReasonCode: row.ReasonCode,
+            ReasonNotes: execution.ErrorMessage ?? row.ReviewNotes,
+            Before: new
+            {
+                approvalStatus = row.Status,
+                changeType = row.ChangeType,
+                lifecycleState = beforeDecisionState
+            },
+            After: new
+            {
+                approvalExecution = execution.IsSuccess ? "Completed" : "Failed",
+                changeType = row.ChangeType,
+                lifecycleState = executionState
+            },
+            OccurredUtc: DateTime.UtcNow,
+            CorrelationId: review.CorrelationId,
+            SourceSystem: "BookingService",
+            RelatedBookingId: row.BookingId,
+            PreviousState: beforeDecisionState,
+            NewState: executionState,
+            TriggerReason: "ApprovedAdviserRequestExecution"), ct);
+
+        await _uow.SaveChangesAsync(ct);
     }
 
     private async Task<Result> ExecuteApprovedRequestAsync(
-        ApprovalRequestModel request,
+        ApprovalWorkflowRecord request,
         ApprovalPayload payload,
         string? correlationId,
         CancellationToken ct)
@@ -307,7 +304,8 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
                 ActorId = request.RequesterId,
                 ReasonCode = request.ReasonCode,
                 ReasonDetail = request.ReasonDetail,
-                CorrelationId = correlationId ?? request.Id
+                CorrelationId = correlationId ?? request.Id,
+                ApprovalRequestId = request.Id
             }, sendClientNotification: true, ct);
 
             return result.IsSuccess
@@ -323,27 +321,13 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
             ActorId = request.RequesterId,
             ReasonCode = request.ReasonCode,
             ReasonDetail = request.ReasonDetail,
-            CorrelationId = correlationId ?? request.Id
+            CorrelationId = correlationId ?? request.Id,
+            ApprovalRequestId = request.Id
         }, ct);
 
         return rearrangeResult.IsSuccess
             ? Result.Ok()
             : Result.Fail(rearrangeResult.StatusCode, rearrangeResult.ErrorMessage ?? "Approval execution failed.", rearrangeResult.ErrorCode);
-    }
-
-    private async Task<(Domain.Bookings.BookingHold Hold, BookingSlot Slot, BookingTransaction Transaction)> LoadBookingAsync(string bookingId, CancellationToken ct)
-    {
-        var hold = await _db.Holds.AsNoTracking().SingleOrDefaultAsync(x => x.Id == bookingId, ct)
-            ?? throw new InvalidOperationException($"Booking '{bookingId}' was not found.");
-        var slot = await _db.BookingSlots.AsNoTracking().SingleOrDefaultAsync(x => x.Id == hold.SlotId, ct)
-            ?? throw new InvalidOperationException($"Slot '{hold.SlotId}' was not found.");
-        var tx = await _db.BookingTransactions.AsNoTracking().SingleOrDefaultAsync(x => x.Id == slot.TransactionId, ct)
-            ?? throw new InvalidOperationException($"Transaction '{slot.TransactionId}' was not found.");
-
-        return (
-            AFH.Booking.Infrastructure.Persistence.Mapping.BookingHoldMapping.ToDomain(hold),
-            AFH.Booking.Infrastructure.Persistence.Mapping.BookingSlotMapping.ToDomain(slot),
-            tx.ToDomain(includeSlots: false));
     }
 
     private static void ValidateCreate(CreateApprovalWorkflowRequest request)
@@ -378,7 +362,7 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
             : LifecycleStates.Rearranged;
     }
 
-    private static ApprovalRequestResponse ToResponse(ApprovalRequestModel model)
+    private static ApprovalRequestResponse ToResponse(ApprovalWorkflowRecord model)
     {
         var payload = string.IsNullOrWhiteSpace(model.RequestedPayloadJson)
             ? null
@@ -403,7 +387,7 @@ public sealed class DbApprovalWorkflowService : IApprovalWorkflowService
             ApproverTargetType = model.ApproverTargetType,
             ApproverTargetValue = model.ApproverTargetValue,
             ApproverTargetDisplayName = model.ApproverTargetDisplayName,
-            RoutedTo = [model.ApproverTargetDisplayName],
+            RoutedTo = [model.ApproverTargetDisplayName!],
             ExecutedUtc = model.ExecutedUtc
         };
     }

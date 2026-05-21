@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text.Json;
-using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
@@ -15,16 +14,13 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class CancelBookingFunction
 {
-    private readonly IApprovalWorkflowService _approvals;
     private readonly ICancelBookingService _service;
     private readonly ILogger<CancelBookingFunction> _logger;
 
     public CancelBookingFunction(
-        IApprovalWorkflowService approvals,
         ICancelBookingService service,
         ILogger<CancelBookingFunction> logger)
     {
-        _approvals = approvals;
         _service = service;
         _logger = logger;
     }
@@ -49,34 +45,6 @@ public sealed class CancelBookingFunction
             var body = await req.ReadJsonAsync<CancelBookingRequest>(ct);
             var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy) ? "Client" : body!.RequestedBy!.Trim();
 
-            if (string.Equals(requestedBy, "Adviser", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.IsNullOrWhiteSpace(body?.ApprovalRequestId))
-                {
-                    return await req.ProblemAsync(
-                        HttpStatusCode.Forbidden,
-                        "Adviser cancellation requires an approved approvalRequestId.",
-                        ct,
-                        "ApprovalRequired");
-                }
-
-                var approved = await _approvals.IsApprovedAsync(
-                    body.ApprovalRequestId.Trim(),
-                    bookingId.Trim(),
-                    changeType: "Cancel",
-                    requestedBy: "Adviser",
-                    ct: ct);
-
-                if (!approved)
-                {
-                    return await req.ProblemAsync(
-                        HttpStatusCode.Forbidden,
-                        "Approval request is not approved for this booking cancellation.",
-                        ct,
-                        "ApprovalRequired");
-                }
-            }
-
             var cmd = new CancelBookingCommand
             {
                 BookingId = bookingId.Trim(),
@@ -84,6 +52,7 @@ public sealed class CancelBookingFunction
                 RequestedBy = requestedBy,
                 ReasonCode = body?.ReasonCode,
                 ReasonDetail = body?.ReasonDetail,
+                ApprovalRequestId = body?.ApprovalRequestId,
                 CorrelationId = req.Headers.TryGetValues("x-correlation-id", out var values) ? values.FirstOrDefault() : null
             };
 

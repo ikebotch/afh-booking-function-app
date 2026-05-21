@@ -227,6 +227,7 @@ public class InternalOutboundAuthTests
         public Task AddRangeAsync(IEnumerable<BookingSlot> slots, CancellationToken ct) => throw new NotSupportedException();
         public Task<IReadOnlyList<BookingSlot>> ListByTransactionAsync(string transactionId, CancellationToken ct) => throw new NotSupportedException();
         public Task AddAsync(BookingSlot slot, CancellationToken ct) => throw new NotSupportedException();
+        public Task UpdateAsync(BookingSlot slot, CancellationToken ct) => throw new NotSupportedException();
 
         public Task<BookingSlot?> GetAsync(string slotId, CancellationToken ct)
             => Task.FromResult<BookingSlot?>(BookingSlot.Rehydrate(

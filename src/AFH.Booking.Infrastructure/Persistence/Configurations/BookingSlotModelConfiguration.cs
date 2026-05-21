@@ -51,12 +51,16 @@ public sealed class BookingSlotModelConfiguration : IEntityTypeConfiguration<Boo
 
         b.Property(x => x.SourcePostcode)
             .HasMaxLength(32);
+        b.Property(x => x.SourceLatitude);
+        b.Property(x => x.SourceLongitude);
 
         b.Property(x => x.DestinationLocationRef)
             .HasMaxLength(128);
 
         b.Property(x => x.DestinationPostcode)
             .HasMaxLength(32);
+        b.Property(x => x.DestinationLatitude);
+        b.Property(x => x.DestinationLongitude);
 
         b.Property(x => x.TravelProvider)
             .HasMaxLength(64);

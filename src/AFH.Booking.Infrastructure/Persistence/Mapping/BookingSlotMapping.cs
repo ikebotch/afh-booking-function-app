@@ -31,8 +31,12 @@ internal static class BookingSlotMapping
             travelDistanceMiles: m.TravelDistanceMiles,
             sourceLocationRef: m.SourceLocationRef,
             sourcePostcode: m.SourcePostcode,
+            sourceLatitude: m.SourceLatitude,
+            sourceLongitude: m.SourceLongitude,
             destinationLocationRef: m.DestinationLocationRef,
             destinationPostcode: m.DestinationPostcode,
+            destinationLatitude: m.DestinationLatitude,
+            destinationLongitude: m.DestinationLongitude,
             travelProvider: m.TravelProvider,
             travelConfidence: m.TravelConfidence,
             travelCalculatedUtc: m.TravelCalculatedUtc,
@@ -66,8 +70,12 @@ internal static class BookingSlotMapping
             TravelDistanceMiles = s.TravelDistanceMiles,
             SourceLocationRef = s.SourceLocationRef,
             SourcePostcode = s.SourcePostcode,
+            SourceLatitude = s.SourceLatitude,
+            SourceLongitude = s.SourceLongitude,
             DestinationLocationRef = s.DestinationLocationRef,
             DestinationPostcode = s.DestinationPostcode,
+            DestinationLatitude = s.DestinationLatitude,
+            DestinationLongitude = s.DestinationLongitude,
             TravelProvider = s.TravelProvider,
             TravelConfidence = s.TravelConfidence,
             TravelCalculatedUtc = s.TravelCalculatedUtc,
@@ -108,8 +116,12 @@ internal static class BookingSlotMapping
         m.TravelDistanceMiles = s.TravelDistanceMiles;
         m.SourceLocationRef = s.SourceLocationRef;
         m.SourcePostcode = s.SourcePostcode;
+        m.SourceLatitude = s.SourceLatitude;
+        m.SourceLongitude = s.SourceLongitude;
         m.DestinationLocationRef = s.DestinationLocationRef;
         m.DestinationPostcode = s.DestinationPostcode;
+        m.DestinationLatitude = s.DestinationLatitude;
+        m.DestinationLongitude = s.DestinationLongitude;
         m.TravelProvider = s.TravelProvider;
         m.TravelConfidence = s.TravelConfidence;
         m.TravelCalculatedUtc = s.TravelCalculatedUtc;

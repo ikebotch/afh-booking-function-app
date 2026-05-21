@@ -53,6 +53,7 @@ public static class ServiceCollectionExtensions
         services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
         services.Configure<AvailabilityRulesOptions>(config.GetSection(AvailabilityRulesOptions.SectionName));
         services.Configure<ApplicationLoggingOptions>(config.GetSection(ApplicationLoggingOptions.SectionName));
+        services.Configure<FinalRouteTimeGuardOptions>(config.GetSection(FinalRouteTimeGuardOptions.SectionName));
         services.AddSingleton<IInternalServiceAuthenticator, InternalBearerServiceAuthenticator>();
         services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();
         services.AddSingleton<ICurrentUserProfileResolver, DomainUserProfileResolver>();
@@ -104,6 +105,17 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddHttpClient<ILocationTravelCoverageClient, LocationTravelCoverageClient>((sp, http) =>
+        {
+            var opt = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
+
+            if (string.IsNullOrWhiteSpace(opt.BaseUrl))
+                throw new InvalidOperationException($"{LocationServiceOptions.SectionName}:BaseUrl is required.");
+
+            http.BaseAddress = new Uri(opt.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
+
+        services.AddHttpClient<ILocationRouteTimeClient, LocationRouteTimeClient>((sp, http) =>
         {
             var opt = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
 

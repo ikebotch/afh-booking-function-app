@@ -2,6 +2,7 @@ using AFH.Booking.Application.EmailTemplates;
 
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Lifecycle;
+using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Governance;
 using AFH.Booking.Application.Holds;
@@ -149,6 +150,7 @@ public class ConfirmBookingHandlerTests
             profiles,
             new StubMeetingLinkFactory(),
             conflicts,
+            new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
             new StubNotificationService(), new StubHoldWindowFactory());
 
@@ -221,6 +223,7 @@ public class ConfirmBookingHandlerTests
             profiles,
             meetingLinks,
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
+            new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
             new StubNotificationService(), new StubHoldWindowFactory());
 
@@ -254,6 +257,7 @@ public class ConfirmBookingHandlerTests
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
+            new StubRouteTimeGuard(),
             audit,
             notifications, new StubHoldWindowFactory());
 
@@ -332,6 +336,7 @@ public class ConfirmBookingHandlerTests
             profiles,
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
+            new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
             new StubNotificationService(), new StubHoldWindowFactory());
 
@@ -384,6 +389,7 @@ public class ConfirmBookingHandlerTests
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
             new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
+            new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
             new StubNotificationService(), new StubHoldWindowFactory());
 
@@ -427,6 +433,7 @@ public class ConfirmBookingHandlerTests
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
             new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
+            new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
             new StubNotificationService(), new StubHoldWindowFactory());
 
@@ -471,6 +478,7 @@ public class ConfirmBookingHandlerTests
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
             new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
+            new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
             new StubNotificationService(), new StubHoldWindowFactory());
 
@@ -493,6 +501,7 @@ public class ConfirmBookingHandlerTests
             new StubProfiles("adv-1", "adviser.one@tenant.com"),
             new StubMeetingLinkFactory(),
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
+            new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
             new StubNotificationService(), new StubHoldWindowFactory());
     }
@@ -573,6 +582,35 @@ public class ConfirmBookingHandlerTests
         public Task<BookingSlot?> GetAsync(string slotId, CancellationToken ct) => Task.FromResult(_slot);
         public Task<IReadOnlyList<BookingSlot>> ListByTransactionAsync(string transactionId, CancellationToken ct) => Task.FromResult<IReadOnlyList<BookingSlot>>([]);
         public Task AddAsync(BookingSlot slot, CancellationToken ct) => Task.CompletedTask;
+        public Task UpdateAsync(BookingSlot slot, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    private sealed class StubRouteTimeGuard : ISelectedSlotRouteTimeGuard
+    {
+        private readonly SelectedSlotRouteTimeGuardResult _result;
+
+        public StubRouteTimeGuard(SelectedSlotRouteTimeGuardResult? result = null)
+        {
+            _result = result ?? new SelectedSlotRouteTimeGuardResult(
+                true,
+                false,
+                null,
+                null,
+                null,
+                null);
+        }
+
+        public int CallCount { get; private set; }
+
+        public Task<SelectedSlotRouteTimeGuardResult> EvaluateAsync(
+            BookingSlot slot,
+            BookingTransaction transaction,
+            string holdId,
+            CancellationToken ct)
+        {
+            CallCount++;
+            return Task.FromResult(_result);
+        }
     }
 
     private sealed class StubTransactionRepository : IBookingTransactionRepository

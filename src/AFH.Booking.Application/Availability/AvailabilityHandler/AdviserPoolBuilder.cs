@@ -293,8 +293,12 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
                         {
                             SourceLocationRef = profile.AdviserId,
                             SourcePostcode = profile.HomePostcode,
+                            SourceLatitude = outcome.Coordinates?.Latitude,
+                            SourceLongitude = outcome.Coordinates?.Longitude,
                             DestinationLocationRef = null,
                             DestinationPostcode = clientDestination.Postcode,
+                            DestinationLatitude = coverage.SourceCoordinates?.Latitude,
+                            DestinationLongitude = coverage.SourceCoordinates?.Longitude,
                             TravelMinutes = outcome.Route?.TravelTimeMinutes,
                             DistanceMiles = outcome.Route?.TravelDistanceMiles,
                             Provider = outcome.Route?.ResolutionSource.ToString(),

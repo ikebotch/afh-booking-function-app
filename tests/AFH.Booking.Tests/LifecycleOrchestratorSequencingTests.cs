@@ -7,6 +7,7 @@ using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using Moq;
+using System.Net;
 
 namespace AFH.Booking.Tests;
 
@@ -183,6 +184,77 @@ public sealed class LifecycleOrchestratorSequencingTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(new[] { "create", "confirm", "cancel", "sql", "notifications" }, order);
+    }
+
+    [Fact]
+    public async Task RearrangementOrchestrator_StopsBeforeCancellingOldBooking_WhenFinalRouteTimeCheckBlocksConfirmation()
+    {
+        var oldHold = BookingHold.Rehydrate("booking-old", "slot-old", "user-1", BookingHoldStatus.Confirmed, DateTime.UtcNow.AddHours(-2), DateTime.UtcNow.AddHours(1), DateTime.UtcNow.AddHours(-1), null, null, null, "provider-old", null);
+        var oldSlot = BookingSlot.Rehydrate("slot-old", "tx-1", "adviser-old", "Old Adviser", DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1), 5, null, null, null, null, null, null, null, DateTime.UtcNow);
+        var tx = BookingTransaction.Rehydrate("tx-1", "txn-ref", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Completed, DateTime.UtcNow, null);
+
+        var holds = new Mock<IBookingHoldRepository>();
+        holds.Setup(x => x.GetAsync("booking-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldHold);
+
+        var slots = new Mock<IBookingSlotRepository>();
+        slots.Setup(x => x.GetAsync("slot-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldSlot);
+
+        var txRepo = new Mock<IBookingTransactionRepository>();
+        txRepo.Setup(x => x.GetAsync("tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(tx);
+
+        var create = new Mock<ICreateBookingHandler>();
+        create.Setup(x => x.HandleAsync(It.IsAny<CreateHoldCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<CreateBookingResponse>.Ok(new CreateBookingResponse
+            {
+                BookingId = "booking-new",
+                SlotId = "slot-new",
+                HoldExpiresUtc = DateTime.UtcNow.AddMinutes(3)
+            }));
+
+        var confirm = new Mock<IConfirmBookingHandler>();
+        confirm.Setup(x => x.HandleAsync(It.IsAny<ConfirmBookingCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<ConfirmBookingResponse>.Fail(
+                HttpStatusCode.Conflict,
+                "The selected in-person slot is no longer available because exact travel falls outside adviser coverage.",
+                Errors.ExactRouteTimeUnavailable));
+
+        var cancel = new Mock<ICancellationOrchestrator>();
+        var notifications = new Mock<INotificationService>();
+        var downstream = new Mock<IDownstreamUpdateService>();
+        var audit = new Mock<ILifecycleAuditService>();
+        var uow = new Mock<IUnitOfWork>();
+
+        var orchestrator = new RearrangementOrchestrator(
+            holds.Object,
+            slots.Object,
+            txRepo.Object,
+            create.Object,
+            confirm.Object,
+            cancel.Object,
+            notifications.Object,
+            downstream.Object,
+            audit.Object,
+            uow.Object,
+            new StubClock(DateTime.UtcNow));
+
+        var result = await orchestrator.RearrangeAsync(
+            new RearrangeBookingCommand
+            {
+                BookingId = "booking-old",
+                NewSlotId = "slot-new",
+                RequestedBy = "Client",
+                ReasonCode = "ClientRearranged"
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(Errors.ExactRouteTimeUnavailable, result.ErrorCode);
+        confirm.Verify(x => x.HandleAsync(
+            It.Is<ConfirmBookingCommand>(cmd => cmd.HoldId == "booking-new"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        cancel.Verify(x => x.CancelAsync(It.IsAny<CancelBookingCommand>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        audit.Verify(x => x.RecordEventAsync(It.IsAny<LifecycleAuditEntry>(), It.IsAny<CancellationToken>()), Times.Never);
+        notifications.Verify(x => x.SendBookingNotificationAsync(It.IsAny<NotificationDispatchRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private sealed class StubClock : IClock

@@ -9,4 +9,6 @@ public interface IBookingSlotRepository
     Task<IReadOnlyList<BookingSlot>> ListByTransactionAsync(string transactionId, CancellationToken ct);
 
     Task AddAsync(BookingSlot slot, CancellationToken ct);
+
+    Task UpdateAsync(BookingSlot slot, CancellationToken ct);
 }

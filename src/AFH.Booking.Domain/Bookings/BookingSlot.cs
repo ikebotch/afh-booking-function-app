@@ -24,8 +24,12 @@ public sealed class BookingSlot
     public double? TravelDistanceMiles { get; private set; }
     public string? SourceLocationRef { get; private set; }
     public string? SourcePostcode { get; private set; }
+    public double? SourceLatitude { get; private set; }
+    public double? SourceLongitude { get; private set; }
     public string? DestinationLocationRef { get; private set; }
     public string? DestinationPostcode { get; private set; }
+    public double? DestinationLatitude { get; private set; }
+    public double? DestinationLongitude { get; private set; }
     public string? TravelProvider { get; private set; }
     public string? TravelConfidence { get; private set; }
     public DateTime? TravelCalculatedUtc { get; private set; }
@@ -92,8 +96,12 @@ public sealed class BookingSlot
         int? companyBufferMinutes,
         string? sourceLocationRef,
         string? sourcePostcode,
+        double? sourceLatitude,
+        double? sourceLongitude,
         string? destinationLocationRef,
         string? destinationPostcode,
+        double? destinationLatitude,
+        double? destinationLongitude,
         string? provider,
         string? confidence,
         DateTime? calculatedUtc)
@@ -107,8 +115,12 @@ public sealed class BookingSlot
 
         SourceLocationRef = sourceLocationRef;
         SourcePostcode = sourcePostcode;
+        SourceLatitude = sourceLatitude;
+        SourceLongitude = sourceLongitude;
         DestinationLocationRef = destinationLocationRef;
         DestinationPostcode = destinationPostcode;
+        DestinationLatitude = destinationLatitude;
+        DestinationLongitude = destinationLongitude;
 
         TravelProvider = provider;
         TravelConfidence = confidence;
@@ -153,6 +165,10 @@ public sealed class BookingSlot
             null,
             null,
             null,
+            null,
+            null,
+            null,
+            null,
             travelStatus,
             travelMessage,
             createdUtc);
@@ -174,8 +190,12 @@ public sealed class BookingSlot
         double? travelDistanceMiles,
         string? sourceLocationRef,
         string? sourcePostcode,
+        double? sourceLatitude,
+        double? sourceLongitude,
         string? destinationLocationRef,
         string? destinationPostcode,
+        double? destinationLatitude,
+        double? destinationLongitude,
         string? travelProvider,
         string? travelConfidence,
         DateTime? travelCalculatedUtc,
@@ -200,8 +220,12 @@ public sealed class BookingSlot
             TravelDistanceMiles = travelDistanceMiles,
             SourceLocationRef = sourceLocationRef,
             SourcePostcode = sourcePostcode,
+            SourceLatitude = sourceLatitude,
+            SourceLongitude = sourceLongitude,
             DestinationLocationRef = destinationLocationRef,
             DestinationPostcode = destinationPostcode,
+            DestinationLatitude = destinationLatitude,
+            DestinationLongitude = destinationLongitude,
             TravelProvider = travelProvider,
             TravelConfidence = travelConfidence,
             TravelCalculatedUtc = travelCalculatedUtc.HasValue

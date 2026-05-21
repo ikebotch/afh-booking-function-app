@@ -20,4 +20,5 @@ public static class Errors
     public const string BookingConflictDoubleBooked = "BookingConflictDoubleBooked";
     public const string BookingConflictShowAs = "BookingConflictShowAs";
     public const string BookingConflictRecurrence = "BookingConflictRecurrence";
+    public const string ExactRouteTimeUnavailable = "ExactRouteTimeUnavailable";
 }

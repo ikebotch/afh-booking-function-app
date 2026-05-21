@@ -34,8 +34,12 @@ public sealed class BookingSlotModel
     public double? TravelDistanceMiles { get; set; }
     public string? SourceLocationRef { get; set; }
     public string? SourcePostcode { get; set; }
+    public double? SourceLatitude { get; set; }
+    public double? SourceLongitude { get; set; }
     public string? DestinationLocationRef { get; set; }
     public string? DestinationPostcode { get; set; }
+    public double? DestinationLatitude { get; set; }
+    public double? DestinationLongitude { get; set; }
     public string? TravelProvider { get; set; }
     public string? TravelConfidence { get; set; }
     public DateTime? TravelCalculatedUtc { get; set; }

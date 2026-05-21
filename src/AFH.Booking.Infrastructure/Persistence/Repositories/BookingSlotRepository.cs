@@ -33,6 +33,15 @@ public sealed class BookingSlotRepository : IBookingSlotRepository
     public async Task AddAsync(BookingSlot slot, CancellationToken ct)
        => await _db.BookingSlots.AddAsync(slot.ToModel(), ct);
 
+    public async Task UpdateAsync(BookingSlot slot, CancellationToken ct)
+    {
+        var model = await _db.BookingSlots.FirstOrDefaultAsync(x => x.Id == slot.Id, ct);
+        if (model is null)
+            return;
+
+        slot.ApplyToModel(model);
+    }
+
     public async Task<IReadOnlyList<BookingSlot>> ListByTransactionAsync(string transactionId, CancellationToken ct)
     {
         var models = await _db.BookingSlots

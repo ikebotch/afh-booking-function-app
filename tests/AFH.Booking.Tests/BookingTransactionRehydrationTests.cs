@@ -3,6 +3,7 @@ using Moq;
 
 ﻿using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Lifecycle;
+using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Holds;
@@ -78,6 +79,15 @@ public sealed class BookingTransactionRehydrationTests
                 It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>()));
 
+        var routeTimeGuard = new Mock<ISelectedSlotRouteTimeGuard>();
+        routeTimeGuard
+            .Setup(g => g.EvaluateAsync(
+                It.IsAny<BookingSlot>(),
+                It.IsAny<BookingTransaction>(),
+                It.IsAny<string>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new SelectedSlotRouteTimeGuardResult(true, false, null, null, null, null));
+
         var audit = new Mock<ILifecycleAuditService>();
         audit.Setup(a => a.RecordEventAsync(It.IsAny<LifecycleAuditEntry>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("event-1");
@@ -104,6 +114,7 @@ public sealed class BookingTransactionRehydrationTests
             profiles.Object,
             new Mock<IMeetingLinkFactory>().Object,
             conflicts.Object,
+            routeTimeGuard.Object,
             audit.Object,
             notifications.Object,
             holdWindowFactory.Object

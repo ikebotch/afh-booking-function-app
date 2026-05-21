@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Lifecycle;
+using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
@@ -20,6 +21,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
     private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IMeetingLinkFactory _meetingLinks;
     private readonly IBookingConflictService _conflicts;
+    private readonly ISelectedSlotRouteTimeGuard _routeTimeGuard;
     private readonly ILifecycleAuditService _audit;
     private readonly INotificationService _notifications;
     private readonly IHoldWindowFactory _holdWindowFactory;
@@ -34,6 +36,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         IAdviserProfileProjectionRepository profiles,
         IMeetingLinkFactory meetingLinks,
         IBookingConflictService conflicts,
+        ISelectedSlotRouteTimeGuard routeTimeGuard,
         ILifecycleAuditService audit,
         INotificationService notifications,
         IHoldWindowFactory holdWindowFactory)
@@ -47,6 +50,7 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
         _profiles = profiles;
         _meetingLinks = meetingLinks;
         _conflicts = conflicts;
+        _routeTimeGuard = routeTimeGuard;
         _audit = audit;
         _notifications = notifications;
         _holdWindowFactory = holdWindowFactory;
@@ -121,6 +125,39 @@ public sealed class ConfirmBookingHandler : IConfirmBookingHandler
                 HttpStatusCode.Conflict,
                 $"Transaction '{slot.TransactionId}' not found.",
                 Errors.HoldTransactionMissing);
+        }
+
+        var routeTimeCheck = await _routeTimeGuard.EvaluateAsync(slot, tx, hold.Id, ct);
+        if (!routeTimeCheck.IsAllowed)
+        {
+            return Result<ConfirmBookingResponse>.Fail(
+                HttpStatusCode.Conflict,
+                routeTimeCheck.ErrorMessage
+                    ?? "The selected slot is no longer available.",
+                routeTimeCheck.ErrorCode ?? Errors.ExactRouteTimeUnavailable);
+        }
+
+        if (routeTimeCheck.WasTriggered &&
+            routeTimeCheck.TravelTimeMinutes.HasValue &&
+            routeTimeCheck.TravelDistanceMiles.HasValue)
+        {
+            slot.AttachTravelSnapshot(
+                travelMinutes: routeTimeCheck.TravelTimeMinutes,
+                distanceMiles: routeTimeCheck.TravelDistanceMiles,
+                companyBufferMinutes: slot.CompanyBufferMinutes,
+                sourceLocationRef: slot.SourceLocationRef,
+                sourcePostcode: slot.SourcePostcode,
+                sourceLatitude: slot.SourceLatitude,
+                sourceLongitude: slot.SourceLongitude,
+                destinationLocationRef: slot.DestinationLocationRef,
+                destinationPostcode: slot.DestinationPostcode,
+                destinationLatitude: slot.DestinationLatitude,
+                destinationLongitude: slot.DestinationLongitude,
+                provider: "LocationRouteTime",
+                confidence: "Exact",
+                calculatedUtc: utcNow);
+
+            await _slots.UpdateAsync(slot, ct);
         }
 
         var calendarUserId =

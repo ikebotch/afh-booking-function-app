@@ -439,6 +439,12 @@ namespace AFH.Booking.Infrastructure.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
+                    b.Property<double?>("DestinationLatitude")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("DestinationLongitude")
+                        .HasColumnType("float");
+
                     b.Property<string>("DestinationPostcode")
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
@@ -463,6 +469,12 @@ namespace AFH.Booking.Infrastructure.Migrations
                     b.Property<string>("SourceLocationRef")
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
+
+                    b.Property<double?>("SourceLatitude")
+                        .HasColumnType("float");
+
+                    b.Property<double?>("SourceLongitude")
+                        .HasColumnType("float");
 
                     b.Property<string>("SourcePostcode")
                         .HasMaxLength(32)

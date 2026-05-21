@@ -10,11 +10,11 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class LeadTechRearrangeBookingFunction
 {
-    private readonly IRearrangeBookingHandler _handler;
+    private readonly IRearrangeBookingService _service;
 
-    public LeadTechRearrangeBookingFunction(IRearrangeBookingHandler handler)
+    public LeadTechRearrangeBookingFunction(IRearrangeBookingService service)
     {
-        _handler = handler;
+        _service = service;
     }
 
     [Function("Bookings_LeadTechRearrange")]
@@ -28,7 +28,7 @@ public sealed class LeadTechRearrangeBookingFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, Errors.Validation);
 
-        var result = await _handler.HandleAsync(new RearrangeBookingCommand
+        var result = await _service.HandleAsync(new RearrangeBookingCommand
         {
             BookingId = bookingId.Trim(),
             NewSlotId = body.NewSlotId,

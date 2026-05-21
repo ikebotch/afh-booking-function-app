@@ -11,14 +11,14 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 public sealed class SelfServiceRearrangementOptionsFunction
 {
     private readonly IBookingChangeAccessService _accessService;
-    private readonly IRearrangementOptionsHandler _handler;
+    private readonly IRearrangementOptionsService _service;
 
     public SelfServiceRearrangementOptionsFunction(
         IBookingChangeAccessService accessService,
-        IRearrangementOptionsHandler handler)
+        IRearrangementOptionsService service)
     {
         _accessService = accessService;
-        _handler = handler;
+        _service = service;
     }
 
     [Function("Bookings_SelfServiceRearrangementOptions")]
@@ -33,7 +33,7 @@ public sealed class SelfServiceRearrangementOptionsFunction
             return await req.ProblemAsync(access.StatusCode, access.ErrorMessage ?? "Unauthorized.", ct, access.ErrorCode);
 
         var body = await req.ReadJsonAsync<RearrangementOptionsRequest>(ct);
-        var result = await _handler.HandleAsync(new GetRearrangementOptionsCommand
+        var result = await _service.HandleAsync(new GetRearrangementOptionsCommand
         {
             BookingId = bookingId,
             PreferredStartUtc = body?.PreferredStartUtc,

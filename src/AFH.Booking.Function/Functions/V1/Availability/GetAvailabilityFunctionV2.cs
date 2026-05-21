@@ -10,11 +10,11 @@ namespace AFH.Booking.Function.Functions.V1.Availability;
 [BookingOpenApiTag("Availability")]
 public sealed class GetAvailabilityFunctionV2
 {
-    private readonly IAvailabilityHandler _handler;
+    private readonly IAvailabilityService _service;
 
-    public GetAvailabilityFunctionV2(IAvailabilityHandler handler)
+    public GetAvailabilityFunctionV2(IAvailabilityService service)
     {
-        _handler = handler;
+        _service = service;
     }
 
     [Function("Transactions_Availability_V2")]
@@ -58,7 +58,7 @@ public sealed class GetAvailabilityFunctionV2
         }
 
         var query = body.ToQuery(transactionId);
-        var result = await _handler.HandleAsync(query, ct);
+        var result = await _service.HandleAsync(query, ct);
 
         if (!result.IsSuccess)
             return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);

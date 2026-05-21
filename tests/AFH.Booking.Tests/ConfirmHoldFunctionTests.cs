@@ -16,25 +16,25 @@ public sealed class ConfirmHoldFunctionTests
     [Fact]
     public async Task Run_AcceptsEmptyBody()
     {
-        var handler = new StubConfirmBookingHandler();
-        var sut = new ConfirmHoldFunction(handler);
+        var service = new StubConfirmBookingService();
+        var sut = new ConfirmHoldFunction(service);
         var request = TestHttpRequestData.Create();
         ConfigureSerializer(request);
 
         var response = await sut.Run(request, "hold-1", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(handler.LastCommand);
-        Assert.Equal("hold-1", handler.LastCommand!.HoldId);
-        Assert.Equal("hold-1", handler.LastCommand.BookingId);
-        Assert.Null(handler.LastCommand.Notes);
+        Assert.NotNull(service.LastCommand);
+        Assert.Equal("hold-1", service.LastCommand!.HoldId);
+        Assert.Equal("hold-1", service.LastCommand.BookingId);
+        Assert.Null(service.LastCommand.Notes);
     }
 
     [Fact]
     public async Task Run_AcceptsEmptyObjectBody()
     {
-        var handler = new StubConfirmBookingHandler();
-        var sut = new ConfirmHoldFunction(handler);
+        var service = new StubConfirmBookingService();
+        var sut = new ConfirmHoldFunction(service);
         var request = TestHttpRequestData.Create();
         ConfigureSerializer(request);
         await using var writer = new StreamWriter(request.Body, Encoding.UTF8, leaveOpen: true);
@@ -45,17 +45,17 @@ public sealed class ConfirmHoldFunctionTests
         var response = await sut.Run(request, "hold-1", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(handler.LastCommand);
-        Assert.Equal("hold-1", handler.LastCommand!.HoldId);
-        Assert.Equal("hold-1", handler.LastCommand.BookingId);
-        Assert.Null(handler.LastCommand.Notes);
+        Assert.NotNull(service.LastCommand);
+        Assert.Equal("hold-1", service.LastCommand!.HoldId);
+        Assert.Equal("hold-1", service.LastCommand.BookingId);
+        Assert.Null(service.LastCommand.Notes);
     }
 
     [Fact]
     public async Task Run_AcceptsOmittedNotes()
     {
-        var handler = new StubConfirmBookingHandler();
-        var sut = new ConfirmHoldFunction(handler);
+        var service = new StubConfirmBookingService();
+        var sut = new ConfirmHoldFunction(service);
         var request = TestHttpRequestData.Create();
         ConfigureSerializer(request);
         await using var writer = new StreamWriter(request.Body, Encoding.UTF8, leaveOpen: true);
@@ -66,17 +66,17 @@ public sealed class ConfirmHoldFunctionTests
         var response = await sut.Run(request, "hold-1", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(handler.LastCommand);
-        Assert.Equal("hold-1", handler.LastCommand!.HoldId);
-        Assert.Equal("hold-1", handler.LastCommand.BookingId);
-        Assert.Null(handler.LastCommand.Notes);
+        Assert.NotNull(service.LastCommand);
+        Assert.Equal("hold-1", service.LastCommand!.HoldId);
+        Assert.Equal("hold-1", service.LastCommand.BookingId);
+        Assert.Null(service.LastCommand.Notes);
     }
 
     [Fact]
     public async Task Run_AcceptsNullNotes()
     {
-        var handler = new StubConfirmBookingHandler();
-        var sut = new ConfirmHoldFunction(handler);
+        var service = new StubConfirmBookingService();
+        var sut = new ConfirmHoldFunction(service);
         var request = TestHttpRequestData.Create();
         ConfigureSerializer(request);
         await using var writer = new StreamWriter(request.Body, Encoding.UTF8, leaveOpen: true);
@@ -87,15 +87,15 @@ public sealed class ConfirmHoldFunctionTests
         var response = await sut.Run(request, "hold-1", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.NotNull(handler.LastCommand);
-        Assert.Null(handler.LastCommand!.Notes);
+        Assert.NotNull(service.LastCommand);
+        Assert.Null(service.LastCommand!.Notes);
     }
 
     [Fact]
     public async Task Run_ReturnsBadRequestForInvalidNonEmptyJson()
     {
-        var handler = new StubConfirmBookingHandler();
-        var sut = new ConfirmHoldFunction(handler);
+        var service = new StubConfirmBookingService();
+        var sut = new ConfirmHoldFunction(service);
         var request = TestHttpRequestData.Create();
         ConfigureSerializer(request);
         await using var writer = new StreamWriter(request.Body, Encoding.UTF8, leaveOpen: true);
@@ -106,7 +106,7 @@ public sealed class ConfirmHoldFunctionTests
         var response = await sut.Run(request, "hold-1", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Null(handler.LastCommand);
+        Assert.Null(service.LastCommand);
     }
 
     private static void ConfigureSerializer(TestHttpRequestData request)
@@ -120,7 +120,7 @@ public sealed class ConfirmHoldFunctionTests
         request.FunctionContext.InstanceServices = services.BuildServiceProvider();
     }
 
-    private sealed class StubConfirmBookingHandler : IConfirmBookingHandler
+    private sealed class StubConfirmBookingService : IConfirmBookingService
     {
         public ConfirmBookingCommand? LastCommand { get; private set; }
 

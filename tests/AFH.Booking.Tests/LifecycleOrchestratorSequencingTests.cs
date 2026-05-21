@@ -125,12 +125,12 @@ public sealed class LifecycleOrchestratorSequencingTests
         var txRepo = new Mock<IBookingTransactionRepository>();
         txRepo.Setup(x => x.GetAsync("tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(tx);
 
-        var create = new Mock<ICreateBookingHandler>();
+        var create = new Mock<ICreateBookingService>();
         create.Setup(x => x.HandleAsync(It.IsAny<CreateHoldCommand>(), It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("create"))
             .ReturnsAsync(Result<CreateBookingResponse>.Ok(new CreateBookingResponse { BookingId = "booking-new", SlotId = "slot-new", HoldExpiresUtc = DateTime.UtcNow.AddMinutes(3) }));
 
-        var confirm = new Mock<IConfirmBookingHandler>();
+        var confirm = new Mock<IConfirmBookingService>();
         confirm.Setup(x => x.HandleAsync(It.IsAny<ConfirmBookingCommand>(), It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("confirm"))
             .ReturnsAsync(Result<ConfirmBookingResponse>.Ok(new ConfirmBookingResponse { BookingId = "booking-new", SlotId = "slot-new", TransactionId = "tx-1", TransactionRef = "TRX-1", Status = "Confirmed", LifecycleState = "Booked" }));
@@ -202,7 +202,7 @@ public sealed class LifecycleOrchestratorSequencingTests
         var txRepo = new Mock<IBookingTransactionRepository>();
         txRepo.Setup(x => x.GetAsync("tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(tx);
 
-        var create = new Mock<ICreateBookingHandler>();
+        var create = new Mock<ICreateBookingService>();
         create.Setup(x => x.HandleAsync(It.IsAny<CreateHoldCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<CreateBookingResponse>.Ok(new CreateBookingResponse
             {
@@ -211,7 +211,7 @@ public sealed class LifecycleOrchestratorSequencingTests
                 HoldExpiresUtc = DateTime.UtcNow.AddMinutes(3)
             }));
 
-        var confirm = new Mock<IConfirmBookingHandler>();
+        var confirm = new Mock<IConfirmBookingService>();
         confirm.Setup(x => x.HandleAsync(It.IsAny<ConfirmBookingCommand>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<ConfirmBookingResponse>.Fail(
                 HttpStatusCode.Conflict,

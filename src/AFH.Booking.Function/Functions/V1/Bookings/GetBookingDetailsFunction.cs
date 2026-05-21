@@ -10,11 +10,11 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class GetBookingDetailsFunction
 {
-    private readonly IBookingDetailsHandler _handler;
+    private readonly IBookingDetailsService _service;
 
-    public GetBookingDetailsFunction(IBookingDetailsHandler handler)
+    public GetBookingDetailsFunction(IBookingDetailsService service)
     {
-        _handler = handler;
+        _service = service;
     }
 
     [Function("Bookings_GetBooking")]
@@ -27,7 +27,7 @@ public sealed class GetBookingDetailsFunction
         string bookingId,
         CancellationToken ct)
     {
-        var result = await _handler.HandleAsync(new GetBookingDetailsQuery { BookingId = bookingId }, ct);
+        var result = await _service.HandleAsync(new GetBookingDetailsQuery { BookingId = bookingId }, ct);
 
         if (!result.IsSuccess)
         {

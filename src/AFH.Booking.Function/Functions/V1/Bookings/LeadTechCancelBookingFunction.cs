@@ -10,11 +10,11 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class LeadTechCancelBookingFunction
 {
-    private readonly ICancelBookingHandler _handler;
+    private readonly ICancelBookingService _service;
 
-    public LeadTechCancelBookingFunction(ICancelBookingHandler handler)
+    public LeadTechCancelBookingFunction(ICancelBookingService service)
     {
-        _handler = handler;
+        _service = service;
     }
 
     [Function("Bookings_LeadTechCancel")]
@@ -25,7 +25,7 @@ public sealed class LeadTechCancelBookingFunction
         CancellationToken ct)
     {
         var body = await req.ReadJsonAsync<CancelBookingRequest>(ct) ?? new CancelBookingRequest();
-        var result = await _handler.HandleAsync(new CancelBookingCommand
+        var result = await _service.HandleAsync(new CancelBookingCommand
         {
             BookingId = bookingId.Trim(),
             RequestedBy = LifecycleActors.LeadTech,

@@ -39,17 +39,17 @@ public sealed class BookingTransactionRehydrationTests
     }
 
     [Fact]
-    public async Task ConfirmBookingHandler_HandleAsync_DoesNotBlowUpWhenCompletedTransactionIsRehydrated()
+    public async Task ConfirmBookingService_HandleAsync_DoesNotBlowUpWhenCompletedTransactionIsRehydrated()
     {
         // This test verifies that rehydrating a completed transaction via EF does not
-        // throw an exception inside the handler (the transaction is already Completed,
-        // so MarkCompleted is a no-op and the handler should short-circuit to success).
+        // throw an exception inside the service (the transaction is already Completed,
+        // so MarkCompleted is a no-op and the service should short-circuit to success).
         var db = CreateDbContext();
         var now = DateTime.UtcNow;
 
         SeedCompletedTransactionGraph(db, now);
 
-        // Use real EF-backed repositories so the handler can actually find the seeded hold/slot/tx
+        // Use real EF-backed repositories so the service can actually find the seeded hold/slot/tx
         var holdRepo = new BookingHoldRepository(db);
         var slotRepo = new BookingSlotRepository(db);
         var txRepo = new BookingTransactionRepository(db);
@@ -104,7 +104,7 @@ public sealed class BookingTransactionRehydrationTests
                 EmailStatus = "Skipped", ProviderMessageId = "p-1", CreatedUtc = now
             });
 
-        var sut = new ConfirmBookingHandler(
+        var sut = new ConfirmBookingService(
             holdRepo,
             slotRepo,
             txRepo,

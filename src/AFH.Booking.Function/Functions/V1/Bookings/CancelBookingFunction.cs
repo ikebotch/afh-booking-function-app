@@ -16,16 +16,16 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 public sealed class CancelBookingFunction
 {
     private readonly IApprovalWorkflowService _approvals;
-    private readonly ICancelBookingHandler _handler;
+    private readonly ICancelBookingService _service;
     private readonly ILogger<CancelBookingFunction> _logger;
 
     public CancelBookingFunction(
         IApprovalWorkflowService approvals,
-        ICancelBookingHandler handler,
+        ICancelBookingService service,
         ILogger<CancelBookingFunction> logger)
     {
         _approvals = approvals;
-        _handler = handler;
+        _service = service;
         _logger = logger;
     }
 
@@ -87,7 +87,7 @@ public sealed class CancelBookingFunction
                 CorrelationId = req.Headers.TryGetValues("x-correlation-id", out var values) ? values.FirstOrDefault() : null
             };
 
-            var result = await _handler.HandleAsync(cmd, ct);
+            var result = await _service.HandleAsync(cmd, ct);
 
             if (!result.IsSuccess)
                 return await req.ProblemAsync(
@@ -96,11 +96,11 @@ public sealed class CancelBookingFunction
                     ct,
                     result.ErrorCode);
 
-            // If your handler returns a payload (recommended)
+            // If your service returns a payload (recommended)
             if (result.Value is not null)
                 return await req.OkJsonAsync(result.Value, ct);
 
-            // If handler returns success without data
+            // If service returns success without data
             return await req.OkJsonAsync(new { message = "Booking cancelled." }, ct);
         }
         catch (JsonException ex)

@@ -20,7 +20,7 @@ public static class ServiceCollectionExtensions
         services.AddBookingAvailabilityModule();
 
         // Booking flow
-        services.AddScoped<ICreateBookingHandler, CreateBookingHandler>();
+        services.AddScoped<ICreateBookingService, CreateBookingService>();
 
         // Refactored services
         services.AddScoped<IBookingContextLoader, BookingContextLoader>();

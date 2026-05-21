@@ -15,10 +15,10 @@ public sealed class ConfirmHoldFunction
         PropertyNameCaseInsensitive = true
     };
 
-    private readonly IConfirmBookingHandler _handler;
+    private readonly IConfirmBookingService _service;
 
-    public ConfirmHoldFunction(IConfirmBookingHandler handler)
-        => _handler = handler;
+    public ConfirmHoldFunction(IConfirmBookingService service)
+        => _service = service;
 
     [Function("Bookings_ConfirmHold")]
     [BookingOpenApiOperation(
@@ -62,7 +62,7 @@ public sealed class ConfirmHoldFunction
             Notes = body?.Notes
         };
 
-        var result = await _handler.HandleAsync(cmd, ct);
+        var result = await _service.HandleAsync(cmd, ct);
 
         if (!result.IsSuccess)
             return await req.ProblemAsync(

@@ -9,14 +9,14 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class CreateHoldFunction
 {
-    private readonly ICreateBookingHandler _handler;
+    private readonly ICreateBookingService _service;
     private readonly ILogger<CreateHoldFunction> _logger;
 
     public CreateHoldFunction(
-        ICreateBookingHandler handler,
+        ICreateBookingService service,
         ILogger<CreateHoldFunction> logger)
     {
-        _handler = handler;
+        _service = service;
         _logger = logger;
     }
 
@@ -36,7 +36,7 @@ public sealed class CreateHoldFunction
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Invalid JSON body.", ct, Errors.Validation);
 
         var cmd = body.ToCommand();
-        var result = await _handler.HandleAsync(cmd, ct);
+        var result = await _service.HandleAsync(cmd, ct);
 
         if (!result.IsSuccess)
             return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);

@@ -11,14 +11,14 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 public sealed class SelfServiceCancelBookingFunction
 {
     private readonly IBookingChangeAccessService _accessService;
-    private readonly ICancelBookingHandler _handler;
+    private readonly ICancelBookingService _service;
 
     public SelfServiceCancelBookingFunction(
         IBookingChangeAccessService accessService,
-        ICancelBookingHandler handler)
+        ICancelBookingService service)
     {
         _accessService = accessService;
-        _handler = handler;
+        _service = service;
     }
 
     [Function("Bookings_SelfServiceCancel")]
@@ -33,7 +33,7 @@ public sealed class SelfServiceCancelBookingFunction
             return await req.ProblemAsync(access.StatusCode, access.ErrorMessage ?? "Unauthorized.", ct, access.ErrorCode);
 
         var body = await req.ReadJsonAsync<CancelBookingRequest>(ct) ?? new CancelBookingRequest();
-        var result = await _handler.HandleAsync(new CancelBookingCommand
+        var result = await _service.HandleAsync(new CancelBookingCommand
         {
             BookingId = bookingId.Trim(),
             RequestedBy = LifecycleActors.Client,

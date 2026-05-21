@@ -11,13 +11,13 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 public sealed class HoldsCleanupFunction
 {
     private readonly IBookingHoldRepository _holds;
-    private readonly IReleaseHoldHandler _release;
+    private readonly IReleaseHoldService _release;
     private readonly IClock _clock;
     private readonly ILogger<HoldsCleanupFunction> _logger;
 
     public HoldsCleanupFunction(
         IBookingHoldRepository holds,
-        IReleaseHoldHandler release,
+        IReleaseHoldService release,
         IClock clock,
         ILogger<HoldsCleanupFunction> logger)
     {

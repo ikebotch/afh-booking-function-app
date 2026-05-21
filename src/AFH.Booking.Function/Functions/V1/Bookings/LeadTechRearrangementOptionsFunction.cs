@@ -10,11 +10,11 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class LeadTechRearrangementOptionsFunction
 {
-    private readonly IRearrangementOptionsHandler _handler;
+    private readonly IRearrangementOptionsService _service;
 
-    public LeadTechRearrangementOptionsFunction(IRearrangementOptionsHandler handler)
+    public LeadTechRearrangementOptionsFunction(IRearrangementOptionsService service)
     {
-        _handler = handler;
+        _service = service;
     }
 
     [Function("Bookings_LeadTechRearrangementOptions")]
@@ -25,7 +25,7 @@ public sealed class LeadTechRearrangementOptionsFunction
         CancellationToken ct)
     {
         var body = await req.ReadJsonAsync<RearrangementOptionsRequest>(ct);
-        var result = await _handler.HandleAsync(new GetRearrangementOptionsCommand
+        var result = await _service.HandleAsync(new GetRearrangementOptionsCommand
         {
             BookingId = bookingId,
             PreferredStartUtc = body?.PreferredStartUtc,

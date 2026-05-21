@@ -12,14 +12,14 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class RearrangeBookingFunction
 {
-    private readonly IRearrangeBookingHandler _handler;
+    private readonly IRearrangeBookingService _service;
     private readonly IApprovalWorkflowService _approvals;
 
     public RearrangeBookingFunction(
-        IRearrangeBookingHandler handler,
+        IRearrangeBookingService service,
         IApprovalWorkflowService approvals)
     {
-        _handler = handler;
+        _service = service;
         _approvals = approvals;
     }
 
@@ -82,7 +82,7 @@ public sealed class RearrangeBookingFunction
             CorrelationId = req.Headers.TryGetValues("x-correlation-id", out var values) ? values.FirstOrDefault() : null
         };
 
-        var result = await _handler.HandleAsync(cmd, ct);
+        var result = await _service.HandleAsync(cmd, ct);
 
         if (!result.IsSuccess)
         {

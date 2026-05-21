@@ -7,14 +7,14 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class ReleaseHoldFunction
 {
-    private readonly IReleaseHoldHandler _handler;
+    private readonly IReleaseHoldService _service;
     private readonly ILogger<ReleaseHoldFunction> _logger;
 
     public ReleaseHoldFunction(
-        IReleaseHoldHandler handler,
+        IReleaseHoldService service,
         ILogger<ReleaseHoldFunction> logger)
     {
-        _handler = handler;
+        _service = service;
         _logger = logger;
     }
 
@@ -33,7 +33,7 @@ public sealed class ReleaseHoldFunction
         if (string.IsNullOrWhiteSpace(holdId))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "holdId is required.", ct, "Validation");
 
-        var result = await _handler.HandleAsync(holdId.Trim(), ct);
+        var result = await _service.HandleAsync(holdId.Trim(), ct);
 
         if (!result.IsSuccess)
             return await req.ProblemAsync(

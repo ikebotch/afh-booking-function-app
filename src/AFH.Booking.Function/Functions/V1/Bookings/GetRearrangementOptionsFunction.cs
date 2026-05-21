@@ -11,11 +11,11 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class GetRearrangementOptionsFunction
 {
-    private readonly IRearrangementOptionsHandler _handler;
+    private readonly IRearrangementOptionsService _service;
 
-    public GetRearrangementOptionsFunction(IRearrangementOptionsHandler handler)
+    public GetRearrangementOptionsFunction(IRearrangementOptionsService service)
     {
-        _handler = handler;
+        _service = service;
     }
 
     [Function("Bookings_GetRearrangementOptions")]
@@ -43,7 +43,7 @@ public sealed class GetRearrangementOptionsFunction
             Cursor = body?.Cursor
         };
 
-        var result = await _handler.HandleAsync(cmd, ct);
+        var result = await _service.HandleAsync(cmd, ct);
 
         if (!result.IsSuccess)
         {

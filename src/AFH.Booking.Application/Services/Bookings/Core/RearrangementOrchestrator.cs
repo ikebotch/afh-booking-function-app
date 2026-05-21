@@ -12,8 +12,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
-    private readonly ICreateBookingHandler _create;
-    private readonly IConfirmBookingHandler _confirm;
+    private readonly ICreateBookingService _create;
+    private readonly IConfirmBookingService _confirm;
     private readonly ICancellationOrchestrator _cancel;
     private readonly INotificationService _notifications;
     private readonly IDownstreamUpdateService _downstreamUpdates;
@@ -25,8 +25,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         IBookingHoldRepository holds,
         IBookingSlotRepository slots,
         IBookingTransactionRepository transactions,
-        ICreateBookingHandler create,
-        IConfirmBookingHandler confirm,
+        ICreateBookingService create,
+        IConfirmBookingService confirm,
         ICancellationOrchestrator cancel,
         INotificationService notifications,
         IDownstreamUpdateService downstreamUpdates,

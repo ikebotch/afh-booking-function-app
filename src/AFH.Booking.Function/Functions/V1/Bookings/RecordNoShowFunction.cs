@@ -1,6 +1,6 @@
 ﻿using System.Net;
 using System.Text.Json;
-using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
@@ -15,14 +15,14 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Bookings")]
 public sealed class RecordNoShowFunction
 {
-    private readonly INoShowBookingHandler _handler;
+    private readonly INoShowBookingService _service;
     private readonly ILogger<RecordNoShowFunction> _logger;
 
     public RecordNoShowFunction(
-        INoShowBookingHandler handler,
+        INoShowBookingService service,
         ILogger<RecordNoShowFunction> logger)
     {
-        _handler = handler;
+        _service = service;
         _logger = logger;
     }
 
@@ -44,7 +44,7 @@ public sealed class RecordNoShowFunction
                 return await req.ProblemAsync(HttpStatusCode.BadRequest, "bookingId is required.", ct, Errors.Validation);
 
             var body = await req.ReadJsonAsync<RecordNoShowRequest>(ct) ?? new RecordNoShowRequest();
-            var result = await _handler.HandleAsync(new RecordNoShowCommand
+            var result = await _service.HandleAsync(new RecordNoShowCommand
             {
                 BookingId = bookingId.Trim(),
                 RequestedBy = string.IsNullOrWhiteSpace(body.RequestedBy)

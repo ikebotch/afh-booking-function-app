@@ -1,5 +1,5 @@
 using AFH.Booking.Application.Abstractions.Bookings;
-using AFH.Booking.Application.Abstractions.Bookings.Handlers;
+using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Location;
@@ -16,11 +16,11 @@ internal static class BookingFlowModuleServiceCollectionExtensions
 {
     internal static IServiceCollection AddBookingFlowModule(this IServiceCollection services)
     {
-        services.AddScoped<ICancelBookingHandler, CancelBookingHandler>();
-        services.AddScoped<IBookingDetailsHandler, BookingDetailsHandler>();
-        services.AddScoped<INoShowBookingHandler, NoShowBookingHandler>();
-        services.AddScoped<IRearrangementOptionsHandler, RearrangementOptionsHandler>();
-        services.AddScoped<IRearrangeBookingHandler, RearrangeBookingHandler>();
+        services.AddScoped<ICancelBookingService, CancelBookingService>();
+        services.AddScoped<IBookingDetailsService, BookingDetailsService>();
+        services.AddScoped<INoShowBookingService, NoShowBookingService>();
+        services.AddScoped<IRearrangementOptionsService, RearrangementOptionsService>();
+        services.AddScoped<IRearrangeBookingService, RearrangeBookingService>();
         services.AddScoped<ICancellationOrchestrator, CancellationOrchestrator>();
         services.AddScoped<IRearrangementOrchestrator, RearrangementOrchestrator>();
         services.AddScoped<IBookingConflictService, BookingConflictService>();

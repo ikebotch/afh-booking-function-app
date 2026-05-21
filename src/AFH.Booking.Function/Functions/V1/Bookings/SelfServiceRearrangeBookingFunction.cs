@@ -11,14 +11,14 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 public sealed class SelfServiceRearrangeBookingFunction
 {
     private readonly IBookingChangeAccessService _accessService;
-    private readonly IRearrangeBookingHandler _handler;
+    private readonly IRearrangeBookingService _service;
 
     public SelfServiceRearrangeBookingFunction(
         IBookingChangeAccessService accessService,
-        IRearrangeBookingHandler handler)
+        IRearrangeBookingService service)
     {
         _accessService = accessService;
-        _handler = handler;
+        _service = service;
     }
 
     [Function("Bookings_SelfServiceRearrange")]
@@ -36,7 +36,7 @@ public sealed class SelfServiceRearrangeBookingFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, Errors.Validation);
 
-        var result = await _handler.HandleAsync(new RearrangeBookingCommand
+        var result = await _service.HandleAsync(new RearrangeBookingCommand
         {
             BookingId = bookingId.Trim(),
             NewSlotId = body.NewSlotId,

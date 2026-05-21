@@ -1,8 +1,5 @@
 ﻿using AFH.Booking.Application.Abstractions.Bookings.Holds;
-using AFH.Booking.Application.Availability;
-using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
-using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Holds;
 
 namespace AFH.Booking.Application.Composition;

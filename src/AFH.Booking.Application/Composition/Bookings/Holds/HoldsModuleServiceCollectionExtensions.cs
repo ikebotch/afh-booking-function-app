@@ -1,4 +1,6 @@
-namespace AFH.Booking.Application.Holds;
+using AFH.Booking.Application.Holds;
+
+namespace AFH.Booking.Application.Composition;
 
 internal static class HoldsModuleServiceCollectionExtensions
 {

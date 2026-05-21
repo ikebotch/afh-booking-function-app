@@ -18,6 +18,8 @@
     "LocationService:BaseUrl": "http://localhost:7073",
     "LocationService:FunctionKey": "<location-function-key>",
     "LocationService:InternalToken": "<shared-internal-token>",
+    "FinalRouteTimeGuard:Enabled": "true",
+    "FinalRouteTimeGuard:AllowLegacyMissingCoordinates": "false",
     "Acs:Enabled": "true",
     "Acs:MeetingLinkServiceBaseUrl": "http://localhost:7072",
     "Acs:FunctionKey": "<acs-function-key>",

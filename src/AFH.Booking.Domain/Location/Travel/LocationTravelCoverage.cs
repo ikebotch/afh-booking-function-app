@@ -4,6 +4,8 @@ public sealed class LocationTravelCoverageRequest
 {
     public string SourcePostcode { get; set; } = string.Empty;
     public DateTimeOffset? RequestedDepartureTime { get; set; }
+    public DateTimeOffset? RequestedEndTime { get; set; }
+    public int? SearchIntervalMinutes { get; set; }
     public LocationTravelTimingMode TimingMode { get; set; } = LocationTravelTimingMode.TimeIndependent;
     public string? AppointmentType { get; set; }
     public string? Channel { get; set; }

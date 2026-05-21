@@ -78,6 +78,7 @@ public class AdviserPoolBuilderTests
             ClientId = "client-1",
             IsRemote = false,
             PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
+            Duration = 60,
             MeetingType = "Review"
         };
 
@@ -104,6 +105,9 @@ public class AdviserPoolBuilderTests
             It.Is<LocationTravelCoverageRequest>(r =>
                 r.TimingMode == LocationTravelTimingMode.TimeIndependent &&
                 r.SourcePostcode == "E1 1AA" &&
+                r.RequestedDepartureTime == new DateTimeOffset(query.PreferredStart) &&
+                r.RequestedEndTime == new DateTimeOffset(query.PreferredStart.AddMinutes(query.Duration)) &&
+                r.SearchIntervalMinutes == 60 &&
                 r.Destinations.Count == 1 &&
                 r.Destinations[0].CorrelationId == "adv-1"),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -127,7 +131,8 @@ public class AdviserPoolBuilderTests
         {
             ClientId = "client-1",
             IsRemote = false,
-            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc)
+            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
+            Duration = 60
         };
 
         var prospect = new ClientDirectoryItem

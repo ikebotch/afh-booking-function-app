@@ -177,6 +177,9 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
         {
             SourcePostcode = destination.Postcode,
             RequestedDepartureTime = DateTime.SpecifyKind(query.PreferredStart, DateTimeKind.Utc),
+            RequestedEndTime = DateTime.SpecifyKind(query.PreferredStart, DateTimeKind.Utc)
+                .AddMinutes(Math.Max(1, query.Duration)),
+            SearchIntervalMinutes = Math.Max(1, Convert.ToInt32(Math.Ceiling(query.Duration))),
             TimingMode = LocationTravelTimingMode.TimeIndependent,
             AppointmentType = query.MeetingType,
             Channel = "BookingAvailability",

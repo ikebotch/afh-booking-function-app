@@ -95,7 +95,9 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
             {
                 TravelEvaluationMode = useTimeDependent ? TravelEvaluationModeDto.TimeDependent : TravelEvaluationModeDto.TimeIndependent,
                 SlotResponseMode = SlotResponseModeDto.Summary,
-                StartTime = request.RequestedDepartureTime
+                StartTime = request.RequestedDepartureTime,
+                EndTime = request.RequestedEndTime,
+                SearchIntervalMinutes = request.SearchIntervalMinutes
             },
             Destinations = request.Destinations.Select(destination => new TravelCoverageDestinationRequestDto
             {
@@ -213,6 +215,7 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         public SlotResponseModeDto SlotResponseMode { get; set; } = SlotResponseModeDto.Summary;
         public DateTimeOffset? StartTime { get; set; }
         public DateTimeOffset? EndTime { get; set; }
+        public int? SearchIntervalMinutes { get; set; }
     }
 
     private enum TravelEvaluationModeDto

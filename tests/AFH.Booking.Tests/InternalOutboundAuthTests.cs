@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 
 namespace AFH.Booking.Tests;
 
@@ -135,6 +136,66 @@ public class InternalOutboundAuthTests
         Assert.Null(candidate.TravelMinutes);
         Assert.Null(candidate.DistanceMiles);
         Assert.Equal(30, candidate.CompanyBufferMinutes);
+    }
+
+    [Fact]
+    public async Task LocationTravelCoverageClient_SendsCompleteTimeContext_ForLocationContract()
+    {
+        HttpRequestMessage? captured = null;
+        string? capturedJson = null;
+        var handler = new StubHandler(request =>
+        {
+            captured = request;
+            capturedJson = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"success\":true,\"data\":{\"sourcePostcode\":\"E1 1AA\",\"destinations\":[]}}",
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        var sut = new LocationTravelCoverageClient(
+            new HttpClient(handler),
+            Options.Create(new LocationServiceOptions
+            {
+                BaseUrl = "https://location.example",
+                FunctionKey = "location-function-key",
+                InternalToken = "location-token"
+            }),
+            new InternalBearerServiceAuthenticator(),
+            NullLogger<LocationTravelCoverageClient>.Instance);
+
+        await sut.EvaluateAsync(new LocationTravelCoverageRequest
+        {
+            SourcePostcode = "E1 1AA",
+            RequestedDepartureTime = new DateTimeOffset(2026, 4, 2, 9, 0, 0, TimeSpan.Zero),
+            RequestedEndTime = new DateTimeOffset(2026, 4, 2, 10, 0, 0, TimeSpan.Zero),
+            SearchIntervalMinutes = 60,
+            Destinations =
+            [
+                new LocationTravelCoverageDestination
+                {
+                    CorrelationId = "adv-1",
+                    Postcode = "SW1A 1AA",
+                    MaxTravelTimeMinutes = 60,
+                    MaxDistanceMiles = 30
+                }
+            ]
+        }, CancellationToken.None);
+
+        Assert.NotNull(captured);
+        Assert.Equal("/api/v1/location/travel-coverage", captured!.RequestUri!.AbsolutePath);
+        Assert.NotNull(capturedJson);
+
+        using var document = JsonDocument.Parse(capturedJson!);
+        var timeContext = document.RootElement.GetProperty("timeContext");
+        Assert.Equal("TimeIndependent", timeContext.GetProperty("travelEvaluationMode").GetString());
+        Assert.Equal("Summary", timeContext.GetProperty("slotResponseMode").GetString());
+        Assert.Equal("2026-04-02T09:00:00+00:00", timeContext.GetProperty("startTime").GetString());
+        Assert.Equal("2026-04-02T10:00:00+00:00", timeContext.GetProperty("endTime").GetString());
+        Assert.Equal(60, timeContext.GetProperty("searchIntervalMinutes").GetInt32());
     }
 
     [Fact]

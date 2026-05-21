@@ -1,7 +1,8 @@
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common.Clock;
-using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
 using System.Text.Json;
 

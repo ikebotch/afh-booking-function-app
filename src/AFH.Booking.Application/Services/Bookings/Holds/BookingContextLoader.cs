@@ -1,5 +1,6 @@
 ﻿
 using AFH.Booking.Application.Holds;
+using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
 
 public sealed class BookingContextLoader : IBookingContextLoader

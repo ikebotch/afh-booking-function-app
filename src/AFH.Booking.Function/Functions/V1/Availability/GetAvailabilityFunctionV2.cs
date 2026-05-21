@@ -63,13 +63,7 @@ public sealed class GetAvailabilityFunctionV2
         if (!result.IsSuccess)
             return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);
 
-        var v1 = result.Value!;
-        var response = new GetAvailabilityResponse
-        {
-            TransactionId = v1.TransactionId,
-            Items = v1.Advisers,
-            Paging = v1.Paging
-        };
+        var response = result.Value!.ToV2Contract();
 
         var paging = HttpResponseExtensions.SinglePage(response.Items.Count);
         return await req.OkJsonAsync(response, ct, paging);

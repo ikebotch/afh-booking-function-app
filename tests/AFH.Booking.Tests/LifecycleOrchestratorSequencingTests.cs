@@ -3,7 +3,6 @@ using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
-using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using Moq;

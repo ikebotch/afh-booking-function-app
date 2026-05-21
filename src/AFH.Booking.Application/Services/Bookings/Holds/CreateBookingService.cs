@@ -2,7 +2,7 @@
 
 using AFH.Booking.Application.Abstractions.Bookings.Holds;
 using AFH.Booking.Application.Common.Clock;
-using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 
 namespace AFH.Booking.Application.Holds;

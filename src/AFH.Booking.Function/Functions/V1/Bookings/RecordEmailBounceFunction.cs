@@ -26,7 +26,7 @@ public sealed class RecordEmailBounceFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, "Validation");
 
-        var response = await _emailBounceService.RecordBounceAsync(body, ct);
-        return await req.CreatedJsonAsync(response, ct);
+        var response = await _emailBounceService.RecordBounceAsync(body.ToApplication(), ct);
+        return await req.CreatedJsonAsync(response.ToContract(), ct);
     }
 }

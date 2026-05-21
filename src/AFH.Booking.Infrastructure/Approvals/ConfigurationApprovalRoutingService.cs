@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Approvals;
+using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Options;
 

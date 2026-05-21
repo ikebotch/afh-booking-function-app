@@ -3,6 +3,7 @@ using AFH.Booking.Domain.Availability;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Common;
 using System.Globalization;
+using AppApprovals = AFH.Booking.Application.Models.Approvals;
 
 namespace AFH.Booking.Function.Mapping;
 
@@ -99,5 +100,15 @@ public static class ContractMappingExtensions
         {
             SlotId = req.SlotId,
             TransactionRef = req.TransactionId,
+        };
+
+    public static AppApprovals.EmailBounceWebhookRequest ToApplication(this EmailBounceWebhookRequest req)
+        => new()
+        {
+            ProviderMessageId = req.ProviderMessageId,
+            RecipientEmail = req.RecipientEmail,
+            ReasonCode = req.ReasonCode,
+            ReasonDetail = req.ReasonDetail,
+            OccurredUtc = req.OccurredUtc
         };
 }

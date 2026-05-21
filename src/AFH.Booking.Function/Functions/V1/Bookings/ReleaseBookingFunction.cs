@@ -42,6 +42,6 @@ public sealed class ReleaseHoldFunction
                 ct,
                 result.ErrorCode ?? "RELEASE_FAILED");
 
-        return await req.OkJsonAsync(result.Value!, ct);
+        return await req.OkJsonAsync(result.Value!.ToContract(), ct);
     }
 }

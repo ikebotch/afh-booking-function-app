@@ -1,0 +1,66 @@
+namespace AFH.Booking.Application.Models.Approvals;
+
+public sealed record CreateApprovalWorkflowRequest(
+    string BookingId,
+    string ChangeType,
+    string RequestedBy,
+    string? RequesterId,
+    string? ReasonCode,
+    string? ReasonDetail,
+    string? NewSlotId,
+    string? CorrelationId);
+
+public sealed record ReviewApprovalWorkflowRequest(
+    string RequestId,
+    bool Approved,
+    string Reviewer,
+    string? Notes,
+    string? CorrelationId);
+
+public sealed record ApprovalRouteTarget(
+    string TargetType,
+    string TargetValue,
+    string DisplayName);
+
+public sealed class ApprovalRequestResponse
+{
+    public string RequestId { get; init; } = default!;
+    public string BookingId { get; init; } = default!;
+    public string TransactionId { get; init; } = default!;
+    public string ChangeType { get; init; } = default!;
+    public string RequestedBy { get; init; } = default!;
+    public string? RequesterId { get; init; }
+    public string Status { get; init; } = default!;
+    public DateTime RequestedUtc { get; init; }
+    public IReadOnlyList<string> RoutedTo { get; init; } = Array.Empty<string>();
+    public string? ReasonCode { get; init; }
+    public string? ReasonDetail { get; init; }
+    public string? NewSlotId { get; init; }
+    public string? ApproverTargetType { get; init; }
+    public string? ApproverTargetValue { get; init; }
+    public string? ApproverTargetDisplayName { get; init; }
+    public string? Reviewer { get; init; }
+    public DateTime? ReviewedUtc { get; init; }
+    public string? ReviewNotes { get; init; }
+    public DateTime? ExecutedUtc { get; init; }
+}
+
+public sealed class EmailBounceWebhookRequest
+{
+    public string? ProviderMessageId { get; init; }
+    public string? RecipientEmail { get; init; }
+    public string? ReasonCode { get; init; }
+    public string? ReasonDetail { get; init; }
+    public DateTime? OccurredUtc { get; init; }
+}
+
+public sealed class EmailBounceEventResponse
+{
+    public string BounceId { get; init; } = default!;
+    public string? ProviderMessageId { get; init; }
+    public string? RecipientEmail { get; init; }
+    public string? ReasonCode { get; init; }
+    public string? ReasonDetail { get; init; }
+    public DateTime OccurredUtc { get; init; }
+    public DateTime ReceivedUtc { get; init; }
+}

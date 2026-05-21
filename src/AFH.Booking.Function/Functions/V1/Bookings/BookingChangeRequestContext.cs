@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Common;
+using AFH.Booking.Application.Models.Bookings;
 using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;

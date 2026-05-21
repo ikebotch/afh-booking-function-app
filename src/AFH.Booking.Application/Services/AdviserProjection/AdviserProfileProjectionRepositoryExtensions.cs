@@ -1,4 +1,6 @@
-namespace AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.Abstractions.Persistence;
+
+namespace AFH.Booking.Application.Services.AdviserProjection;
 
 public static class AdviserProfileProjectionRepositoryExtensions
 {

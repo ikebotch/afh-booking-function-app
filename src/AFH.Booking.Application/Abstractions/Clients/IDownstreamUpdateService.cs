@@ -1,4 +1,4 @@
-using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Application.Models.Clients;
 
 namespace AFH.Booking.Application.Abstractions.Clients;
 

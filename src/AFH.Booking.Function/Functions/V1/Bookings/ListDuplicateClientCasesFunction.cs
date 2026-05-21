@@ -22,6 +22,7 @@ public sealed class ListDuplicateClientCasesFunction
         CancellationToken ct)
     {
         var response = await _duplicates.ListPendingAsync(ct);
-        return await req.OkJsonAsync(response, ct, HttpResponseExtensions.SinglePage(response.Count));
+        var contractResponse = response.Select(x => x.ToContract()).ToList();
+        return await req.OkJsonAsync(contractResponse, ct, HttpResponseExtensions.SinglePage(contractResponse.Count));
     }
 }

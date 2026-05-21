@@ -2,6 +2,8 @@ using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Holds;
 
+using AFH.Booking.Application.Models.Governance;
+
 namespace AFH.Booking.Application.Governance;
 
 public sealed class BookingConflictService : IBookingConflictService

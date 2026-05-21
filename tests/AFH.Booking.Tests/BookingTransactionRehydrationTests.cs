@@ -7,7 +7,6 @@ using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Holds;
-using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Common;

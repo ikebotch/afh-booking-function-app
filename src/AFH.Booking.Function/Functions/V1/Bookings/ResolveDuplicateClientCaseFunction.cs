@@ -40,6 +40,6 @@ public sealed class ResolveDuplicateClientCaseFunction
         if (response is null)
             return await req.ProblemAsync(HttpStatusCode.NotFound, "Duplicate case was not found.", ct, "NotFound");
 
-        return await req.OkJsonAsync(response, ct);
+        return await req.OkJsonAsync(response.ToContract(), ct);
     }
 }

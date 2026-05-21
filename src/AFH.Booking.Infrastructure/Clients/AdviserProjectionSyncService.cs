@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Application.Models.Clients;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Auth;
 using AFH.Booking.Infrastructure.Http;

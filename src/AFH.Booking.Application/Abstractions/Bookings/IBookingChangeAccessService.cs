@@ -1,3 +1,5 @@
+using AFH.Booking.Application.Models.Bookings;
+
 namespace AFH.Booking.Application.Abstractions.Bookings;
 
 public interface IBookingChangeAccessService
@@ -7,9 +9,3 @@ public interface IBookingChangeAccessService
         string? token,
         CancellationToken ct);
 }
-
-public sealed record BookingChangeActorContext(
-    string ActorType,
-    string? ActorId,
-    string? TransactionRef,
-    string? CorrelationId = null);

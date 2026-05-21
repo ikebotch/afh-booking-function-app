@@ -1,4 +1,4 @@
-﻿using AFH.Booking.Contracts.V1.Dtos;
+﻿using AFH.Booking.Application.Models.Calendar;
 using AFH.Booking.Domain.Calendar;
 
 namespace AFH.Booking.Application.Abstractions.Calendar;

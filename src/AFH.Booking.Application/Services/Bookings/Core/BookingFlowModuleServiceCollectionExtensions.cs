@@ -1,5 +1,4 @@
 using AFH.Booking.Application.Abstractions.Bookings;
-using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Location;

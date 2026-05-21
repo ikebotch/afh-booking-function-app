@@ -1,4 +1,4 @@
-﻿using AFH.Booking.Contracts.V1.Responses;
+﻿using AFH.Booking.Application.Models.Availability;
 using AFH.Booking.Domain.Availability;
 
 namespace AFH.Booking.Application.Abstractions.Availability;

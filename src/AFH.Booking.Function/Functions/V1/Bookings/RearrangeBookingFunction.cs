@@ -93,6 +93,6 @@ public sealed class RearrangeBookingFunction
                 result.ErrorCode);
         }
 
-        return await req.OkJsonAsync(result.Value!, ct);
+        return await req.OkJsonAsync(result.Value!.ToContract(), ct);
     }
 }

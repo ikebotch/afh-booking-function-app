@@ -98,7 +98,7 @@ public sealed class CancelBookingFunction
 
             // If your service returns a payload (recommended)
             if (result.Value is not null)
-                return await req.OkJsonAsync(result.Value, ct);
+                return await req.OkJsonAsync(result.Value!.ToContract(), ct);
 
             // If service returns success without data
             return await req.OkJsonAsync(new { message = "Booking cancelled." }, ct);

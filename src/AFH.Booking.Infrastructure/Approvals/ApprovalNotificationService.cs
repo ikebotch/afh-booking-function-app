@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.Models.Approvals;
 
 namespace AFH.Booking.Infrastructure.Approvals;
 

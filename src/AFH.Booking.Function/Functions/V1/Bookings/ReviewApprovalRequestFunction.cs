@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Approvals;
+using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -40,6 +41,6 @@ public sealed class ReviewApprovalRequestFunction
         if (review is null)
             return await req.ProblemAsync(HttpStatusCode.NotFound, $"Approval request '{requestId}' was not found.", ct, "NotFound");
 
-        return await req.OkJsonAsync(review, ct);
+        return await req.OkJsonAsync(review.ToContract(), ct);
     }
 }

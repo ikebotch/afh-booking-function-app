@@ -1,3 +1,5 @@
+using AFH.Booking.Application.Models.Governance;
+
 namespace AFH.Booking.Application.Abstractions.Governance;
 
 public interface IBookingConflictService

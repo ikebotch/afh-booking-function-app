@@ -5,6 +5,7 @@ using System.Net;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common;
+using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;

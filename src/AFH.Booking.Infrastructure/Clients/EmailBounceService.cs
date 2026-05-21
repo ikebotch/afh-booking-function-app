@@ -1,6 +1,5 @@
 using AFH.Booking.Application.Abstractions.Approvals;
-using AFH.Booking.Contracts.V1.Requests;
-using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;

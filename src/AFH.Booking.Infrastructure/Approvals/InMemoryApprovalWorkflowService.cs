@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using AFH.Booking.Application.Abstractions.Approvals;
-using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Application.Models.Approvals;
 
 namespace AFH.Booking.Infrastructure.Approvals;
 

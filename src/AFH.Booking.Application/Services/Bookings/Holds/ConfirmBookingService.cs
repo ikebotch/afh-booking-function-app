@@ -4,7 +4,8 @@ using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
-using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
 

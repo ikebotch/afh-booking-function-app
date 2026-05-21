@@ -1,4 +1,4 @@
-namespace AFH.Booking.Application.Abstractions.Governance;
+namespace AFH.Booking.Application.Models.Governance;
 
 public sealed record BookingConflictCheckResult(
     bool IsBlocked,

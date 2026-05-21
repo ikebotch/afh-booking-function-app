@@ -33,6 +33,6 @@ public sealed class CreateDuplicateClientCaseFunction
             raisedBy: body.RaisedBy,
             ct: ct);
 
-        return await req.CreatedJsonAsync(response, ct);
+        return await req.CreatedJsonAsync(response.ToContract(), ct);
     }
 }

@@ -6,7 +6,6 @@ using AFH.Booking.Application.Abstractions.Bookings.Holds;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Holds;
-using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using Moq;

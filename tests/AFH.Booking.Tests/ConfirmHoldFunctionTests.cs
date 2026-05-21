@@ -1,5 +1,4 @@
 using AFH.Booking.Application.Abstractions.Bookings;
-using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Functions.V1.Bookings;
 using Azure.Core.Serialization;

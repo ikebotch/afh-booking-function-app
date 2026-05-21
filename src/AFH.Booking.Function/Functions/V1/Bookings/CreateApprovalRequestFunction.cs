@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Approvals;
+using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -42,7 +43,7 @@ public sealed class CreateApprovalRequestFunction
         if (string.Equals(changeType, "Rearrange", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(body?.NewSlotId))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "newSlotId is required for adviser rearrangement approval requests.", ct, "Validation");
 
-        object created;
+        ApprovalRequestResponse created;
         try
         {
             created = await _approvals.CreateAsync(new CreateApprovalWorkflowRequest(
@@ -60,7 +61,7 @@ public sealed class CreateApprovalRequestFunction
             return await req.ProblemAsync(HttpStatusCode.BadRequest, ex.Message, ct, "Validation");
         }
 
-        return await req.CreatedJsonAsync(created, ct);
+        return await req.CreatedJsonAsync(created.ToContract(), ct);
     }
 
     private static bool IsAllowedChangeType(string value)

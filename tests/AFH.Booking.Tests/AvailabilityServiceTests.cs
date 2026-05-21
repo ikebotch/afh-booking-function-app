@@ -8,7 +8,6 @@ using AFH.Booking.Application.Availability;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Common.Clock;
-using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Availability;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Calendar;

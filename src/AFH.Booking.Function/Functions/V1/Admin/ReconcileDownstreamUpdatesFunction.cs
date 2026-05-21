@@ -50,6 +50,6 @@ public sealed class ReconcileDownstreamUpdatesFunction
             result.FailedCount,
             correlationId);
 
-        return await req.OkJsonAsync(result, ct);
+        return await req.OkJsonAsync(result.ToContract(), ct);
     }
 }

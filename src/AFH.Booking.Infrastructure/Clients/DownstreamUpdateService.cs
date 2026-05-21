@@ -1,7 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using AFH.Booking.Application.Abstractions.Clients;
-using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Application.Models.Clients;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;

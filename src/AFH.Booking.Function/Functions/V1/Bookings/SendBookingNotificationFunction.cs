@@ -37,6 +37,6 @@ public sealed class SendBookingNotificationFunction
             sendEmail: body?.SendEmail ?? true,
             ct: ct);
 
-        return await req.OkJsonAsync(response, ct);
+        return await req.OkJsonAsync(response.ToContract(), ct);
     }
 }

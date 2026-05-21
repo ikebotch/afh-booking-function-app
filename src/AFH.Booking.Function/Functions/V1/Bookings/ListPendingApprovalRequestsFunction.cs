@@ -22,6 +22,6 @@ public sealed class ListPendingApprovalRequestsFunction
         CancellationToken ct)
     {
         var pending = await _approvals.ListPendingAsync(ct);
-        return await req.OkJsonAsync(pending, ct);
+        return await req.OkJsonAsync(pending.Select(x => x.ToContract()).ToList(), ct);
     }
 }

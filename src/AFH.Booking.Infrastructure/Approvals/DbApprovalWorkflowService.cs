@@ -4,7 +4,7 @@ using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common;
-using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Infrastructure.Persistence;

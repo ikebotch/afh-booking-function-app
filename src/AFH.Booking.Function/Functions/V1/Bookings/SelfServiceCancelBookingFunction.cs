@@ -47,6 +47,6 @@ public sealed class SelfServiceCancelBookingFunction
         if (!result.IsSuccess)
             return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);
 
-        return await req.OkJsonAsync(result.Value!, ct);
+        return await req.OkJsonAsync(result.Value!.ToContract(), ct);
     }
 }

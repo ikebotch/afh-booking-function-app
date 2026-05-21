@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Models.Clients;
 using Microsoft.Extensions.Logging;
 
 namespace AFH.Booking.Infrastructure.Clients;

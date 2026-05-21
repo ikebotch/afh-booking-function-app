@@ -1,6 +1,5 @@
-﻿using AFH.Booking.Contracts.V1.Dtos;
-using AFH.Booking.Contracts.V1.Dtos.Availability;
-using AFH.Booking.Contracts.V1.Responses;
+﻿using AFH.Booking.Application.Models.Calendar;
+using AFH.Booking.Application.Models.Availability;
 using AFH.Booking.Domain.Calendar;
 
 namespace AFH.Booking.Application.Mapping.Availability;

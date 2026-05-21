@@ -71,7 +71,7 @@ public sealed class ConfirmHoldFunction
                 ct,
                 result.ErrorCode);
 
-        return await req.OkJsonAsync(result.Value, ct);
+        return await req.OkJsonAsync(result.Value!.ToContract(), ct);
     }
 
     private static async Task<(bool IsSuccess, ConfirmBookingRequest? Value)> TryReadOptionalBodyAsync(HttpRequestData req, CancellationToken ct)

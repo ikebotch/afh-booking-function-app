@@ -1,5 +1,4 @@
-using AFH.Booking.Contracts.V1.Requests;
-using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Application.Models.Approvals;
 
 namespace AFH.Booking.Application.Abstractions.Approvals;
 

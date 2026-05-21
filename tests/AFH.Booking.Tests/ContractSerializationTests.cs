@@ -1,5 +1,6 @@
-using AFH.Booking.Contracts.V1.Responses;
 using System.Text.Json;
+using ReleaseHoldError = AFH.Booking.Contracts.V1.Responses.ReleaseHoldError;
+using ReleaseHoldResponse = AFH.Booking.Contracts.V1.Responses.ReleaseHoldResponse;
 
 namespace AFH.Booking.Tests;
 

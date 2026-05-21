@@ -53,79 +53,140 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         bool sendClientNotification,
         CancellationToken ct)
     {
+        var utcNow = _clock.UtcNow;
+
+        var holdResult = await LoadCancellationHoldAsync(cmd, ct);
+        if (!holdResult.IsSuccess || holdResult.Value is null)
+            return FailLike<BookingHold, CancelBookingResponse>(holdResult);
+
+        var hold = holdResult.Value;
+        if (hold.Status == BookingHoldStatus.Cancelled)
+            return OkResponse(hold, utcNow);
+
+        var contextResult = await LoadCancellationContextAsync(hold, ct);
+        if (!contextResult.IsSuccess || contextResult.Value is null)
+            return FailLike<CancellationContext, CancelBookingResponse>(contextResult);
+
+        var context = contextResult.Value;
+
+        var before = CreateSnapshot(context.Hold, context.Slot, context.Transaction);
+        context.Hold.Cancel(cmd.Reason ?? cmd.ReasonCode ?? "Cancelled", utcNow);
+        var outlookStep = await CancelCalendarEventIfPresentAsync(context, ct);
+
+        await _holds.UpdateAsync(context.Hold, ct);
+
+        var eventId = await RecordCancellationLifecycleAsync(
+            cmd,
+            context,
+            before,
+            outlookStep,
+            utcNow,
+            ct);
+
+        await _uow.SaveChangesAsync(ct);
+
+        await RecordCancellationNotificationStepAsync(
+            cmd,
+            context,
+            eventId,
+            sendClientNotification,
+            ct);
+
+        await _uow.SaveChangesAsync(ct);
+
+        await PublishCancellationUpdateAsync(cmd, context, eventId, ct);
+
+        return OkResponse(context.Hold, utcNow);
+    }
+
+    private async Task<Result<BookingHold>> LoadCancellationHoldAsync(
+        CancelBookingCommand cmd,
+        CancellationToken ct)
+    {
         if (string.IsNullOrWhiteSpace(cmd.BookingId))
-            return Result<CancelBookingResponse>.Fail(
+        {
+            return Result<BookingHold>.Fail(
                 HttpStatusCode.BadRequest,
                 "bookingId is required.",
                 Errors.Validation);
+        }
 
         var validation = BookingChangeValidation.Validate(cmd);
         if (!validation.IsSuccess)
-            return Result<CancelBookingResponse>.Fail(validation.StatusCode, validation.ErrorMessage!, validation.ErrorCode);
+            return FailLike<BookingHold>(validation);
 
-        var utcNow = _clock.UtcNow;
         var hold = await _holds.GetAsync(cmd.BookingId, ct);
         if (hold is null)
-            return Result<CancelBookingResponse>.NotFound($"Hold '{cmd.BookingId}' was not found.");
+            return Result<BookingHold>.NotFound($"Hold '{cmd.BookingId}' was not found.");
 
-        if (hold.Status == BookingHoldStatus.Cancelled)
-        {
-            return Result<CancelBookingResponse>.Ok(new CancelBookingResponse
-            {
-                BookingId = hold.Id,
-                Status = hold.Status.ToString(),
-                CancelledUtc = hold.CancelledUtc ?? utcNow
-            });
-        }
+        return Result<BookingHold>.Ok(hold);
+    }
 
+    private async Task<Result<CancellationContext>> LoadCancellationContextAsync(
+        BookingHold hold,
+        CancellationToken ct)
+    {
         if (string.IsNullOrWhiteSpace(hold.SlotId))
-            return Result<CancelBookingResponse>.Fail(HttpStatusCode.Conflict, "Hold has no slotId linked.", Errors.Conflict);
+            return Result<CancellationContext>.Fail(HttpStatusCode.Conflict, "Hold has no slotId linked.", Errors.Conflict);
 
         var slot = await _slots.GetAsync(hold.SlotId, ct);
         if (slot is null)
-            return Result<CancelBookingResponse>.Fail(HttpStatusCode.Conflict, $"Slot '{hold.SlotId}' linked to hold was not found.", Errors.Conflict);
+            return Result<CancellationContext>.Fail(HttpStatusCode.Conflict, $"Slot '{hold.SlotId}' linked to hold was not found.", Errors.Conflict);
 
         var tx = await _transactions.GetAsync(slot.TransactionId, ct);
         if (tx is null)
-            return Result<CancelBookingResponse>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' linked to slot was not found.", Errors.Conflict);
+            return Result<CancellationContext>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' linked to slot was not found.", Errors.Conflict);
 
-        var before = CreateSnapshot(hold, slot, tx);
-        var outlookStartedUtc = _clock.UtcNow;
-        var outlookStatus = LifecycleStepStatuses.Skipped;
-        string? outlookErrorCode = null;
-        string? outlookErrorDetails = null;
+        return Result<CancellationContext>.Ok(new CancellationContext(hold, slot, tx));
+    }
 
-        hold.Cancel(cmd.Reason ?? cmd.ReasonCode ?? "Cancelled", utcNow);
+    private async Task<LifecycleStepOutcome> CancelCalendarEventIfPresentAsync(
+        CancellationContext context,
+        CancellationToken ct)
+    {
+        var startedUtc = _clock.UtcNow;
+        var status = LifecycleStepStatuses.Skipped;
+        string? errorCode = null;
+        string? errorDetails = null;
 
-        if (!string.IsNullOrWhiteSpace(hold.CalendarProviderEventId))
+        if (string.IsNullOrWhiteSpace(context.Hold.CalendarProviderEventId))
+            return new LifecycleStepOutcome(startedUtc, status, errorCode, errorDetails);
+
+        try
         {
-            try
-            {
-                var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
-                await _calendar.CancelBookingEventAsync(calendarUserId, hold.CalendarProviderEventId!, ct);
-                outlookStatus = LifecycleStepStatuses.Succeeded;
-            }
-            catch (Exception ex)
-            {
-                outlookStatus = LifecycleStepStatuses.Failed;
-                outlookErrorCode = LifecycleErrorCodes.CalendarCancelFailed;
-                outlookErrorDetails = ex.Message;
-                _logger.LogWarning(ex, "Failed to cancel calendar event for HoldId={HoldId}. Continuing with lifecycle persistence.", hold.Id);
-            }
+            var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(context.Slot.AdviserId, ct);
+            await _calendar.CancelBookingEventAsync(calendarUserId, context.Hold.CalendarProviderEventId!, ct);
+            status = LifecycleStepStatuses.Succeeded;
+        }
+        catch (Exception ex)
+        {
+            status = LifecycleStepStatuses.Failed;
+            errorCode = LifecycleErrorCodes.CalendarCancelFailed;
+            errorDetails = ex.Message;
+            _logger.LogWarning(ex, "Failed to cancel calendar event for HoldId={HoldId}. Continuing with lifecycle persistence.", context.Hold.Id);
         }
 
-        await _holds.UpdateAsync(hold, ct);
+        return new LifecycleStepOutcome(startedUtc, status, errorCode, errorDetails);
+    }
 
+    private async Task<string> RecordCancellationLifecycleAsync(
+        CancelBookingCommand cmd,
+        CancellationContext context,
+        object before,
+        LifecycleStepOutcome outlookStep,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
         var eventId = await _audit.RecordEventAsync(new LifecycleAuditEntry(
-            BookingId: hold.Id,
-            TransactionId: tx.Id,
+            BookingId: context.Hold.Id,
+            TransactionId: context.Transaction.Id,
             EventType: LifecycleEventTypes.Cancelled,
             ActorType: string.IsNullOrWhiteSpace(cmd.RequestedBy) ? LifecycleActors.Unknown : cmd.RequestedBy,
             ActorId: cmd.ActorId,
             ReasonCode: cmd.ReasonCode,
             ReasonNotes: cmd.ReasonDetail ?? cmd.Reason,
             Before: before,
-            After: CreateSnapshot(hold, slot, tx),
+            After: CreateSnapshot(context.Hold, context.Slot, context.Transaction),
             OccurredUtc: utcNow,
             CorrelationId: cmd.CorrelationId,
             SourceSystem: "BookingService",
@@ -137,11 +198,11 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             eventId,
             LifecycleStepNames.Outlook,
             1,
-            outlookStatus,
-            outlookStartedUtc,
+            outlookStep.Status,
+            outlookStep.StartedUtc,
             _clock.UtcNow,
-            outlookErrorCode,
-            outlookErrorDetails,
+            outlookStep.ErrorCode,
+            outlookStep.ErrorDetails,
             cmd.CorrelationId), ct);
 
         var sqlCompletedUtc = _clock.UtcNow;
@@ -156,8 +217,16 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             null,
             cmd.CorrelationId), ct);
 
-        await _uow.SaveChangesAsync(ct);
+        return eventId;
+    }
 
+    private async Task RecordCancellationNotificationStepAsync(
+        CancelBookingCommand cmd,
+        CancellationContext context,
+        string eventId,
+        bool sendClientNotification,
+        CancellationToken ct)
+    {
         var notificationStartedUtc = _clock.UtcNow;
         var notificationStepStatus = LifecycleStepStatuses.Skipped;
         string? notificationStepError = null;
@@ -167,10 +236,10 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         {
             try
             {
-                var notificationMessage = BuildCancellationNotification(slot, cmd);
+                var notificationMessage = BuildCancellationNotification(context.Slot, cmd);
                 var dispatch = await _notifications.SendBookingNotificationAsync(
                     new NotificationDispatchRequest(
-                        hold.Id,
+                        context.Hold.Id,
                         LifecycleEventTypes.Cancelled,
                         notificationMessage,
                         true,
@@ -189,7 +258,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
                 notificationStepStatus = LifecycleStepStatuses.Failed;
                 notificationStepError = LifecycleErrorCodes.NotificationFailed;
                 notificationStepDetails = ex.Message;
-                _logger.LogWarning(ex, "Notification dispatch failed for HoldId={HoldId}", hold.Id);
+                _logger.LogWarning(ex, "Notification dispatch failed for HoldId={HoldId}", context.Hold.Id);
             }
         }
 
@@ -203,25 +272,33 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             notificationStepError,
             notificationStepDetails,
             cmd.CorrelationId), ct);
+    }
 
-        await _uow.SaveChangesAsync(ct);
-
+    private async Task PublishCancellationUpdateAsync(
+        CancelBookingCommand cmd,
+        CancellationContext context,
+        string eventId,
+        CancellationToken ct)
+    {
         await _downstreamUpdates.PublishBookingChangeAsync(
-            bookingId: hold.Id,
+            bookingId: context.Hold.Id,
             changeType: "Cancel",
-            transactionRef: tx.TransactionRef,
+            transactionRef: context.Transaction.TransactionRef,
             payloadJson: JsonSerializer.Serialize(new
             {
-                bookingId = hold.Id,
-                slotId = slot.Id,
-                adviserId = slot.AdviserId,
-                cancelledUtc = hold.CancelledUtc,
+                bookingId = context.Hold.Id,
+                slotId = context.Slot.Id,
+                adviserId = context.Slot.AdviserId,
+                cancelledUtc = context.Hold.CancelledUtc,
                 reasonCode = cmd.ReasonCode,
                 reasonNotes = cmd.ReasonDetail ?? cmd.Reason,
                 lifecycleEventId = eventId
             }),
             ct: ct);
+    }
 
+    private static Result<CancelBookingResponse> OkResponse(BookingHold hold, DateTime utcNow)
+    {
         return Result<CancelBookingResponse>.Ok(new CancelBookingResponse
         {
             BookingId = hold.Id,
@@ -266,4 +343,31 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
 
         return $"Your meeting with {slot.AdviserName} on {slot.StartUtc:yyyy-MM-dd HH:mm} has been cancelled.{reason}";
     }
+
+    private static Result<T> FailLike<T>(Result failure)
+    {
+        return Result<T>.Fail(
+            failure.StatusCode,
+            failure.ErrorMessage ?? "Request failed.",
+            failure.ErrorCode);
+    }
+
+    private static Result<TTo> FailLike<TFrom, TTo>(Result<TFrom> failure)
+    {
+        return Result<TTo>.Fail(
+            failure.StatusCode,
+            failure.ErrorMessage ?? "Request failed.",
+            failure.ErrorCode);
+    }
+
+    private sealed record CancellationContext(
+        BookingHold Hold,
+        BookingSlot Slot,
+        BookingTransaction Transaction);
+
+    private sealed record LifecycleStepOutcome(
+        DateTime StartedUtc,
+        string Status,
+        string? ErrorCode,
+        string? ErrorDetails);
 }

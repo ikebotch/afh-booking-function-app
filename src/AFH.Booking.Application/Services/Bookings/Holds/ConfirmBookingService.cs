@@ -61,59 +61,62 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         ConfirmBookingCommand cmd,
         CancellationToken ct)
     {
+        var utcNow = _clock.UtcNow;
+
+        var contextResult = await LoadConfirmationContextAsync(cmd, utcNow, ct);
+        if (!contextResult.IsSuccess || contextResult.Value is null)
+            return FailLike<ConfirmationContext, ConfirmBookingResponse>(contextResult);
+
+        var context = contextResult.Value;
+
+        var routeTimeResult = await ApplyRouteTimeSnapshotIfRequiredAsync(context, utcNow, ct);
+        if (!routeTimeResult.IsSuccess)
+            return FailLike<ConfirmBookingResponse>(routeTimeResult);
+
+        var calendarUserIdResult = await ResolveCalendarUserAndCheckConflictsAsync(context, ct);
+        if (!calendarUserIdResult.IsSuccess || calendarUserIdResult.Value is null)
+            return FailLike<string, ConfirmBookingResponse>(calendarUserIdResult);
+
+        var before = CreateSnapshot(context.Hold, context.Slot, context.Transaction);
+        await ConfirmHoldAndTransactionAsync(context, utcNow, ct);
+
+        var joinUrl = await CreateJoinLinkIfRemoteAsync(context, ct);
+        await UpdateConfirmedCalendarEventAsync(context, calendarUserIdResult.Value, joinUrl, ct);
+
+        var eventId = await RecordBookedLifecycleAsync(cmd, context, before, utcNow, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        await SendBookedNotificationAsync(context.Hold.Id, context.Slot, eventId, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        return OkResponse(context.Hold, context.Transaction, joinUrl);
+    }
+
+    private async Task<Result<ConfirmationContext>> LoadConfirmationContextAsync(
+        ConfirmBookingCommand cmd,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
         if (string.IsNullOrWhiteSpace(cmd.HoldId))
         {
-            return Result<ConfirmBookingResponse>.Fail(
+            return Result<ConfirmationContext>.Fail(
                 HttpStatusCode.BadRequest,
                 "holdId is required.",
                 Errors.Validation);
         }
 
-        var utcNow = _clock.UtcNow;
-
         var hold = await _holds.GetForUpdateAsync(cmd.HoldId.Trim(), ct);
         if (hold is null)
-        {
-            return Result<ConfirmBookingResponse>.NotFound(
-                $"Hold '{cmd.HoldId}' not found.");
-        }
+            return Result<ConfirmationContext>.NotFound($"Hold '{cmd.HoldId}' not found.");
 
-        if (hold.Status == BookingHoldStatus.Cancelled)
-        {
-            return Result<ConfirmBookingResponse>.Fail(
-                HttpStatusCode.Conflict,
-                "Hold already cancelled.",
-                Errors.HoldCancelled);
-        }
-
-        if (hold.Status == BookingHoldStatus.Confirmed)
-        {
-            return Result<ConfirmBookingResponse>.Fail(
-                HttpStatusCode.Conflict,
-                "Hold already confirmed.",
-                Errors.HoldAlreadyConfirmed);
-        }
-
-        if (hold.ExpiresUtc <= utcNow)
-        {
-            return Result<ConfirmBookingResponse>.Fail(
-                HttpStatusCode.Conflict,
-                "Hold has expired.",
-                Errors.HoldExpired);
-        }
-
-        if (string.IsNullOrWhiteSpace(hold.SlotId))
-        {
-            return Result<ConfirmBookingResponse>.Fail(
-                HttpStatusCode.Conflict,
-                "Hold has no slotId.",
-                Errors.HoldStateInvalid);
-        }
+        var holdStatusResult = ValidateHoldCanBeConfirmed(hold, utcNow);
+        if (!holdStatusResult.IsSuccess)
+            return FailLike<ConfirmationContext>(holdStatusResult);
 
         var slot = await _slots.GetAsync(hold.SlotId, ct);
         if (slot is null)
         {
-            return Result<ConfirmBookingResponse>.Fail(
+            return Result<ConfirmationContext>.Fail(
                 HttpStatusCode.Conflict,
                 $"Slot '{hold.SlotId}' not found.",
                 Errors.HoldSlotMissing);
@@ -122,116 +125,172 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         var tx = await _tx.GetForUpdateAsync(slot.TransactionId, ct);
         if (tx is null)
         {
-            return Result<ConfirmBookingResponse>.Fail(
+            return Result<ConfirmationContext>.Fail(
                 HttpStatusCode.Conflict,
                 $"Transaction '{slot.TransactionId}' not found.",
                 Errors.HoldTransactionMissing);
         }
 
-        var routeTimeCheck = await _routeTimeGuard.EvaluateAsync(slot, tx, hold.Id, ct);
+        return Result<ConfirmationContext>.Ok(new ConfirmationContext(hold, slot, tx));
+    }
+
+    private static Result ValidateHoldCanBeConfirmed(BookingHold hold, DateTime utcNow)
+    {
+        if (hold.Status == BookingHoldStatus.Cancelled)
+            return Result.Fail(HttpStatusCode.Conflict, "Hold already cancelled.", Errors.HoldCancelled);
+
+        if (hold.Status == BookingHoldStatus.Confirmed)
+            return Result.Fail(HttpStatusCode.Conflict, "Hold already confirmed.", Errors.HoldAlreadyConfirmed);
+
+        if (hold.ExpiresUtc <= utcNow)
+            return Result.Fail(HttpStatusCode.Conflict, "Hold has expired.", Errors.HoldExpired);
+
+        if (string.IsNullOrWhiteSpace(hold.SlotId))
+            return Result.Fail(HttpStatusCode.Conflict, "Hold has no slotId.", Errors.HoldStateInvalid);
+
+        return Result.Ok();
+    }
+
+    private async Task<Result> ApplyRouteTimeSnapshotIfRequiredAsync(
+        ConfirmationContext context,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        var routeTimeCheck = await _routeTimeGuard.EvaluateAsync(
+            context.Slot,
+            context.Transaction,
+            context.Hold.Id,
+            ct);
+
         if (!routeTimeCheck.IsAllowed)
         {
-            return Result<ConfirmBookingResponse>.Fail(
+            return Result.Fail(
                 HttpStatusCode.Conflict,
-                routeTimeCheck.ErrorMessage
-                    ?? "The selected slot is no longer available.",
+                routeTimeCheck.ErrorMessage ?? "The selected slot is no longer available.",
                 routeTimeCheck.ErrorCode ?? Errors.ExactRouteTimeUnavailable);
         }
 
-        if (routeTimeCheck.WasTriggered &&
-            routeTimeCheck.TravelTimeMinutes.HasValue &&
-            routeTimeCheck.TravelDistanceMiles.HasValue)
+        if (!routeTimeCheck.WasTriggered ||
+            !routeTimeCheck.TravelTimeMinutes.HasValue ||
+            !routeTimeCheck.TravelDistanceMiles.HasValue)
         {
-            slot.AttachTravelSnapshot(
-                travelMinutes: routeTimeCheck.TravelTimeMinutes,
-                distanceMiles: routeTimeCheck.TravelDistanceMiles,
-                companyBufferMinutes: slot.CompanyBufferMinutes,
-                sourceLocationRef: slot.SourceLocationRef,
-                sourcePostcode: slot.SourcePostcode,
-                sourceLatitude: slot.SourceLatitude,
-                sourceLongitude: slot.SourceLongitude,
-                destinationLocationRef: slot.DestinationLocationRef,
-                destinationPostcode: slot.DestinationPostcode,
-                destinationLatitude: slot.DestinationLatitude,
-                destinationLongitude: slot.DestinationLongitude,
-                provider: "LocationRouteTime",
-                confidence: "Exact",
-                calculatedUtc: utcNow);
-
-            await _slots.UpdateAsync(slot, ct);
+            return Result.Ok();
         }
 
-        var calendarUserId =
-            await _profiles.ResolveCalendarUserIdAsync(slot.AdviserId, ct);
+        context.Slot.AttachTravelSnapshot(
+            travelMinutes: routeTimeCheck.TravelTimeMinutes,
+            distanceMiles: routeTimeCheck.TravelDistanceMiles,
+            companyBufferMinutes: context.Slot.CompanyBufferMinutes,
+            sourceLocationRef: context.Slot.SourceLocationRef,
+            sourcePostcode: context.Slot.SourcePostcode,
+            sourceLatitude: context.Slot.SourceLatitude,
+            sourceLongitude: context.Slot.SourceLongitude,
+            destinationLocationRef: context.Slot.DestinationLocationRef,
+            destinationPostcode: context.Slot.DestinationPostcode,
+            destinationLatitude: context.Slot.DestinationLatitude,
+            destinationLongitude: context.Slot.DestinationLongitude,
+            provider: "LocationRouteTime",
+            confidence: "Exact",
+            calculatedUtc: utcNow);
 
-        var conflicts =
-            await _conflicts.EvaluateConfirmationConflictsAsync(
-                hold,
-                slot,
-                tx,
-                calendarUserId,
-                ct);
+        await _slots.UpdateAsync(context.Slot, ct);
+        return Result.Ok();
+    }
+
+    private async Task<Result<string>> ResolveCalendarUserAndCheckConflictsAsync(
+        ConfirmationContext context,
+        CancellationToken ct)
+    {
+        var calendarUserId = await _profiles.ResolveCalendarUserIdAsync(context.Slot.AdviserId, ct);
+
+        var conflicts = await _conflicts.EvaluateConfirmationConflictsAsync(
+            context.Hold,
+            context.Slot,
+            context.Transaction,
+            calendarUserId,
+            ct);
 
         if (conflicts.IsBlocked)
         {
-            return Result<ConfirmBookingResponse>.Fail(
+            return Result<string>.Fail(
                 HttpStatusCode.Conflict,
-                conflicts.ErrorMessage
-                    ?? "Booking confirmation blocked by calendar conflict.",
+                conflicts.ErrorMessage ?? "Booking confirmation blocked by calendar conflict.",
                 conflicts.ErrorCode ?? Errors.Conflict);
         }
 
-        var before = CreateSnapshot(hold, slot, tx);
+        return Result<string>.Ok(calendarUserId);
+    }
 
-        hold.Confirm(utcNow);
-        await _holds.UpdateAsync(hold, ct);
+    private async Task ConfirmHoldAndTransactionAsync(
+        ConfirmationContext context,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        context.Hold.Confirm(utcNow);
+        await _holds.UpdateAsync(context.Hold, ct);
 
-        if (tx.Status == BookingTransactionStatus.Open)
-        {
-            tx.MarkCompleted();
-            await _tx.UpdateAsync(tx, ct);
-        }
+        if (context.Transaction.Status != BookingTransactionStatus.Open)
+            return;
 
-        string? joinUrl = null;
-        if (tx.IsRemote)
-        {
-            joinUrl = await _meetingLinks.CreateJoinLinkAsync(hold.Id, ct);
-        }
+        context.Transaction.MarkCompleted();
+        await _tx.UpdateAsync(context.Transaction, ct);
+    }
 
-        if (!string.IsNullOrWhiteSpace(hold.CalendarProviderEventId))
-        {
-            var windows = _holdWindowFactory.Create(slot, tx);
+    private async Task<string?> CreateJoinLinkIfRemoteAsync(
+        ConfirmationContext context,
+        CancellationToken ct)
+    {
+        return context.Transaction.IsRemote
+            ? await _meetingLinks.CreateJoinLinkAsync(context.Hold.Id, ct)
+            : null;
+    }
 
-            var calendarTemplate =
-                ConfirmedBookingTemplate.BuildConfirmedTemplate(
-                    slot: slot,
-                    tx: tx,
-                    booking: hold,
-                    windows: windows,
-                    joinUrl: joinUrl,
-                    location: null);
+    private async Task UpdateConfirmedCalendarEventAsync(
+        ConfirmationContext context,
+        string calendarUserId,
+        string? joinUrl,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(context.Hold.CalendarProviderEventId))
+            return;
 
-            var calendarEvent = BookingCalendarEvent.Update(
-                userId: calendarUserId,
-                providerEventId: hold.CalendarProviderEventId,
-                showAs: BookingShowAs.Busy,
-                body: calendarTemplate.CalendarDescription,
-                categories: new[] { "AFH Booking", "Confirmed" });
+        var windows = _holdWindowFactory.Create(context.Slot, context.Transaction);
+        var calendarTemplate = ConfirmedBookingTemplate.BuildConfirmedTemplate(
+            slot: context.Slot,
+            tx: context.Transaction,
+            booking: context.Hold,
+            windows: windows,
+            joinUrl: joinUrl,
+            location: null);
 
-            await _calendar.UpdateBookingEventAsync(calendarEvent, ct);
-        }
+        var calendarEvent = BookingCalendarEvent.Update(
+            userId: calendarUserId,
+            providerEventId: context.Hold.CalendarProviderEventId,
+            showAs: BookingShowAs.Busy,
+            body: calendarTemplate.CalendarDescription,
+            categories: new[] { "AFH Booking", "Confirmed" });
 
+        await _calendar.UpdateBookingEventAsync(calendarEvent, ct);
+    }
+
+    private async Task<string> RecordBookedLifecycleAsync(
+        ConfirmBookingCommand cmd,
+        ConfirmationContext context,
+        object before,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
         var eventId = await _audit.RecordEventAsync(
             new LifecycleAuditEntry(
-                BookingId: hold.Id,
-                TransactionId: tx.Id,
+                BookingId: context.Hold.Id,
+                TransactionId: context.Transaction.Id,
                 EventType: LifecycleEventTypes.Booked,
                 ActorType: LifecycleActors.Client,
                 ActorId: null,
                 ReasonCode: null,
                 ReasonNotes: cmd.Notes,
                 Before: before,
-                After: CreateSnapshot(hold, slot, tx),
+                After: CreateSnapshot(context.Hold, context.Slot, context.Transaction),
                 OccurredUtc: utcNow,
                 CorrelationId: null,
                 SourceSystem: "BookingService",
@@ -245,7 +304,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 eventId,
                 LifecycleStepNames.Outlook,
                 1,
-                string.IsNullOrWhiteSpace(hold.CalendarProviderEventId)
+                string.IsNullOrWhiteSpace(context.Hold.CalendarProviderEventId)
                     ? LifecycleStepStatuses.Skipped
                     : LifecycleStepStatuses.Succeeded,
                 utcNow,
@@ -262,8 +321,15 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 _clock.UtcNow),
             ct);
 
-        await _uow.SaveChangesAsync(ct);
+        return eventId;
+    }
 
+    private async Task SendBookedNotificationAsync(
+        string bookingId,
+        BookingSlot slot,
+        string eventId,
+        CancellationToken ct)
+    {
         var notificationStartedUtc = _clock.UtcNow;
         var notificationStatus = LifecycleStepStatuses.Succeeded;
         string? notificationErrorCode = null;
@@ -273,7 +339,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         {
             await _notifications.SendBookingNotificationAsync(
                 new NotificationDispatchRequest(
-                    hold.Id,
+                    bookingId,
                     LifecycleEventTypes.Booked,
                     BuildBookingConfirmationMessage(slot),
                     true,
@@ -300,10 +366,6 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 notificationErrorCode,
                 notificationErrorDetails),
             ct);
-
-        await _uow.SaveChangesAsync(ct);
-
-        return OkResponse(hold, tx, joinUrl);
     }
 
     private static Result<ConfirmBookingResponse> OkResponse(
@@ -352,4 +414,25 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         return
             $"Your meeting with {slot.AdviserName} on {slot.StartUtc:yyyy-MM-dd HH:mm} has been booked.";
     }
+
+    private static Result<T> FailLike<T>(Result failure)
+    {
+        return Result<T>.Fail(
+            failure.StatusCode,
+            failure.ErrorMessage ?? "Request failed.",
+            failure.ErrorCode);
+    }
+
+    private static Result<TTo> FailLike<TFrom, TTo>(Result<TFrom> failure)
+    {
+        return Result<TTo>.Fail(
+            failure.StatusCode,
+            failure.ErrorMessage ?? "Request failed.",
+            failure.ErrorCode);
+    }
+
+    private sealed record ConfirmationContext(
+        BookingHold Hold,
+        BookingSlot Slot,
+        BookingTransaction Transaction);
 }

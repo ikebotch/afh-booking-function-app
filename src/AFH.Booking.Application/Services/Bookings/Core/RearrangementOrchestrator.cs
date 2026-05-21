@@ -47,47 +47,88 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         _clock = clock;
     }
 
-    public async Task<Result<RearrangeBookingResponse>> RearrangeAsync(RearrangeBookingCommand cmd, CancellationToken ct)
+    public async Task<Result<RearrangeBookingResponse>> RearrangeAsync(
+        RearrangeBookingCommand cmd,
+        CancellationToken ct)
+    {
+        var existingBookingResult = await LoadExistingBookingAsync(cmd, ct);
+        if (!existingBookingResult.IsSuccess || existingBookingResult.Value is null)
+            return FailLike<ExistingBookingContext, RearrangeBookingResponse>(existingBookingResult);
+
+        var existingBooking = existingBookingResult.Value;
+        var before = CreateBeforeSnapshot(existingBooking);
+
+        var newBookingResult = await CreateAndConfirmNewBookingAsync(
+            cmd,
+            existingBooking.Transaction.TransactionRef,
+            ct);
+        if (!newBookingResult.IsSuccess || newBookingResult.Value is null)
+            return FailLike<ConfirmedBookingContext, RearrangeBookingResponse>(newBookingResult);
+
+        var cancelResult = await CancelPreviousBookingAsync(cmd, existingBooking.Hold.Id, ct);
+        if (!cancelResult.IsSuccess)
+            return FailLike<RearrangeBookingResponse>(cancelResult);
+
+        var newBooking = newBookingResult.Value;
+        var eventId = await RecordRearrangedLifecycleAsync(cmd, existingBooking, newBooking, before, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        var notificationSummary = BuildNotificationSummary(existingBooking.Slot, newBooking.Slot);
+        await RecordRearrangedNotificationStepAsync(
+            cmd,
+            newBooking.Hold.Id,
+            eventId,
+            notificationSummary,
+            ct);
+        await _uow.SaveChangesAsync(ct);
+
+        await PublishRearrangementUpdateAsync(cmd, existingBooking, newBooking, eventId, ct);
+
+        return OkResponse(existingBooking, newBooking, notificationSummary);
+    }
+
+    private async Task<Result<ExistingBookingContext>> LoadExistingBookingAsync(
+        RearrangeBookingCommand cmd,
+        CancellationToken ct)
     {
         var validation = BookingChangeValidation.Validate(cmd);
         if (!validation.IsSuccess)
-            return Result<RearrangeBookingResponse>.Fail(validation.StatusCode, validation.ErrorMessage!, validation.ErrorCode);
+            return FailLike<ExistingBookingContext>(validation);
 
         if (string.IsNullOrWhiteSpace(cmd.BookingId))
-            return Result<RearrangeBookingResponse>.Fail(HttpStatusCode.BadRequest, "bookingId is required.", Errors.Validation);
+            return Result<ExistingBookingContext>.Fail(HttpStatusCode.BadRequest, "bookingId is required.", Errors.Validation);
 
         if (string.IsNullOrWhiteSpace(cmd.NewSlotId))
-            return Result<RearrangeBookingResponse>.Fail(HttpStatusCode.BadRequest, "newSlotId is required.", Errors.Validation);
+            return Result<ExistingBookingContext>.Fail(HttpStatusCode.BadRequest, "newSlotId is required.", Errors.Validation);
 
-        var oldHold = await _holds.GetAsync(cmd.BookingId.Trim(), ct);
-        if (oldHold is null)
-            return Result<RearrangeBookingResponse>.NotFound($"Booking '{cmd.BookingId}' was not found.");
+        var hold = await _holds.GetAsync(cmd.BookingId.Trim(), ct);
+        if (hold is null)
+            return Result<ExistingBookingContext>.NotFound($"Booking '{cmd.BookingId}' was not found.");
 
-        var oldSlot = await _slots.GetAsync(oldHold.SlotId, ct);
-        if (oldSlot is null)
-            return Result<RearrangeBookingResponse>.Fail(HttpStatusCode.Conflict, $"Old slot '{oldHold.SlotId}' was not found.", Errors.Conflict);
+        var slot = await _slots.GetAsync(hold.SlotId, ct);
+        if (slot is null)
+            return Result<ExistingBookingContext>.Fail(HttpStatusCode.Conflict, $"Old slot '{hold.SlotId}' was not found.", Errors.Conflict);
 
-        var tx = await _transactions.GetAsync(oldSlot.TransactionId, ct);
+        var tx = await _transactions.GetAsync(slot.TransactionId, ct);
         if (tx is null)
-            return Result<RearrangeBookingResponse>.Fail(HttpStatusCode.Conflict, $"Transaction '{oldSlot.TransactionId}' was not found.", Errors.Conflict);
+            return Result<ExistingBookingContext>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' was not found.", Errors.Conflict);
 
-        var before = new
-        {
-            previousBookingId = oldHold.Id,
-            previousSlotId = oldSlot.Id,
-            previousAdviserId = oldSlot.AdviserId,
-            previousStartUtc = oldSlot.StartUtc,
-            transactionId = tx.Id
-        };
+        return Result<ExistingBookingContext>.Ok(new ExistingBookingContext(hold, slot, tx));
+    }
 
+    private async Task<Result<ConfirmedBookingContext>> CreateAndConfirmNewBookingAsync(
+        RearrangeBookingCommand cmd,
+        string transactionRef,
+        CancellationToken ct)
+    {
         var holdResult = await _create.HandleAsync(new CreateHoldCommand
         {
             SlotId = cmd.NewSlotId.Trim(),
-            TransactionRef = tx.TransactionRef
+            TransactionRef = transactionRef
         }, ct);
 
         if (!holdResult.IsSuccess || holdResult.Value is null)
-            return Result<RearrangeBookingResponse>.Fail(holdResult.StatusCode, holdResult.ErrorMessage ?? "Unable to create hold for new slot.", holdResult.ErrorCode);
+            return Result<ConfirmedBookingContext>.Fail(holdResult.StatusCode, holdResult.ErrorMessage ?? "Unable to create hold for new slot.", holdResult.ErrorCode);
 
         var confirmResult = await _confirm.HandleAsync(new ConfirmBookingCommand
         {
@@ -96,11 +137,27 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         }, ct);
 
         if (!confirmResult.IsSuccess || confirmResult.Value is null)
-            return Result<RearrangeBookingResponse>.Fail(confirmResult.StatusCode, confirmResult.ErrorMessage ?? "Unable to confirm new booking.", confirmResult.ErrorCode);
+            return Result<ConfirmedBookingContext>.Fail(confirmResult.StatusCode, confirmResult.ErrorMessage ?? "Unable to confirm new booking.", confirmResult.ErrorCode);
 
+        var newHold = await _holds.GetAsync(holdResult.Value.BookingId, ct);
+        if (newHold is null)
+            return Result<ConfirmedBookingContext>.Fail(HttpStatusCode.Conflict, "New booking hold was not found after confirmation.", Errors.Conflict);
+
+        var newSlot = await _slots.GetAsync(newHold.SlotId, ct);
+        if (newSlot is null)
+            return Result<ConfirmedBookingContext>.Fail(HttpStatusCode.Conflict, "New slot was not found after confirmation.", Errors.Conflict);
+
+        return Result<ConfirmedBookingContext>.Ok(new ConfirmedBookingContext(newHold, newSlot));
+    }
+
+    private async Task<Result> CancelPreviousBookingAsync(
+        RearrangeBookingCommand cmd,
+        string previousBookingId,
+        CancellationToken ct)
+    {
         var cancelResult = await _cancel.CancelAsync(new CancelBookingCommand
         {
-            BookingId = oldHold.Id,
+            BookingId = previousBookingId,
             RequestedBy = cmd.RequestedBy,
             ReasonCode = string.IsNullOrWhiteSpace(cmd.ReasonCode) ? "Rearranged" : cmd.ReasonCode,
             ReasonDetail = cmd.ReasonDetail,
@@ -108,20 +165,24 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             CorrelationId = cmd.CorrelationId
         }, sendClientNotification: false, ct);
 
-        if (!cancelResult.IsSuccess)
-            return Result<RearrangeBookingResponse>.Fail(cancelResult.StatusCode, cancelResult.ErrorMessage ?? "Unable to cancel previous booking.", cancelResult.ErrorCode);
+        return cancelResult.IsSuccess
+            ? Result.Ok()
+            : Result.Fail(
+                cancelResult.StatusCode,
+                cancelResult.ErrorMessage ?? "Unable to cancel previous booking.",
+                cancelResult.ErrorCode);
+    }
 
-        var newHold = await _holds.GetAsync(holdResult.Value.BookingId, ct);
-        if (newHold is null)
-            return Result<RearrangeBookingResponse>.Fail(HttpStatusCode.Conflict, "New booking hold was not found after confirmation.", Errors.Conflict);
-
-        var newSlot = await _slots.GetAsync(newHold.SlotId, ct);
-        if (newSlot is null)
-            return Result<RearrangeBookingResponse>.Fail(HttpStatusCode.Conflict, "New slot was not found after confirmation.", Errors.Conflict);
-
+    private async Task<string> RecordRearrangedLifecycleAsync(
+        RearrangeBookingCommand cmd,
+        ExistingBookingContext existingBooking,
+        ConfirmedBookingContext newBooking,
+        object before,
+        CancellationToken ct)
+    {
         var eventId = await _audit.RecordEventAsync(new LifecycleAuditEntry(
-            BookingId: newHold.Id,
-            TransactionId: tx.Id,
+            BookingId: newBooking.Hold.Id,
+            TransactionId: existingBooking.Transaction.Id,
             EventType: LifecycleEventTypes.Rearranged,
             ActorType: string.IsNullOrWhiteSpace(cmd.RequestedBy) ? LifecycleActors.Unknown : cmd.RequestedBy,
             ActorId: cmd.ActorId,
@@ -130,25 +191,33 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             Before: before,
             After: new
             {
-                previousBookingId = oldHold.Id,
-                newBookingId = newHold.Id,
-                newSlotId = newSlot.Id,
-                newAdviserId = newSlot.AdviserId,
-                newStartUtc = newSlot.StartUtc
+                previousBookingId = existingBooking.Hold.Id,
+                newBookingId = newBooking.Hold.Id,
+                newSlotId = newBooking.Slot.Id,
+                newAdviserId = newBooking.Slot.AdviserId,
+                newStartUtc = newBooking.Slot.StartUtc
             },
             OccurredUtc: _clock.UtcNow,
             CorrelationId: cmd.CorrelationId,
             SourceSystem: "BookingService",
-            RelatedBookingId: oldHold.Id,
+            RelatedBookingId: existingBooking.Hold.Id,
             PreviousState: LifecycleStates.Booked,
             NewState: LifecycleStates.Rearranged), ct);
 
         var now = _clock.UtcNow;
         await _audit.RecordStepAsync(new LifecycleAuditStepEntry(eventId, LifecycleStepNames.Outlook, 1, LifecycleStepStatuses.Succeeded, now, now, null, null, cmd.CorrelationId), ct);
         await _audit.RecordStepAsync(new LifecycleAuditStepEntry(eventId, LifecycleStepNames.SqlAudit, 2, LifecycleStepStatuses.Succeeded, now, now, null, null, cmd.CorrelationId), ct);
-        await _uow.SaveChangesAsync(ct);
 
-        var notificationSummary = BuildNotificationSummary(oldSlot, newSlot);
+        return eventId;
+    }
+
+    private async Task RecordRearrangedNotificationStepAsync(
+        RearrangeBookingCommand cmd,
+        string newBookingId,
+        string eventId,
+        string notificationSummary,
+        CancellationToken ct)
+    {
         var notificationStartedUtc = _clock.UtcNow;
         var notificationStatus = LifecycleStepStatuses.Succeeded;
         string? notificationErrorCode = null;
@@ -158,7 +227,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         {
             await _notifications.SendBookingNotificationAsync(
                 new NotificationDispatchRequest(
-                    newHold.Id,
+                    newBookingId,
                     LifecycleEventTypes.Rearranged,
                     AppendReason(notificationSummary, cmd),
                     true,
@@ -184,40 +253,65 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             notificationErrorCode,
             notificationErrorDetails,
             cmd.CorrelationId), ct);
-        await _uow.SaveChangesAsync(ct);
+    }
 
+    private async Task PublishRearrangementUpdateAsync(
+        RearrangeBookingCommand cmd,
+        ExistingBookingContext existingBooking,
+        ConfirmedBookingContext newBooking,
+        string eventId,
+        CancellationToken ct)
+    {
         await _downstreamUpdates.PublishBookingChangeAsync(
-            bookingId: newHold.Id,
+            bookingId: newBooking.Hold.Id,
             changeType: "Rearrange",
-            transactionRef: tx.TransactionRef,
+            transactionRef: existingBooking.Transaction.TransactionRef,
             payloadJson: JsonSerializer.Serialize(new
             {
-                previousBookingId = oldHold.Id,
-                newBookingId = newHold.Id,
-                previousSlotId = oldSlot.Id,
-                newSlotId = newSlot.Id,
+                previousBookingId = existingBooking.Hold.Id,
+                newBookingId = newBooking.Hold.Id,
+                previousSlotId = existingBooking.Slot.Id,
+                newSlotId = newBooking.Slot.Id,
                 requestedBy = cmd.RequestedBy,
                 reasonCode = cmd.ReasonCode,
                 reasonDetail = cmd.ReasonDetail,
                 lifecycleEventId = eventId
             }),
             ct: ct);
+    }
 
+    private static Result<RearrangeBookingResponse> OkResponse(
+        ExistingBookingContext existingBooking,
+        ConfirmedBookingContext newBooking,
+        string notificationSummary)
+    {
         return Result<RearrangeBookingResponse>.Ok(new RearrangeBookingResponse
         {
-            PreviousBookingId = oldHold.Id,
-            NewBookingId = newHold.Id,
-            NewSlotId = newSlot.Id,
-            PreviousAdviserId = oldSlot.AdviserId,
-            PreviousAdviserName = oldSlot.AdviserName,
-            PreviousStartUtc = oldSlot.StartUtc,
-            PreviousEndUtc = oldSlot.EndUtc,
-            NewAdviserId = newSlot.AdviserId,
-            NewAdviserName = newSlot.AdviserName,
-            NewStartUtc = newSlot.StartUtc,
-            NewEndUtc = newSlot.EndUtc,
+            PreviousBookingId = existingBooking.Hold.Id,
+            NewBookingId = newBooking.Hold.Id,
+            NewSlotId = newBooking.Slot.Id,
+            PreviousAdviserId = existingBooking.Slot.AdviserId,
+            PreviousAdviserName = existingBooking.Slot.AdviserName,
+            PreviousStartUtc = existingBooking.Slot.StartUtc,
+            PreviousEndUtc = existingBooking.Slot.EndUtc,
+            NewAdviserId = newBooking.Slot.AdviserId,
+            NewAdviserName = newBooking.Slot.AdviserName,
+            NewStartUtc = newBooking.Slot.StartUtc,
+            NewEndUtc = newBooking.Slot.EndUtc,
             NotificationSummary = notificationSummary
         });
+    }
+
+    private static object CreateBeforeSnapshot(ExistingBookingContext existingBooking)
+    {
+        return new
+        {
+            previousBookingId = existingBooking.Hold.Id,
+            previousSlotId = existingBooking.Slot.Id,
+            previousAdviserId = existingBooking.Slot.AdviserId,
+            previousStartUtc = existingBooking.Slot.StartUtc,
+            transactionId = existingBooking.Transaction.Id
+        };
     }
 
     private static string BuildReason(RearrangeBookingCommand cmd)
@@ -250,4 +344,29 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         var detail = string.IsNullOrWhiteSpace(cmd.ReasonDetail) ? string.Empty : $" - {cmd.ReasonDetail.Trim()}";
         return $"{summary} Reason: {cmd.ReasonCode}{detail}.";
     }
+
+    private static Result<T> FailLike<T>(Result failure)
+    {
+        return Result<T>.Fail(
+            failure.StatusCode,
+            failure.ErrorMessage ?? "Request failed.",
+            failure.ErrorCode);
+    }
+
+    private static Result<TTo> FailLike<TFrom, TTo>(Result<TFrom> failure)
+    {
+        return Result<TTo>.Fail(
+            failure.StatusCode,
+            failure.ErrorMessage ?? "Request failed.",
+            failure.ErrorCode);
+    }
+
+    private sealed record ExistingBookingContext(
+        BookingHold Hold,
+        BookingSlot Slot,
+        BookingTransaction Transaction);
+
+    private sealed record ConfirmedBookingContext(
+        BookingHold Hold,
+        BookingSlot Slot);
 }

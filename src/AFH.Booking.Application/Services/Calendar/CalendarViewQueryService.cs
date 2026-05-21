@@ -1,4 +1,5 @@
-﻿using AFH.Booking.Application.Models.Calendar;
+﻿using AFH.Booking.Application.Mapping.Calendar;
+using AFH.Booking.Application.Models.Calendar;
 using AFH.Booking.Domain.Calendar;
 
 namespace AFH.Booking.Application.Calendar;
@@ -37,22 +38,7 @@ public sealed class CalendarViewQueryService : ICalendarViewQueryService
                           freshnessMode: "ForceRefresh",
                 ct: ct);
 
-            items.Add(new CalendarViewDto
-            {
-                AdviserId = u.AdviserId,
-                IsBusy = !availability.IsFree,
-                MailboxUnavailable = availability.MailboxUnavailable,
-                Message = availability.StatusMessage,
-                Conflicts = availability.Conflicts
-                    .Select(c => new CalendarBlock
-                    {
-                        StartUtc = c.StartUtc,
-                        EndUtc = c.EndUtc,
-                        Subject = c.Subject
-                    })
-                    .OrderBy(x => x.StartUtc)
-                    .ToList()
-            });
+            items.Add(availability.ToDto(u.AdviserId));
         }
 
 

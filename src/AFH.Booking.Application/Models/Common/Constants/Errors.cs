@@ -1,4 +1,4 @@
-﻿namespace AFH.Booking.Application.Common;
+﻿namespace AFH.Booking.Application.Models.Common.Constants;
 
 public static class Errors
 {

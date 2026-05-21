@@ -3,6 +3,9 @@ global using System.Text.Json;
 
 global using AFH.Booking.Application.Common;
 global using AFH.Booking.Application.Models.AdviserProjection;
+global using AFH.Booking.Application.Models.Common.Constants;
+global using AFH.Booking.Application.Models.Governance.Constants;
+global using AFH.Booking.Application.Models.Lifecycle.Constants;
 global using AFH.Booking.Domain.Options;
 global using AFH.Booking.Function.Functions.V1.Docs;
 global using AFH.Booking.Function.Mapping;

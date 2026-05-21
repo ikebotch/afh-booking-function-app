@@ -11,7 +11,7 @@ public interface IAvailabilitySlotProcessor
 {
     Task<IReadOnlyList<AvailabilitySlotResult>> ProcessAsync(
         GetAvailabilityQuery query,
-        IReadOnlyList<AdviserDirectoryItem> advisers,
+        IReadOnlyList<AdviserProjectionItem> advisers,
         IReadOnlyList<DateTime> slotStarts,
         BookingTransaction transaction,
         IReadOnlyDictionary<string, LocationCandidate> travelByAdviserId,

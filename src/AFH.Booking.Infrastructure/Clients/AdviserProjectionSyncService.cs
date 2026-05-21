@@ -11,7 +11,7 @@ using System.Text.Json;
 
 namespace AFH.Booking.Infrastructure.Clients;
 
-public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
+public sealed class AdviserProjectionSyncService : IAdviserProjectionSyncService
 {
     private const string SyncCursorKey = "adviser_directory_last_sync_utc";
     private readonly HttpClient _http;
@@ -22,9 +22,9 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
     private readonly IClock _clock;
     private readonly IApplicationLogSink _logSink;
     private readonly ApplicationLoggingOptions _loggingOptions;
-    private readonly ILogger<AdviserDirectorySyncService> _logger;
+    private readonly ILogger<AdviserProjectionSyncService> _logger;
 
-    public AdviserDirectorySyncService(
+    public AdviserProjectionSyncService(
         HttpClient http,
         IOptions<AdviserDirectoryOptions> options,
         IInternalServiceAuthenticator authenticator,
@@ -33,7 +33,7 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         IClock clock,
         IApplicationLogSink logSink,
         IOptions<ApplicationLoggingOptions> loggingOptions,
-        ILogger<AdviserDirectorySyncService> logger)
+        ILogger<AdviserProjectionSyncService> logger)
     {
         _http = http;
         _options = options.Value;
@@ -46,11 +46,11 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
         _logger = logger;
     }
 
-    public async Task<AdviserDirectorySyncResult> SyncAsync(CancellationToken ct)
+    public async Task<AdviserProjectionSyncResult> SyncAsync(CancellationToken ct)
     {
         if (!_options.Enabled || string.IsNullOrWhiteSpace(_options.BaseUrl))
         {
-            return new AdviserDirectorySyncResult
+            return new AdviserProjectionSyncResult
             {
                 SyncedAtUtc = _clock.UtcNow,
                 SyncedCount = 0,
@@ -118,7 +118,7 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
             await _profiles.UpsertRangeAsync(records, ct);
 
             await _syncState.UpsertValueAsync(SyncCursorKey, now.ToString("O"), now, ct);
-            return new AdviserDirectorySyncResult
+            return new AdviserProjectionSyncResult
             {
                 SyncedAtUtc = now,
                 SyncedCount = records.Count,
@@ -216,12 +216,12 @@ public sealed class AdviserDirectorySyncService : IAdviserDirectorySyncService
             {
                 OccurredUtc = _clock.UtcNow,
                 Level = "Warning",
-                Category = "AdviserDirectorySync",
-                Operation = "AdviserDirectoryProjectionSync",
+                Category = "AdviserProjectionSync",
+                Operation = "AdviserProjectionDeltaSync",
                 ContextId = SyncCursorKey,
-                EventType = "AdviserDirectorySyncFailed",
+                EventType = "AdviserProjectionSyncFailed",
                 Result = "Failure",
-                Message = "Adviser directory sync failed.",
+                Message = "Adviser projection sync failed.",
                 ExceptionType = ex.GetType().Name,
                 ExceptionMessage = ex.Message,
                 PayloadJson = ApplicationLogPayloadHelper.Serialize(new

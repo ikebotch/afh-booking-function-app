@@ -5,13 +5,13 @@ using AFH.Booking.Function.Http;
 namespace AFH.Booking.Function.Functions.V1.Admin;
 
 [BookingOpenApiTag("Internal/Admin")]
-public sealed class SyncAdviserDirectoryProjectionFunction
+public sealed class SyncAdviserProjectionFunction
 {
-    private readonly IAdviserDirectorySyncService _syncService;
+    private readonly IAdviserProjectionSyncService _syncService;
     private readonly IUnitOfWork _uow;
 
-    public SyncAdviserDirectoryProjectionFunction(
-        IAdviserDirectorySyncService syncService,
+    public SyncAdviserProjectionFunction(
+        IAdviserProjectionSyncService syncService,
         IUnitOfWork uow)
     {
         _syncService = syncService;

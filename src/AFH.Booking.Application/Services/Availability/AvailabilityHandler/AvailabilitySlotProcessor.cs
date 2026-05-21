@@ -35,7 +35,7 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
 
     public async Task<IReadOnlyList<AvailabilitySlotResult>> ProcessAsync(
         GetAvailabilityQuery query,
-        IReadOnlyList<AdviserDirectoryItem> advisers,
+        IReadOnlyList<AdviserProjectionItem> advisers,
         IReadOnlyList<DateTime> slotStarts,
         BookingTransaction transaction,
         IReadOnlyDictionary<string, LocationCandidate> travelByAdviserId,
@@ -207,7 +207,7 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
     }
 
     private async Task<Dictionary<string, CalendarViewDto>> GetAvailabilityByAdviserIdAsync(
-        IReadOnlyList<AdviserDirectoryItem> advisers,
+        IReadOnlyList<AdviserProjectionItem> advisers,
         IReadOnlyList<DateTime> slotStarts,
         double durationMinutes,
         bool isRemote,
@@ -250,7 +250,7 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
     }
 
     private static TravelMatrixResult CreateTravelResultForAdvisers(
-        IReadOnlyList<AdviserDirectoryItem> advisers,
+        IReadOnlyList<AdviserProjectionItem> advisers,
         IReadOnlyDictionary<string, LocationCandidate> travelByAdviserId)
     {
         return new TravelMatrixResult

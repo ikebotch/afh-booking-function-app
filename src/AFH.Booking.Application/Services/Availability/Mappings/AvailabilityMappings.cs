@@ -10,7 +10,7 @@ namespace AFH.Booking.Application.Availability.Mappings;
 public static class AvailabilityMappings
 {
     public static AdviserSlotsDto ToDto(
-        this AdviserDirectoryItem adviser,
+        this AdviserProjectionItem adviser,
         string slotId,
         DateTime startUtc,
         DateTime endUtc,

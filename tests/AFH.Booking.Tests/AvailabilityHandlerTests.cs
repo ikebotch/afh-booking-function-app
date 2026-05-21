@@ -165,7 +165,7 @@ public class AvailabilityHandlerTests
         var slotStarts = new List<DateTime> { new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc) } as IReadOnlyList<DateTime>;
         _slotStartBuilder.Setup(s => s.BuildPage(q)).Returns((slotStarts, "next-cursor"));
 
-        var adviser = new AdviserDirectoryItem { AdviserId = "adv-1", Name = "Adviser One" };
+        var adviser = new AdviserProjectionItem { AdviserId = "adv-1", Name = "Adviser One" };
         var travelMap = new Dictionary<string, LocationCandidate>() as IReadOnlyDictionary<string, LocationCandidate>;
         var poolResult = new AdviserPoolResult(new[] { adviser }, travelMap);
         _adviserPoolBuilder.Setup(a => a.BuildAsync(q, prospect, It.IsAny<CancellationToken>()))
@@ -179,7 +179,7 @@ public class AvailabilityHandlerTests
         var processedSlots = new[] { slotResult } as IReadOnlyList<AvailabilitySlotResult>;
         _slotProcessor.Setup(s => s.ProcessAsync(
                 q,
-                It.Is<IReadOnlyList<AdviserDirectoryItem>>(l => l.Count == 1 && l[0].AdviserId == "adv-1"),
+                It.Is<IReadOnlyList<AdviserProjectionItem>>(l => l.Count == 1 && l[0].AdviserId == "adv-1"),
                 slotStarts,
                 It.IsAny<BookingTransaction>(),
                 It.IsAny<IReadOnlyDictionary<string, LocationCandidate>>(),

@@ -20,7 +20,7 @@ public sealed class AvailabilityRulesService : IAvailabilityRulesService
     }
 
     public async Task<AvailabilityRuleEvaluation> EvaluateAsync(
-        AdviserDirectoryItem adviser,
+        AdviserProjectionItem adviser,
         DateTime startUtc,
         DateTime endUtc,
         double durationMinutes,

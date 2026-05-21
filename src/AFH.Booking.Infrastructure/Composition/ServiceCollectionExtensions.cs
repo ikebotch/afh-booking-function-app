@@ -174,7 +174,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IApprovalNotificationService, ApprovalNotificationService>();
         services.AddScoped<IApprovalWorkflowService, DbApprovalWorkflowService>();
         services.AddScoped<IEmailBounceService, EmailBounceService>();
-        services.AddHttpClient<IAdviserDirectorySyncService, AdviserDirectorySyncService>((sp, http) =>
+        services.AddHttpClient<IAdviserProjectionSyncService, AdviserProjectionSyncService>((sp, http) =>
         {
             var options = sp.GetRequiredService<IOptions<AdviserDirectoryOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(options.BaseUrl))
@@ -182,7 +182,7 @@ public static class ServiceCollectionExtensions
 
             http.Timeout = TimeSpan.FromSeconds(30);
         });
-        services.AddHostedService<AdviserDirectoryProjectionSyncWorker>();
+        services.AddHostedService<AdviserProjectionSyncWorker>();
         services.AddScoped<IEmailNotificationSender, ComposedEmailNotificationSender>();
         services.AddScoped<IClientNotificationService, ClientNotificationService>();
         services.AddScoped<IOperationalNotificationService, OperationalNotificationService>();

@@ -14,7 +14,7 @@ public sealed class CalendarViewHandlerTests
         {
             AdviserList =
             [
-                new AdviserDirectoryItem
+                new AdviserProjectionItem
                 {
                     AdviserId = "adv-1",
                     Name = "Adviser One",

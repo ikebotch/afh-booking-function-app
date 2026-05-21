@@ -2,6 +2,8 @@
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Contracts.V1.Responses;
 
+namespace AFH.Booking.Application.Holds;
+
 public sealed class ReleaseHoldHandler : IReleaseHoldHandler
 {
     private readonly IBookingHoldRepository _holds;

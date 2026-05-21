@@ -8,16 +8,16 @@ using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Infrastructure.Clients;
 
-public sealed class AdviserDirectoryProjectionSyncWorker : BackgroundService
+public sealed class AdviserProjectionSyncWorker : BackgroundService
 {
     private readonly IServiceProvider _services;
     private readonly AdviserDirectoryOptions _options;
-    private readonly ILogger<AdviserDirectoryProjectionSyncWorker> _logger;
+    private readonly ILogger<AdviserProjectionSyncWorker> _logger;
 
-    public AdviserDirectoryProjectionSyncWorker(
+    public AdviserProjectionSyncWorker(
         IServiceProvider services,
         IOptions<AdviserDirectoryOptions> options,
-        ILogger<AdviserDirectoryProjectionSyncWorker> logger)
+        ILogger<AdviserProjectionSyncWorker> logger)
     {
         _services = services;
         _options = options.Value;
@@ -38,7 +38,7 @@ public sealed class AdviserDirectoryProjectionSyncWorker : BackgroundService
             try
             {
                 await using var scope = _services.CreateAsyncScope();
-                var sync = scope.ServiceProvider.GetRequiredService<IAdviserDirectorySyncService>();
+                var sync = scope.ServiceProvider.GetRequiredService<IAdviserProjectionSyncService>();
                 var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
                 var result = await sync.SyncAsync(stoppingToken);
                 await uow.SaveChangesAsync(stoppingToken);

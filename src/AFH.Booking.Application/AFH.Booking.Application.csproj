@@ -20,9 +20,4 @@
 	<ItemGroup>
 		<InternalsVisibleTo Include="AFH.Booking.Infrastructure" />
 	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="Availability\Queries\" />
-	</ItemGroup>
-
 </Project>

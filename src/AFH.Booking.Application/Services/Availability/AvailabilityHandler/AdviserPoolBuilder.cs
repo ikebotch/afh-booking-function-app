@@ -84,7 +84,7 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
 
         var remoteAdvisers = filteredRemoteProfiles
             .Where(x => !string.IsNullOrWhiteSpace(x.AdviserId))
-            .Select(x => new AdviserDirectoryItem
+            .Select(x => new AdviserProjectionItem
             {
                 AdviserId = x.AdviserId,
                 Name = string.IsNullOrWhiteSpace(x.DisplayName) ? x.AdviserId : x.DisplayName,
@@ -114,7 +114,7 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
             .Where(c => !string.IsNullOrWhiteSpace(c.AdviserId))
             .Where(c => c.IsEligible)
             .Where(c => !query.ExcludeAdviserIds.Contains(c.AdviserId, StringComparer.OrdinalIgnoreCase))
-            .Select(c => new AdviserDirectoryItem
+            .Select(c => new AdviserProjectionItem
             {
                 AdviserId = c.AdviserId,
                 Name = string.IsNullOrWhiteSpace(c.AdviserName) ? c.AdviserId : c.AdviserName,

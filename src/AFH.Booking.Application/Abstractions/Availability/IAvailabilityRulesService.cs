@@ -5,7 +5,7 @@ namespace AFH.Booking.Application.Abstractions.Availability;
 public interface IAvailabilityRulesService
 {
     Task<AvailabilityRuleEvaluation> EvaluateAsync(
-        AdviserDirectoryItem adviser,
+        AdviserProjectionItem adviser,
         DateTime startUtc,
         DateTime endUtc,
         double durationMinutes,

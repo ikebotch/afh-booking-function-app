@@ -1,7 +1,7 @@
 ﻿namespace AFH.Booking.Domain.Calendar;
 
 
-    public sealed class AdviserDirectoryItem
+public sealed class AdviserProjectionItem
 {
     public string AdviserId { get; set; } = default!;
     public string Name { get; set; } = default!;

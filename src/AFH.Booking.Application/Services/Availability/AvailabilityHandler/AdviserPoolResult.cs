@@ -4,5 +4,5 @@ using AFH.Booking.Domain.Location;
 namespace AFH.Booking.Application.Availability;
 
 public sealed record AdviserPoolResult(
-    IReadOnlyList<AdviserDirectoryItem> Advisers,
+    IReadOnlyList<AdviserProjectionItem> Advisers,
     IReadOnlyDictionary<string, LocationCandidate> TravelByAdviserId);

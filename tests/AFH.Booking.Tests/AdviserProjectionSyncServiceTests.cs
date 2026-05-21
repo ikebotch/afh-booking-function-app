@@ -12,7 +12,7 @@ using System.Text;
 
 namespace AFH.Booking.Tests;
 
-public sealed class AdviserDirectorySyncServiceTests
+public sealed class AdviserProjectionSyncServiceTests
 {
     [Fact]
     public async Task SyncAsync_StoresAuthoritativeFieldsFromLocationCoverage()
@@ -53,7 +53,7 @@ public sealed class AdviserDirectorySyncServiceTests
 
         var profiles = new RecordingProfiles();
         var syncState = new RecordingSyncState();
-        var sut = new AdviserDirectorySyncService(
+        var sut = new AdviserProjectionSyncService(
             new HttpClient(handler),
             Options.Create(new AdviserDirectoryOptions
             {
@@ -69,7 +69,7 @@ public sealed class AdviserDirectorySyncServiceTests
             new StubClock(now),
             new RecordingLogSink(),
             Options.Create(new ApplicationLoggingOptions()),
-            NullLogger<AdviserDirectorySyncService>.Instance);
+            NullLogger<AdviserProjectionSyncService>.Instance);
 
         var result = await sut.SyncAsync(CancellationToken.None);
 
@@ -103,7 +103,7 @@ public sealed class AdviserDirectorySyncServiceTests
     {
         var now = new DateTime(2026, 04, 02, 12, 30, 0, DateTimeKind.Utc);
         var logSink = new RecordingLogSink();
-        var sut = new AdviserDirectorySyncService(
+        var sut = new AdviserProjectionSyncService(
             new HttpClient(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.Unauthorized))),
             Options.Create(new AdviserDirectoryOptions
             {
@@ -119,15 +119,15 @@ public sealed class AdviserDirectorySyncServiceTests
             new StubClock(now),
             logSink,
             Options.Create(new ApplicationLoggingOptions()),
-            NullLogger<AdviserDirectorySyncService>.Instance);
+            NullLogger<AdviserProjectionSyncService>.Instance);
 
         var ex = await Assert.ThrowsAsync<HttpRequestException>(() => sut.SyncAsync(CancellationToken.None));
 
         Assert.Contains("401", ex.Message, StringComparison.OrdinalIgnoreCase);
         var entry = Assert.Single(logSink.Entries);
-        Assert.Equal("AdviserDirectorySync", entry.Category);
-        Assert.Equal("AdviserDirectoryProjectionSync", entry.Operation);
-        Assert.Equal("AdviserDirectorySyncFailed", entry.EventType);
+        Assert.Equal("AdviserProjectionSync", entry.Category);
+        Assert.Equal("AdviserProjectionDeltaSync", entry.Operation);
+        Assert.Equal("AdviserProjectionSyncFailed", entry.EventType);
         Assert.Equal("Failure", entry.Result);
         Assert.Equal("Warning", entry.Level);
         Assert.Equal("HttpRequestException", entry.ExceptionType);

@@ -1,4 +1,4 @@
-namespace AFH.Booking.Application.Abstractions.Persistence;
+namespace AFH.Booking.Application.Models.Lifecycle;
 
 public sealed record LifecycleEventRecord
 {

@@ -2,6 +2,13 @@
 global using AFH.Booking.Application.Abstractions.Bookings;
 global using AFH.Booking.Application.Abstractions.Persistence;
 global using AFH.Booking.Application.Common;
+global using AFH.Booking.Application.Models.AdviserProjection;
+global using AFH.Booking.Application.Models.Auth;
+global using AFH.Booking.Application.Models.Bookings;
+global using AFH.Booking.Application.Models.Calendar;
+global using AFH.Booking.Application.Models.Governance;
+global using AFH.Booking.Application.Models.Lifecycle;
+global using AFH.Booking.Application.Models.Notifications;
 global using AFH.Booking.Domain.Bookings;
 global using Microsoft.Extensions.DependencyInjection;
 global using Microsoft.Extensions.Logging;

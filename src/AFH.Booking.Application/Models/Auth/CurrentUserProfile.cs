@@ -1,4 +1,4 @@
-namespace AFH.Booking.Application.Abstractions.Auth;
+namespace AFH.Booking.Application.Models.Auth;
 
 public sealed class CurrentUserProfile
 {

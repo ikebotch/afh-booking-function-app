@@ -1,4 +1,4 @@
-namespace AFH.Booking.Application.Abstractions.Lifecycle;
+namespace AFH.Booking.Application.Models.Lifecycle;
 
 public sealed record LifecycleAuditEntry(
     string BookingId,
@@ -27,13 +27,4 @@ public sealed record LifecycleAuditStepEntry(
     DateTime? CompletedUtc = null,
     string? ErrorCode = null,
     string? ErrorDetails = null,
-    string? CorrelationId = null);
-
-public sealed record NotificationDispatchRequest(
-    string BookingId,
-    string EventType,
-    string? Message,
-    bool SendSms,
-    bool SendEmail,
-    string? LifecycleEventId = null,
     string? CorrelationId = null);

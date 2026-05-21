@@ -2,6 +2,7 @@ global using System.Net;
 global using System.Text.Json;
 
 global using AFH.Booking.Application.Common;
+global using AFH.Booking.Application.Models.AdviserProjection;
 global using AFH.Booking.Domain.Options;
 global using AFH.Booking.Function.Functions.V1.Docs;
 global using AFH.Booking.Function.Mapping;

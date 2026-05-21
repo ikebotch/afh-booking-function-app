@@ -1,1 +1,8 @@
 ﻿global using System;
+global using AFH.Booking.Application.Models.AdviserProjection;
+global using AFH.Booking.Application.Models.Auth;
+global using AFH.Booking.Application.Models.Bookings;
+global using AFH.Booking.Application.Models.Calendar;
+global using AFH.Booking.Application.Models.Governance;
+global using AFH.Booking.Application.Models.Lifecycle;
+global using AFH.Booking.Application.Models.Notifications;

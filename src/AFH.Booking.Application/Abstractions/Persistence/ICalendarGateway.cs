@@ -1,4 +1,5 @@
-﻿using AFH.Booking.Domain.Calendar;
+﻿using AFH.Booking.Application.Models.Calendar;
+using AFH.Booking.Domain.Calendar;
 
 namespace AFH.Booking.Application.Abstractions.Persistence;
 
@@ -23,10 +24,4 @@ public interface ICalendarGateway
         string timezone,
         string? freshnessMode,
         CancellationToken ct);
-}
-
-
-public sealed class CalendarNotFoundException : Exception
-{
-    public CalendarNotFoundException(string message) : base(message) { }
 }

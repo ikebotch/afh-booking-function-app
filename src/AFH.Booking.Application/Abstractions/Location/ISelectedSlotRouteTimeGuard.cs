@@ -1,3 +1,4 @@
+using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Bookings;
 
 namespace AFH.Booking.Application.Abstractions.Location;
@@ -10,11 +11,3 @@ public interface ISelectedSlotRouteTimeGuard
         string holdId,
         CancellationToken ct);
 }
-
-public sealed record SelectedSlotRouteTimeGuardResult(
-    bool IsAllowed,
-    bool WasTriggered,
-    string? ErrorMessage,
-    string? ErrorCode,
-    int? TravelTimeMinutes,
-    double? TravelDistanceMiles);

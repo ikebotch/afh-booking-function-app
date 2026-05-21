@@ -1,4 +1,6 @@
-﻿namespace AFH.Booking.Application.Abstractions.Persistence;
+﻿using AFH.Booking.Application.Models.Bookings;
+
+namespace AFH.Booking.Application.Abstractions.Persistence;
 
 public interface IBookingHoldRepository
 {
@@ -27,7 +29,3 @@ public interface IBookingHoldRepository
         CancellationToken ct);
 
 }
-
-public sealed record ActiveHoldLookupResult(
-    BookingHold? TransactionHold,
-    BookingHold? SlotHold);

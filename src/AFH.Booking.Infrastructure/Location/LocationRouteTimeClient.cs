@@ -73,7 +73,10 @@ public sealed class LocationRouteTimeClient : ILocationRouteTimeClient
         using var response = await _http.SendAsync(httpRequest, ct);
         if (response.IsSuccessStatusCode)
         {
-            var data = await ReadEnvelopedOrRawAsync<RouteTimeResponseDto>(response, ct);
+            var data = await ReadEnvelopedOrRawAsync<RouteTimeResponseDto>(
+                response,
+                request.CorrelationId,
+                ct);
             return data is null ? Failed(request.CorrelationId) : ToDomainResult(data);
         }
 
@@ -120,7 +123,10 @@ public sealed class LocationRouteTimeClient : ILocationRouteTimeClient
             Status = LocationRouteTimeStatus.Failed
         };
 
-    private static async Task<T?> ReadEnvelopedOrRawAsync<T>(HttpResponseMessage response, CancellationToken ct)
+    private async Task<T?> ReadEnvelopedOrRawAsync<T>(
+        HttpResponseMessage response,
+        string? correlationId,
+        CancellationToken ct)
         where T : class
     {
         var json = await response.Content.ReadAsStringAsync(ct);
@@ -135,8 +141,14 @@ public sealed class LocationRouteTimeClient : ILocationRouteTimeClient
 
             return JsonSerializer.Deserialize<T>(json, JsonOptions);
         }
-        catch
+        catch (JsonException ex)
         {
+            _logger.LogWarning(
+                ex,
+                "Location route-time returned malformed JSON. CorrelationId={CorrelationId} Status={Status}",
+                correlationId,
+                (int)response.StatusCode);
+
             return default;
         }
     }

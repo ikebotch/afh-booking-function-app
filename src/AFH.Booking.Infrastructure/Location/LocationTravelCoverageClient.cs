@@ -70,8 +70,12 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         using var response = await _http.SendAsync(httpRequest, ct);
         if (response.IsSuccessStatusCode)
         {
-            var data = await ReadEnvelopedOrRawAsync<TravelCoverageResponseDto>(response, ct);
-            return data is null ? new LocationTravelCoverageResult() : ToDomainResult(data);
+            var data = await ReadEnvelopedOrRawAsync<TravelCoverageResponseDto>(
+                response,
+                request.CorrelationId,
+                ct);
+
+            return data is null ? MalformedCoverageResult(request) : ToDomainResult(data);
         }
 
         var body = await response.Content.ReadAsStringAsync(ct);
@@ -151,6 +155,20 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
         };
     }
 
+    private static LocationTravelCoverageResult MalformedCoverageResult(LocationTravelCoverageRequest request)
+    {
+        return new LocationTravelCoverageResult
+        {
+            SourcePostcode = request.SourcePostcode,
+            Destinations = request.Destinations.Select(destination => new LocationTravelCoverageOutcome
+            {
+                CorrelationId = destination.CorrelationId,
+                Postcode = destination.Postcode,
+                Status = LocationTravelCoverageStatus.Failed
+            }).ToList()
+        };
+    }
+
     private static LocationTravelCoordinates? ToDomainCoordinates(LocationCoordinatesDto? coordinates)
     {
         return coordinates is null
@@ -175,7 +193,10 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
     }
 
 
-    private static async Task<T?> ReadEnvelopedOrRawAsync<T>(HttpResponseMessage response, CancellationToken ct)
+    private async Task<T?> ReadEnvelopedOrRawAsync<T>(
+        HttpResponseMessage response,
+        string? correlationId,
+        CancellationToken ct)
         where T : class
     {
         var json = await response.Content.ReadAsStringAsync(ct);
@@ -190,8 +211,14 @@ public sealed class LocationTravelCoverageClient : ILocationTravelCoverageClient
 
             return JsonSerializer.Deserialize<T>(json, JsonOptions);
         }
-        catch
+        catch (JsonException ex)
         {
+            _logger.LogWarning(
+                ex,
+                "Location travel coverage returned malformed JSON. CorrelationId={CorrelationId} Status={Status}",
+                correlationId,
+                (int)response.StatusCode);
+
             return default;
         }
     }

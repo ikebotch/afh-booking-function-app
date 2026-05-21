@@ -157,9 +157,9 @@ public sealed class AdviserProjectionSyncService : IAdviserProjectionSyncService
             if (data?.Advisers is { Count: > 0 })
                 return data.Advisers;
         }
-        catch
+        catch (JsonException ex)
         {
-            // ignored by design; return empty list
+            throw new InvalidOperationException("Adviser directory coverage feed returned malformed JSON.", ex);
         }
 
         return [];

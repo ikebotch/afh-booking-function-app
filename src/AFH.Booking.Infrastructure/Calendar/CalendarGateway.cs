@@ -80,7 +80,11 @@ public sealed class CalendarGateway : ICalendarGateway
             throw new HttpRequestException("Calendar service request failed.", null, res.StatusCode);
         }
 
-        var created = await ReadEnvelopedOrRawAsync<CreateAppointmentResponse>(res, ct);
+        var created = await ReadEnvelopedOrRawAsync<CreateAppointmentResponse>(
+            res,
+            "CreateBookingEvent",
+            ev.UserId,
+            ct);
         return created?.AppointmentId ?? created?.EventId;
     }
 
@@ -116,7 +120,11 @@ public sealed class CalendarGateway : ICalendarGateway
             throw new HttpRequestException("Calendar service request failed.", null, res.StatusCode);
         }
 
-        var updated = await ReadEnvelopedOrRawAsync<CreateAppointmentResponse>(res, ct);
+        var updated = await ReadEnvelopedOrRawAsync<CreateAppointmentResponse>(
+            res,
+            "UpdateBookingEvent",
+            ev.UserId,
+            ct);
         return updated?.AppointmentId ?? updated?.EventId ?? ev.EventId;
     }
 
@@ -167,7 +175,11 @@ public sealed class CalendarGateway : ICalendarGateway
             return null;
         }
 
-        var payload = await ReadEnvelopedOrRawAsync<CalendarEventResponse>(res, ct);
+        var payload = await ReadEnvelopedOrRawAsync<CalendarEventResponse>(
+            res,
+            "GetEvent",
+            userId,
+            ct);
         if (payload is null)
             return null;
 
@@ -224,7 +236,31 @@ public sealed class CalendarGateway : ICalendarGateway
             };
         }
 
-        var schedule = await ReadEnvelopedOrRawAsync<ScheduleResponse>(res, ct) ?? new ScheduleResponse();
+        ScheduleResponse schedule;
+        try
+        {
+            schedule = await ReadEnvelopedOrRawAsync<ScheduleResponse>(
+                res,
+                "CheckAvailability",
+                userId,
+                ct) ?? new ScheduleResponse();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Calendar schedule lookup returned malformed data. UserId={UserId} FreshnessMode={FreshnessMode}",
+                userId,
+                freshnessMode);
+
+            return new AdviserAvailabilityResult
+            {
+                IsFree = false,
+                MailboxUnavailable = true,
+                StatusMessage = "Calendar schedule lookup failed because the calendar service returned malformed data.",
+                Conflicts = Array.Empty<CalendarConflictBlock>()
+            };
+        }
 
         var conflicts = schedule.Bookings
             .Where(b => b.EndUtc > startUtc && b.StartUtc < endUtc)
@@ -278,7 +314,11 @@ public sealed class CalendarGateway : ICalendarGateway
         _authenticator.Apply(req, _options.InternalToken);
     }
 
-    private static async Task<T?> ReadEnvelopedOrRawAsync<T>(HttpResponseMessage response, CancellationToken ct)
+    private async Task<T?> ReadEnvelopedOrRawAsync<T>(
+        HttpResponseMessage response,
+        string operation,
+        string userId,
+        CancellationToken ct)
         where T : class
     {
         var json = await response.Content.ReadAsStringAsync(ct);
@@ -294,9 +334,16 @@ public sealed class CalendarGateway : ICalendarGateway
             // Backward compatibility for legacy non-enveloped responses.
             return JsonSerializer.Deserialize<T>(json, JsonOptions);
         }
-        catch
+        catch (JsonException ex)
         {
-            return default;
+            _logger.LogWarning(
+                ex,
+                "Calendar dependency returned malformed JSON. Operation={Operation} UserId={UserId} Status={Status}",
+                operation,
+                userId,
+                (int)response.StatusCode);
+
+            throw new InvalidOperationException("Calendar service returned malformed JSON.", ex);
         }
     }
 

@@ -1,4 +1,5 @@
-﻿namespace AFH.Booking.Domain.Calendar;
+﻿namespace AFH.Booking.Application.Models.Calendar;
+
 public sealed class AdviserCalendarWindow
 {
     public string AdviserId { get; init; } = default!;

@@ -2,7 +2,6 @@ using AFH.Booking.Application.Abstractions.Availability;
 using AFH.Booking.Application.Models.Calendar;
 using AFH.Booking.Domain.Availability;
 using AFH.Booking.Domain.Bookings.Score;
-using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Location;
 using AFH.Booking.Domain.Location.Travel;
 

@@ -3,7 +3,6 @@ using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Mapping.Availability;
 using AFH.Booking.Application.Models.Availability;
 using AFH.Booking.Domain.Availability;
-using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Location;
 using AFH.Booking.Domain.Location.Travel;
 

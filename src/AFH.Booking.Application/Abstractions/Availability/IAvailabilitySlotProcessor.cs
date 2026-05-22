@@ -1,7 +1,6 @@
 using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Availability;
 using AFH.Booking.Domain.Availability;
-using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Location;
 using AFH.Booking.Domain.Location.Travel;
 

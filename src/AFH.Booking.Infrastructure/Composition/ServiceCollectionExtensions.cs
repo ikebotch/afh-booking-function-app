@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Auth;
 using AFH.Booking.Application.Abstractions.Bookings;
+using AFH.Booking.Application.Abstractions.Calendar;
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;

@@ -1,4 +1,5 @@
 global using AFH.Booking.Application.Abstractions.Meetings;
+global using AFH.Booking.Application.Abstractions.Calendar;
 global using AFH.Booking.Application.Abstractions.Persistence;
 global using AFH.Booking.Application.Common;
 global using AFH.Booking.Application.Models.Availability;

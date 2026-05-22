@@ -1,7 +1,6 @@
 ﻿using AFH.Booking.Application.Abstractions.Availability;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.Availability;
-using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Options;
 

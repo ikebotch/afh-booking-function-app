@@ -1,4 +1,3 @@
-using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Location;
 
 namespace AFH.Booking.Application.Availability;

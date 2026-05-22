@@ -23,6 +23,7 @@ internal static class AvailabilityModuleServiceCollectionExtensions
         services.AddScoped<IAvailabilitySlotProcessor, AvailabilitySlotProcessor>();
         services.AddScoped<IAvailabilityResponseBuilder, AvailabilityResponseBuilder>();
         services.AddScoped<ICalendarViewQueryService, CalendarViewQueryService>();
+        services.AddScoped<IBookingShowAsRemediationService, BookingShowAsRemediationService>();
 
         return services;
     }

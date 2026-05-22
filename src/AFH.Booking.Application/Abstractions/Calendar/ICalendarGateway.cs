@@ -1,18 +1,16 @@
-﻿using AFH.Booking.Application.Models.Calendar;
-using AFH.Booking.Domain.Calendar;
+﻿using AFH.Booking.Domain.Calendar;
 
-namespace AFH.Booking.Application.Abstractions.Persistence;
+namespace AFH.Booking.Application.Abstractions.Calendar;
 
 public interface ICalendarGateway
 {
-
-
     Task<string?> CreateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct);
 
     Task CancelBookingEventAsync(
-     string userId,
-     string providerEventId,
-     CancellationToken ct);
+        string userId,
+        string providerEventId,
+        CancellationToken ct);
+
     Task<string?> UpdateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct);
 
     Task<CalendarEventDetails?> GetEventAsync(string userId, string eventId, CancellationToken ct = default);

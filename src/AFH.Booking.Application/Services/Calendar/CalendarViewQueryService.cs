@@ -1,6 +1,5 @@
 ﻿using AFH.Booking.Application.Mapping.Calendar;
 using AFH.Booking.Application.Models.Calendar;
-using AFH.Booking.Domain.Calendar;
 
 namespace AFH.Booking.Application.Calendar;
 
@@ -34,17 +33,11 @@ public sealed class CalendarViewQueryService : ICalendarViewQueryService
                 startUtc: q.StartUtc,
                 endUtc: q.EndUtc,
                 timezone: q.Timezone,
-                          //freshnessMode: "PreferCached",
-                          freshnessMode: "ForceRefresh",
+                freshnessMode: "ForceRefresh",
                 ct: ct);
 
             items.Add(availability.ToDto(u.AdviserId));
         }
-
-
-
-
-
 
         return Result<List<CalendarViewDto>>.Ok(items);
     }

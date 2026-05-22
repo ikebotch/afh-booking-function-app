@@ -1,4 +1,4 @@
-using AFH.Booking.Application.Abstractions.Persistence;
+using AFH.Booking.Application.Abstractions.Calendar;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Infrastructure.Http;
 using AFH.Booking.Domain.Options;

@@ -1,5 +1,4 @@
 using AFH.Booking.Application.Models.Calendar;
-using AFH.Booking.Domain.Calendar;
 
 namespace AFH.Booking.Application.Mapping.Calendar;
 

@@ -32,7 +32,7 @@ public static class ContractMappingExtensions
             else if (DateTimeOffset.TryParse(
                 req.PreferredStartUtc,
                 CultureInfo.InvariantCulture,
-                DateTimeStyles.RoundtripKind,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
                 out var dto))
             {
                 preferredStartUtc = dto.UtcDateTime;
@@ -44,8 +44,8 @@ public static class ContractMappingExtensions
             }
         }
 
-        DateTime? windowStart = req.Window?.StartUtc;
-        DateTime? windowEnd = req.Window?.EndUtc;
+        DateTime? windowStart = AsUtc(req.Window?.StartUtc);
+        DateTime? windowEnd = AsUtc(req.Window?.EndUtc);
 
         if (isDateOnly && preferredStartUtc.HasValue)
         {
@@ -94,6 +94,17 @@ public static class ContractMappingExtensions
             Cursor = req.Cursor
         };
     }
+
+    private static DateTime? AsUtc(DateTime? value)
+        => value.HasValue ? AsUtc(value.Value) : null;
+
+    private static DateTime AsUtc(DateTime value)
+        => value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 
     public static CreateHoldCommand ToCommand(this CreateHoldRequest req)
         => new()

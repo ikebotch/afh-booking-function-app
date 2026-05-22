@@ -21,7 +21,11 @@ public static class AvailabilityParsing
         }
 
         // datetime: ISO with offset/Z
-        if (DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dto))
+        if (DateTimeOffset.TryParse(
+            raw,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+            out var dto))
         {
             preferred.Kind = PreferredStartKind.DateTimeUtc;
             preferred.StartUtc = DateTime.SpecifyKind(dto.UtcDateTime, DateTimeKind.Utc);

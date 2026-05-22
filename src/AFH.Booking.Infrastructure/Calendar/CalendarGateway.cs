@@ -187,8 +187,8 @@ public sealed class CalendarGateway : ICalendarGateway
         {
             CalendarId = payload.CalendarId ?? string.Empty,
             Subject = payload.Subject ?? string.Empty,
-            StartUtc = payload.StartUtc,
-            EndUtc = payload.EndUtc,
+            StartUtc = AsUtc(payload.StartUtc),
+            EndUtc = AsUtc(payload.EndUtc),
             ChangeKey = payload.ChangeKey,
             ICalUId = payload.ICalUId,
             ShowAs = payload.ShowAs,
@@ -263,11 +263,11 @@ public sealed class CalendarGateway : ICalendarGateway
         }
 
         var conflicts = schedule.Bookings
-            .Where(b => b.EndUtc > startUtc && b.StartUtc < endUtc)
+            .Where(b => AsUtc(b.EndUtc) > startUtc && AsUtc(b.StartUtc) < endUtc)
             .Select(b => new CalendarConflictBlock
             {
-                StartUtc = b.StartUtc,
-                EndUtc = b.EndUtc,
+                StartUtc = AsUtc(b.StartUtc),
+                EndUtc = AsUtc(b.EndUtc),
                 Subject = b.Subject,
                 ProviderEventId = string.IsNullOrWhiteSpace(b.BookingId) ? null : b.BookingId
             })
@@ -292,6 +292,14 @@ public sealed class CalendarGateway : ICalendarGateway
             (int)statusCode,
             DownstreamFailureClassifier.Classify(statusCode));
     }
+
+    private static DateTime AsUtc(DateTime value)
+        => value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 
     private void EnsureConfigured()
     {

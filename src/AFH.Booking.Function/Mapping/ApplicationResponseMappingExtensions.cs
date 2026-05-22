@@ -34,7 +34,7 @@ public static class ApplicationResponseMappingExtensions
         {
             BookingId = response.BookingId,
             SlotId = response.SlotId,
-            HoldExpiresUtc = response.HoldExpiresUtc,
+            HoldExpiresUtc = AsUtc(response.HoldExpiresUtc),
             CompanyBufferMinutes = response.CompanyBufferMinutes
         };
 
@@ -68,7 +68,7 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             BookingId = response.BookingId,
-            CancelledUtc = response.CancelledUtc,
+            CancelledUtc = AsUtc(response.CancelledUtc),
             Status = response.Status
         };
 
@@ -81,14 +81,14 @@ public static class ApplicationResponseMappingExtensions
             TransactionRef = response.TransactionRef,
             AdviserId = response.AdviserId,
             AdviserName = response.AdviserName,
-            StartUtc = response.StartUtc,
-            EndUtc = response.EndUtc,
+            StartUtc = AsUtc(response.StartUtc),
+            EndUtc = AsUtc(response.EndUtc),
             DurationMinutes = response.DurationMinutes,
             IsRemote = response.IsRemote,
             MeetingType = response.MeetingType,
             Status = response.Status,
-            ConfirmedUtc = response.ConfirmedUtc,
-            CancelledUtc = response.CancelledUtc,
+            ConfirmedUtc = AsUtc(response.ConfirmedUtc),
+            CancelledUtc = AsUtc(response.CancelledUtc),
             CancelReason = response.CancelReason
         };
 
@@ -100,12 +100,12 @@ public static class ApplicationResponseMappingExtensions
             NewSlotId = response.NewSlotId,
             PreviousAdviserId = response.PreviousAdviserId,
             PreviousAdviserName = response.PreviousAdviserName,
-            PreviousStartUtc = response.PreviousStartUtc,
-            PreviousEndUtc = response.PreviousEndUtc,
+            PreviousStartUtc = AsUtc(response.PreviousStartUtc),
+            PreviousEndUtc = AsUtc(response.PreviousEndUtc),
             NewAdviserId = response.NewAdviserId,
             NewAdviserName = response.NewAdviserName,
-            NewStartUtc = response.NewStartUtc,
-            NewEndUtc = response.NewEndUtc,
+            NewStartUtc = AsUtc(response.NewStartUtc),
+            NewEndUtc = AsUtc(response.NewEndUtc),
             NotificationSummary = response.NotificationSummary
         };
 
@@ -128,7 +128,7 @@ public static class ApplicationResponseMappingExtensions
             LifecycleEventId = response.LifecycleEventId,
             PreviousState = response.PreviousState,
             NewState = response.NewState,
-            RecordedUtc = response.RecordedUtc
+            RecordedUtc = AsUtc(response.RecordedUtc)
         };
 
     public static ContractResponses.ApprovalRequestResponse ToContract(this AppApprovals.ApprovalRequestResponse response)
@@ -141,7 +141,7 @@ public static class ApplicationResponseMappingExtensions
             RequestedBy = response.RequestedBy,
             RequesterId = response.RequesterId,
             Status = response.Status,
-            RequestedUtc = response.RequestedUtc,
+            RequestedUtc = AsUtc(response.RequestedUtc),
             RoutedTo = response.RoutedTo,
             ReasonCode = response.ReasonCode,
             ReasonDetail = response.ReasonDetail,
@@ -150,9 +150,9 @@ public static class ApplicationResponseMappingExtensions
             ApproverTargetValue = response.ApproverTargetValue,
             ApproverTargetDisplayName = response.ApproverTargetDisplayName,
             Reviewer = response.Reviewer,
-            ReviewedUtc = response.ReviewedUtc,
+            ReviewedUtc = AsUtc(response.ReviewedUtc),
             ReviewNotes = response.ReviewNotes,
-            ExecutedUtc = response.ExecutedUtc
+            ExecutedUtc = AsUtc(response.ExecutedUtc)
         };
 
     public static ContractResponses.EmailBounceEventResponse ToContract(this AppApprovals.EmailBounceEventResponse response)
@@ -163,8 +163,8 @@ public static class ApplicationResponseMappingExtensions
             RecipientEmail = response.RecipientEmail,
             ReasonCode = response.ReasonCode,
             ReasonDetail = response.ReasonDetail,
-            OccurredUtc = response.OccurredUtc,
-            ReceivedUtc = response.ReceivedUtc
+            OccurredUtc = AsUtc(response.OccurredUtc),
+            ReceivedUtc = AsUtc(response.ReceivedUtc)
         };
 
     public static ContractResponses.DuplicateClientCaseResponse ToContract(this AppClients.DuplicateClientCaseResponse response)
@@ -176,10 +176,10 @@ public static class ApplicationResponseMappingExtensions
             Status = response.Status,
             Notes = response.Notes,
             RaisedBy = response.RaisedBy,
-            RaisedUtc = response.RaisedUtc,
+            RaisedUtc = AsUtc(response.RaisedUtc),
             Resolution = response.Resolution,
             ResolvedBy = response.ResolvedBy,
-            ResolvedUtc = response.ResolvedUtc
+            ResolvedUtc = AsUtc(response.ResolvedUtc)
         };
 
     public static ContractResponses.DownstreamUpdateReconciliationResponse ToContract(this AppClients.DownstreamUpdateReconciliationResponse response)
@@ -199,8 +199,8 @@ public static class ApplicationResponseMappingExtensions
             BookingId = response.BookingId,
             ChangeType = response.ChangeType,
             Status = response.Status,
-            CreatedUtc = response.CreatedUtc,
-            ProcessedUtc = response.ProcessedUtc,
+            CreatedUtc = AsUtc(response.CreatedUtc),
+            ProcessedUtc = AsUtc(response.ProcessedUtc),
             ErrorMessage = response.ErrorMessage
         };
 
@@ -215,7 +215,7 @@ public static class ApplicationResponseMappingExtensions
             SmsStatus = response.SmsStatus,
             EmailStatus = response.EmailStatus,
             ProviderMessageId = response.ProviderMessageId,
-            CreatedUtc = response.CreatedUtc
+            CreatedUtc = AsUtc(response.CreatedUtc)
         };
 
     private static ContractResponses.DownstreamUpdateReconciliationItemResponse ToContract(this AppClients.DownstreamUpdateReconciliationItemResponse response)
@@ -227,7 +227,7 @@ public static class ApplicationResponseMappingExtensions
             PreviousStatus = response.PreviousStatus,
             CurrentStatus = response.CurrentStatus,
             AttemptCount = response.AttemptCount,
-            ProcessedUtc = response.ProcessedUtc,
+            ProcessedUtc = AsUtc(response.ProcessedUtc),
             ErrorMessage = response.ErrorMessage
         };
 
@@ -244,8 +244,8 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             SlotId = dto.SlotId,
-            StartUtc = dto.StartUtc,
-            EndUtc = dto.EndUtc,
+            StartUtc = AsUtc(dto.StartUtc),
+            EndUtc = AsUtc(dto.EndUtc),
             Rating = dto.Rating,
             ScoreBreakdown = dto.ScoreBreakdown,
             TravelMinutes = dto.TravelMinutes,
@@ -255,7 +255,7 @@ public static class ApplicationResponseMappingExtensions
             TravelMessage = dto.TravelMessage,
             HoldId = dto.HoldId,
             HoldStatus = dto.HoldStatus,
-            HoldExpiresUtc = dto.HoldExpiresUtc,
+            HoldExpiresUtc = AsUtc(dto.HoldExpiresUtc),
             HoldMessage = dto.HoldMessage
         };
 
@@ -265,5 +265,16 @@ public static class ApplicationResponseMappingExtensions
             ReturnedCount = paging.ReturnedCount,
             PageSize = paging.PageSize,
             NextCursor = paging.NextCursor
+        };
+
+    private static DateTime? AsUtc(DateTime? value)
+        => value.HasValue ? AsUtc(value.Value) : null;
+
+    private static DateTime AsUtc(DateTime value)
+        => value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
         };
 }

@@ -68,6 +68,53 @@ public class InternalOutboundAuthTests
     }
 
     [Fact]
+    public async Task CalendarGateway_CheckAvailability_NormalizesUnspecifiedScheduleTimesToUtc()
+    {
+        var handler = new StubHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""
+                {
+                  "data": {
+                    "bookings": [
+                      {
+                        "bookingId": "evt-1",
+                        "subject": "Busy",
+                        "startUtc": "2026-04-02T09:00:00",
+                        "endUtc": "2026-04-02T10:00:00",
+                        "status": "Busy"
+                      }
+                    ]
+                  }
+                }
+                """, Encoding.UTF8, "application/json")
+        });
+
+        var sut = new CalendarGateway(
+            new HttpClient(handler),
+            Options.Create(new CalendarSubscriptionOptions
+            {
+                BaseUrl = "https://calendar.example",
+                FunctionKey = "calendar-function-key",
+                InternalToken = "calendar-token"
+            }),
+            new InternalBearerServiceAuthenticator(),
+            NullLogger<CalendarGateway>.Instance);
+
+        var result = await sut.CheckAvailabilityAsync(
+            "adv-1",
+            new DateTime(2026, 04, 02, 8, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 04, 02, 11, 0, 0, DateTimeKind.Utc),
+            "UTC",
+            null,
+            CancellationToken.None);
+
+        Assert.False(result.IsFree);
+        Assert.Single(result.Conflicts);
+        Assert.Equal(DateTimeKind.Utc, result.Conflicts[0].StartUtc.Kind);
+        Assert.Equal(DateTimeKind.Utc, result.Conflicts[0].EndUtc.Kind);
+    }
+
+    [Fact]
     public async Task LocationTravelCoverageClient_SendsCompleteTimeContext_ForLocationContract()
     {
         HttpRequestMessage? captured = null;

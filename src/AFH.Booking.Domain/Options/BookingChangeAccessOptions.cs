@@ -6,4 +6,5 @@ public sealed class BookingChangeAccessOptions
 
     public string? SigningKey { get; set; }
     public bool AllowUnsignedTokensInDevelopment { get; set; }
+    public int DefaultTokenValidityDays { get; set; } = 90;
 }

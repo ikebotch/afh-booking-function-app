@@ -10,6 +10,8 @@ using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
+using Microsoft.Extensions.Logging;
+
 namespace AFH.Booking.Infrastructure.Bookings;
 
 public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
@@ -19,19 +21,63 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
+    private readonly ILogger<HmacBookingChangeAccessService> _logger;
 
     public HmacBookingChangeAccessService(
         IOptions<BookingChangeAccessOptions> options,
         IHostEnvironment hostEnvironment,
         IBookingHoldRepository holds,
         IBookingSlotRepository slots,
-        IBookingTransactionRepository transactions)
+        IBookingTransactionRepository transactions,
+        ILogger<HmacBookingChangeAccessService> logger)
     {
         _options = options.Value;
         _hostEnvironment = hostEnvironment;
         _holds = holds;
         _slots = slots;
         _transactions = transactions;
+        _logger = logger;
+    }
+
+    public async Task<Result<string>> GenerateClientTokenAsync(string bookingId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_options.SigningKey))
+        {
+            _logger.LogError("Cannot generate token: BookingChangeAccess:SigningKey is required.");
+            return Result<string>.Fail(HttpStatusCode.InternalServerError, "BookingChangeAccess:SigningKey is required.", Errors.ServerError);
+        }
+
+        var hold = await _holds.GetAsync(bookingId, ct);
+        if (hold is null)
+        {
+            _logger.LogWarning("Token generation failed: Booking '{BookingId}' was not found.", bookingId);
+            return Result<string>.NotFound($"Booking '{bookingId}' was not found.");
+        }
+
+        var slot = await _slots.GetAsync(hold.SlotId, ct);
+        if (slot is null)
+        {
+            _logger.LogWarning("Token generation failed: Slot '{SlotId}' for booking '{BookingId}' was not found.", hold.SlotId, bookingId);
+            return Result<string>.Fail(HttpStatusCode.Conflict, $"Slot '{hold.SlotId}' linked to booking was not found.", Errors.Conflict);
+        }
+
+        var tx = await _transactions.GetAsync(slot.TransactionId, ct);
+        if (tx is null)
+        {
+            _logger.LogWarning("Token generation failed: Transaction '{TransactionId}' for booking '{BookingId}' was not found.", slot.TransactionId, bookingId);
+            return Result<string>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' linked to booking was not found.", Errors.Conflict);
+        }
+
+        var expiryDays = _options.DefaultTokenValidityDays > 0 ? _options.DefaultTokenValidityDays : 90;
+        var envelope = new BookingChangeAccessTokenEnvelope(
+            BookingId: bookingId,
+            ActorType: LifecycleActors.Client,
+            ExpiresUtc: DateTimeOffset.UtcNow.AddDays(expiryDays),
+            TransactionRef: tx.TransactionRef);
+
+        var token = CreateToken(envelope, _options.SigningKey!);
+        _logger.LogInformation("Successfully generated client token for Booking '{BookingId}' (TransactionRef: '{TransactionRef}').", bookingId, tx.TransactionRef);
+        return Result<string>.Ok(token);
     }
 
     public async Task<Result<BookingChangeActorContext>> ValidateClientTokenAsync(
@@ -54,16 +100,28 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Unauthorized, error!, Errors.Unauthorized);
 
         if (!string.Equals(envelope!.BookingId, bookingId, StringComparison.Ordinal))
+        {
+            _logger.LogWarning("Token validation rejected: Token BookingId '{TokenBookingId}' does not match requested BookingId '{BookingId}'.", envelope.BookingId, bookingId);
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client token does not match booking.", Errors.Unauthorized);
+        }
 
         if (!string.Equals(envelope.ActorType, LifecycleActors.Client, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Token validation rejected: Token actor '{ActorType}' is invalid.", envelope.ActorType);
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client token actor is invalid.", Errors.Unauthorized);
+        }
 
         if (envelope.ExpiresUtc <= DateTimeOffset.UtcNow)
+        {
+            _logger.LogWarning("Token validation rejected: Token for Booking '{BookingId}' expired at {ExpiresUtc}.", bookingId, envelope.ExpiresUtc);
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Unauthorized, "Client token has expired.", Errors.Unauthorized);
+        }
 
         if (!ValidateSignature(token, _options.SigningKey!))
+        {
+            _logger.LogWarning("Token validation rejected: Invalid signature for Booking '{BookingId}'.", bookingId);
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client token signature is invalid.", Errors.Unauthorized);
+        }
 
         var hold = await _holds.GetAsync(bookingId, ct);
         if (hold is null)
@@ -80,8 +138,11 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
         if (!string.IsNullOrWhiteSpace(envelope.TransactionRef) &&
             !string.Equals(envelope.TransactionRef, tx.TransactionRef, StringComparison.OrdinalIgnoreCase))
         {
+            _logger.LogWarning("Token validation rejected: Token TransactionRef '{TokenTxRef}' does not match active TransactionRef '{ActiveTxRef}'.", envelope.TransactionRef, tx.TransactionRef);
             return Result<BookingChangeActorContext>.Fail(HttpStatusCode.Forbidden, "Client token transaction does not match booking.", Errors.Unauthorized);
         }
+
+        _logger.LogInformation("Successfully validated client token for Booking '{BookingId}'.", bookingId);
 
         return Result<BookingChangeActorContext>.Ok(new BookingChangeActorContext(
             LifecycleActors.Client,
@@ -90,7 +151,7 @@ public sealed class HmacBookingChangeAccessService : IBookingChangeAccessService
             envelope.CorrelationId));
     }
 
-    internal static string CreateToken(BookingChangeAccessTokenEnvelope envelope, string signingKey)
+    public static string CreateToken(BookingChangeAccessTokenEnvelope envelope, string signingKey)
     {
         var payload = JsonSerializer.Serialize(envelope);
         var payloadBase64 = ToBase64Url(Encoding.UTF8.GetBytes(payload));

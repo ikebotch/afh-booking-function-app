@@ -8,4 +8,8 @@ public interface IBookingChangeAccessService
         string bookingId,
         string? token,
         CancellationToken ct);
+
+    Task<Result<string>> GenerateClientTokenAsync(
+        string bookingId,
+        CancellationToken ct);
 }

@@ -10,6 +10,7 @@ using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Governance;
 using AFH.Booking.Application.Holds;
 using AFH.Booking.Application.Lifecycle;
+using AFH.Booking.Application.Services.Bookings.Core;
 
 namespace AFH.Booking.Application.Composition;
 
@@ -17,6 +18,8 @@ internal static class BookingFlowModuleServiceCollectionExtensions
 {
     internal static IServiceCollection AddBookingFlowModule(this IServiceCollection services)
     {
+        services.AddScoped<IConfirmBookingService, ConfirmBookingService>();
+        services.AddScoped<IBookingTokenService, BookingTokenService>();
         services.AddScoped<ICancelBookingService, CancelBookingService>();
         services.AddScoped<IBookingDetailsService, BookingDetailsService>();
         services.AddScoped<INoShowBookingService, NoShowBookingService>();

@@ -1,10 +1,15 @@
-﻿using AFH.Booking.Application.Abstractions.Bookings.Holds;
+﻿using AFH.Booking.Application.Abstractions.Bookings;
+using AFH.Booking.Application.Abstractions.Bookings.Holds;
 using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.EmailTemplates;
+using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Client;
 using AFH.Booking.Domain.Common;
+using AFH.Booking.Domain.Options;
+using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Application.Holds;
 
@@ -15,19 +20,25 @@ public sealed class BookingCalendarService : IBookingCalendarService
     private readonly IUnitOfWork _uow;
     private readonly IHoldWindowFactory _holdWindowFactory;
     private readonly IClientDirectory _clients;
+    private readonly IBookingTokenService _tokenService;
+    private readonly NotificationsOptions _notificationOptions;
 
     public BookingCalendarService(
         ICalendarGateway calendar,
         IBookingHoldRepository holdRepo,
         IUnitOfWork uow,
         IHoldWindowFactory holdWindowFactory,
-        IClientDirectory clients)
+        IClientDirectory clients,
+        IBookingTokenService tokenService,
+        IOptions<NotificationsOptions> notificationOptions)
     {
         _calendar = calendar;
         _holdRepo = holdRepo;
         _uow = uow;
         _holdWindowFactory = holdWindowFactory;
         _clients = clients;
+        _tokenService = tokenService;
+        _notificationOptions = notificationOptions.Value;
     }
 
     public async Task<Result<Unit>> CreateHoldEventAsync(
@@ -79,7 +90,8 @@ public sealed class BookingCalendarService : IBookingCalendarService
             slot,
             tx,
             hold,
-            windows);
+            windows,
+            await BuildSelfServiceLinksAsync(hold.Id, ct));
 
         CalendarLocation? calendarLocation = null;
 
@@ -162,5 +174,13 @@ public sealed class BookingCalendarService : IBookingCalendarService
         return string.IsNullOrWhiteSpace(value)
             ? null
             : value;
+    }
+
+    private async Task<BookingSelfServiceLinks?> BuildSelfServiceLinksAsync(string bookingId, CancellationToken ct)
+    {
+        var tokenResult = await _tokenService.GenerateClientAccessTokenAsync(bookingId, ct);
+        return tokenResult.IsSuccess
+            ? BookingSelfServiceLinkBuilder.Build(_notificationOptions.ClientPortalBaseUrl, bookingId, tokenResult.Value)
+            : null;
     }
 }

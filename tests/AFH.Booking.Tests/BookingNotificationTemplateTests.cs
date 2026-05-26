@@ -1,4 +1,5 @@
 using AFH.Booking.Application.EmailTemplates;
+using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Calendar;
 
@@ -46,12 +47,19 @@ public sealed class BookingNotificationTemplateTests
         var hold = BookingHold.Create(slot.Id, slot.AdviserId, TimeSpan.FromMinutes(10), now);
         var windows = new HoldWindows(slot.StartUtc.AddMinutes(-30), slot.EndUtc.AddMinutes(15), 15, 15, true);
 
-        var template = HoldBookingTemplate.BuildHoldTemplate(slot, transaction, hold, windows);
+        var template = HoldBookingTemplate.BuildHoldTemplate(slot, transaction, hold, windows, CreateLinks());
 
         Assert.Contains("<html", template.HtmlBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<html", template.CalendarDescription, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("AFH Booking Hold", template.CalendarDescription);
         Assert.Contains("Hold expires", template.CalendarDescription);
+        Assert.Contains("View booking: https://client.example/bookings/booking-1?token=token", template.TextBody);
+        Assert.Contains("Cancel booking: https://client.example/bookings/booking-1/cancel?token=token", template.TextBody);
+        Assert.Contains("Reschedule booking: https://client.example/bookings/booking-1/reschedule?token=token", template.TextBody);
+        Assert.Contains("View booking", template.HtmlBody);
+        Assert.Contains("Cancel booking", template.HtmlBody);
+        Assert.Contains("Reschedule booking", template.HtmlBody);
+        Assert.Contains("View booking: https://client.example/bookings/booking-1?token=token", template.CalendarDescription);
     }
 
     [Fact]
@@ -69,12 +77,26 @@ public sealed class BookingNotificationTemplateTests
             hold,
             windows,
             joinUrl: "https://meeting.example/join",
-            location: null);
+            location: null,
+            selfServiceLinks: CreateLinks());
 
         Assert.Contains("https://meeting.example/join", template.TextBody);
         Assert.Contains("https://meeting.example/join", template.CalendarDescription);
+        Assert.Contains("View booking: https://client.example/bookings/booking-1?token=token", template.TextBody);
+        Assert.Contains("Cancel booking: https://client.example/bookings/booking-1/cancel?token=token", template.TextBody);
+        Assert.Contains("Reschedule booking: https://client.example/bookings/booking-1/reschedule?token=token", template.TextBody);
+        Assert.Contains("View booking", template.HtmlBody);
+        Assert.Contains("Cancel booking", template.HtmlBody);
+        Assert.Contains("Reschedule booking", template.HtmlBody);
+        Assert.Contains("View booking: https://client.example/bookings/booking-1?token=token", template.CalendarDescription);
         Assert.DoesNotContain("<html", template.CalendarDescription, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static BookingSelfServiceLinks CreateLinks()
+        => new(
+            "https://client.example/bookings/booking-1?token=token",
+            "https://client.example/bookings/booking-1/cancel?token=token",
+            "https://client.example/bookings/booking-1/reschedule?token=token");
 
     private static BookingTransaction CreateTransaction(DateTime now, bool isRemote) =>
         BookingTransaction.Rehydrate(

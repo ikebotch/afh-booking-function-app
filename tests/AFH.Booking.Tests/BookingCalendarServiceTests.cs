@@ -1,8 +1,11 @@
+using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Holds;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Client;
+using AFH.Booking.Domain.Options;
+using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Tests;
 
@@ -37,7 +40,9 @@ public sealed class BookingCalendarServiceTests
             new StubHoldRepository(),
             new StubUnitOfWork(),
             new HoldWindowFactory(),
-            new StubClientDirectory());
+            new StubClientDirectory(),
+            new StubBookingTokenService(),
+            TestNotificationOptions());
 
         var result = await sut.CreateHoldEventAsync(
             new BookingContext(slot, tx, "adviser.one@tenant.com"),
@@ -50,6 +55,43 @@ public sealed class BookingCalendarServiceTests
         Assert.Equal(startUtc.AddMinutes(-35), calendar.LastAvailabilityStartUtc);
         Assert.Equal(startUtc.AddMinutes(60), calendar.LastAvailabilityEndUtc);
     }
+
+    [Fact]
+    public async Task CreateHoldEventAsync_IncludesSelfServiceLinksInFinalCalendarBody()
+    {
+        var startUtc = new DateTime(2026, 05, 21, 10, 0, 0, DateTimeKind.Utc);
+        var tx = CreateTransaction(startUtc, isRemote: true);
+        var slot = CreateSlot(startUtc, startUtc.AddMinutes(30), travelMinutes: 0, companyBufferMinutes: 0);
+        var hold = BookingHold.Create(slot.Id, "adviser.one@tenant.com", TimeSpan.FromMinutes(3), startUtc.AddHours(-1));
+        var calendar = new StubCalendarGateway(new AdviserAvailabilityResult
+        {
+            IsFree = true,
+            MailboxUnavailable = false,
+            Conflicts = []
+        });
+
+        var sut = new BookingCalendarService(
+            calendar,
+            new StubHoldRepository(),
+            new StubUnitOfWork(),
+            new HoldWindowFactory(),
+            new StubClientDirectory(),
+            new StubBookingTokenService("hold-token"),
+            TestNotificationOptions());
+
+        var result = await sut.CreateHoldEventAsync(
+            new BookingContext(slot, tx, "adviser.one@tenant.com"),
+            hold,
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Contains("View booking: https://client.example/bookings/", calendar.LastCreatedBody);
+        Assert.Contains("/cancel?token=hold-token", calendar.LastCreatedBody);
+        Assert.Contains("/reschedule?token=hold-token", calendar.LastCreatedBody);
+    }
+
+    private static IOptions<NotificationsOptions> TestNotificationOptions()
+        => Options.Create(new NotificationsOptions { ClientPortalBaseUrl = "https://client.example" });
 
     private static BookingTransaction CreateTransaction(DateTime startUtc, bool isRemote) =>
         BookingTransaction.Rehydrate(
@@ -95,10 +137,12 @@ public sealed class BookingCalendarServiceTests
         public bool CreatedEvent { get; private set; }
         public DateTime LastAvailabilityStartUtc { get; private set; }
         public DateTime LastAvailabilityEndUtc { get; private set; }
+        public string LastCreatedBody { get; private set; } = string.Empty;
 
         public Task<string?> CreateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct)
         {
             CreatedEvent = true;
+            LastCreatedBody = ev.Body ?? string.Empty;
             return Task.FromResult<string?>("evt-new");
         }
 
@@ -145,5 +189,11 @@ public sealed class BookingCalendarServiceTests
     private sealed class StubClientDirectory : IClientDirectory
     {
         public Task<ClientDirectoryItem?> GetAsync(string transactionIdOrClientId, CancellationToken ct) => Task.FromResult<ClientDirectoryItem?>(null);
+    }
+
+    private sealed class StubBookingTokenService(string token = "client-token") : IBookingTokenService
+    {
+        public Task<Result<string>> GenerateClientAccessTokenAsync(string bookingId, CancellationToken ct)
+            => Task.FromResult(Result<string>.Ok(token));
     }
 }

@@ -1,4 +1,5 @@
-﻿using AFH.Booking.Domain.Calendar;
+﻿using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Domain.Calendar;
 using System.Globalization;
 
 namespace AFH.Booking.Application.EmailTemplates;
@@ -11,7 +12,8 @@ public static class ConfirmedBookingTemplate
         BookingHold booking,        
         HoldWindows windows,
         string? joinUrl = null,       
-        CalendarLocation? location = null) 
+        CalendarLocation? location = null,
+        BookingSelfServiceLinks? selfServiceLinks = null)
     {
         var tzId = string.IsNullOrWhiteSpace(tx.Timezone) ? "UTC" : tx.Timezone.Trim();
 
@@ -31,6 +33,8 @@ public static class ConfirmedBookingTemplate
         var whereLine = tx.IsRemote
             ? $"Join link: {(string.IsNullOrWhiteSpace(joinUrl) ? "TBC" : joinUrl)}"
             : $"Location: {FormatLocation(location)}";
+        var textLinks = BuildTextLinks(selfServiceLinks);
+        var htmlLinks = BuildHtmlLinks(selfServiceLinks);
 
         var subject = "AFH Booking: Booking Confirmed";
         var textBody =
@@ -46,6 +50,7 @@ When: {slotLocal}
 {whereLine}
 
 {travelLine}
+{textLinks}
 
 This is an automated AFH booking notification.";
 
@@ -67,6 +72,7 @@ Where:
 - {whereLine}
 
 {travelLine}
+{textLinks}
 
 Calendar block:
 - Local: {blockLocal}
@@ -91,6 +97,7 @@ $@"<!doctype html>
       <li><strong>Where:</strong> {Escape(whereLine)}</li>
     </ul>
     <p>{Escape(travelLine)}</p>
+    {htmlLinks}
     <p>This is an automated AFH booking notification.</p>
   </body>
 </html>";
@@ -100,6 +107,33 @@ $@"<!doctype html>
 
     private static string FormatUtc(DateTime utc)
         => utc.ToUniversalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + "Z";
+
+    private static string BuildTextLinks(BookingSelfServiceLinks? links)
+    {
+        if (links is null)
+            return string.Empty;
+
+        return
+$@"
+Manage your booking:
+- View booking: {links.ViewBookingUrl}
+- Cancel booking: {links.CancelBookingUrl}
+- Reschedule booking: {links.RescheduleBookingUrl}";
+    }
+
+    private static string BuildHtmlLinks(BookingSelfServiceLinks? links)
+    {
+        if (links is null)
+            return string.Empty;
+
+        return
+$@"<div style=""margin:18px 0;padding:14px;border:1px solid #cbd5e1;border-radius:8px;"">
+      <p style=""margin:0 0 10px;font-weight:600;"">Manage your booking</p>
+      <p style=""margin:0 0 8px;""><a href=""{Escape(links.ViewBookingUrl)}"">View booking</a></p>
+      <p style=""margin:0 0 8px;""><a href=""{Escape(links.CancelBookingUrl)}"">Cancel booking</a></p>
+      <p style=""margin:0;""><a href=""{Escape(links.RescheduleBookingUrl)}"">Reschedule booking</a></p>
+    </div>";
+    }
 
     private static string FormatLocal(DateTime utc, string timezoneId)
     {

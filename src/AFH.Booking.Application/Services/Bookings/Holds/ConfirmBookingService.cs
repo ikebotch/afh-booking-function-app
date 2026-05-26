@@ -90,12 +90,13 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         await ConfirmHoldAndTransactionAsync(context, utcNow, ct);
 
         var joinUrl = await CreateJoinLinkIfRemoteAsync(context, ct);
-        await UpdateConfirmedCalendarEventAsync(context, calendarUserIdResult.Value, joinUrl, ct);
+        var selfServiceLinks = await BuildSelfServiceLinksAsync(context.Hold.Id, ct);
+        await UpdateConfirmedCalendarEventAsync(context, calendarUserIdResult.Value, joinUrl, selfServiceLinks, ct);
 
         var eventId = await RecordBookedLifecycleAsync(cmd, context, before, utcNow, ct);
         await _uow.SaveChangesAsync(ct);
 
-        await SendBookedNotificationAsync(context.Hold.Id, context.Slot, eventId, ct);
+        await SendBookedNotificationAsync(context.Hold.Id, context.Slot, eventId, selfServiceLinks, ct);
         await _uow.SaveChangesAsync(ct);
 
         return OkResponse(context.Hold, context.Transaction, joinUrl);
@@ -258,6 +259,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         ConfirmationContext context,
         string calendarUserId,
         string? joinUrl,
+        BookingSelfServiceLinks? selfServiceLinks,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(context.Hold.CalendarProviderEventId))
@@ -270,7 +272,8 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             booking: context.Hold,
             windows: windows,
             joinUrl: joinUrl,
-            location: null);
+            location: null,
+            selfServiceLinks: selfServiceLinks);
 
         var calendarEvent = BookingCalendarEvent.Update(
             userId: calendarUserId,
@@ -337,6 +340,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         string bookingId,
         BookingSlot slot,
         string eventId,
+        BookingSelfServiceLinks? links,
         CancellationToken ct)
     {
         var notificationStartedUtc = _clock.UtcNow;
@@ -346,11 +350,6 @@ public sealed class ConfirmBookingService : IConfirmBookingService
 
         try
         {
-            var tokenResult = await _tokenService.GenerateClientAccessTokenAsync(bookingId, ct);
-            var links = tokenResult.IsSuccess
-                ? BookingSelfServiceLinkBuilder.Build(_notificationOptions.ClientPortalBaseUrl, bookingId, tokenResult.Value)
-                : null;
-
             await _notifications.SendBookingNotificationAsync(
                 new NotificationDispatchRequest(
                     bookingId,
@@ -381,6 +380,14 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 notificationErrorCode,
                 notificationErrorDetails),
             ct);
+    }
+
+    private async Task<BookingSelfServiceLinks?> BuildSelfServiceLinksAsync(string bookingId, CancellationToken ct)
+    {
+        var tokenResult = await _tokenService.GenerateClientAccessTokenAsync(bookingId, ct);
+        return tokenResult.IsSuccess
+            ? BookingSelfServiceLinkBuilder.Build(_notificationOptions.ClientPortalBaseUrl, bookingId, tokenResult.Value)
+            : null;
     }
 
     private static Result<ConfirmBookingResponse> OkResponse(

@@ -26,6 +26,7 @@ public class TimeZoneAndRouteTests
     [InlineData("Booking_OpenApiV1", EndpointAccessPolicy.Public)]
     [InlineData("Booking_ScalarUi", EndpointAccessPolicy.Public)]
     [InlineData("Bookings_SelfServiceCancel", EndpointAccessPolicy.Public)]
+    [InlineData("Bookings_SelfServiceGetBooking", EndpointAccessPolicy.Public)]
     [InlineData("Bookings_SelfServiceRearrange", EndpointAccessPolicy.Public)]
     [InlineData("Bookings_SelfServiceRearrangementOptions", EndpointAccessPolicy.Public)]
     [InlineData("Users_GetCurrentUser", EndpointAccessPolicy.UserAuthenticated)]

@@ -209,13 +209,13 @@ internal sealed class TestHttpRequestData : HttpRequestData
         return new TestHttpResponseData(FunctionContext);
     }
 
-    public static TestHttpRequestData Create()
+    public static TestHttpRequestData Create(Uri? url = null, string method = "GET")
     {
         var context = new TestFunctionContext();
         ConfigureSerializer(context);
         context.Items[CorrelationIdMiddleware.ItemKey] = "ctx-correlation";
         context.Items["CorrelationId"] = "ctx-correlation";
-        return new TestHttpRequestData(context);
+        return new TestHttpRequestData(context, url, method);
     }
 
     private static void ConfigureSerializer(TestFunctionContext context)

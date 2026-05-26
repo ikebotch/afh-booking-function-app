@@ -19,9 +19,11 @@ internal static class BookingChangeRequestContext
         if (req.Headers.TryGetValues("x-booking-access-token", out var customValues))
             return customValues.FirstOrDefault();
 
-        return req.Headers.TryGetValues("Authorization", out var authValues)
-            ? authValues.FirstOrDefault()
-            : null;
+        if (req.Headers.TryGetValues("Authorization", out var authValues))
+            return authValues.FirstOrDefault();
+
+        return GetQueryValue(req.Url.Query, "token")
+            ?? GetQueryValue(req.Url.Query, "accessToken");
     }
 
     public static async Task<Result<BookingChangeActorContext>> ValidateClientAsync(
@@ -31,5 +33,25 @@ internal static class BookingChangeRequestContext
         CancellationToken ct)
     {
         return await accessService.ValidateClientTokenAsync(bookingId, GetClientAccessToken(req), ct);
+    }
+
+    private static string? GetQueryValue(string query, string key)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return null;
+
+        var trimmed = query[0] == '?' ? query[1..] : query;
+        foreach (var pair in trimmed.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var separator = pair.IndexOf('=', StringComparison.Ordinal);
+            var rawKey = separator >= 0 ? pair[..separator] : pair;
+            if (!string.Equals(Uri.UnescapeDataString(rawKey), key, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var rawValue = separator >= 0 ? pair[(separator + 1)..] : string.Empty;
+            return Uri.UnescapeDataString(rawValue.Replace("+", "%2B", StringComparison.Ordinal));
+        }
+
+        return null;
     }
 }

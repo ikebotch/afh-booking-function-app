@@ -6,6 +6,8 @@ namespace AFH.Booking.Application.Mapping.Availability;
 
 public static class TravelCoverageMapping
 {
+    private const int DefaultCompanyBufferMinutes = 30;
+
     public static TravelMatrixResult ToTravelMatrixResult(
         LocationAddress clientDestination,
         IReadOnlyList<AdviserProfileProjectionRecord> profiles,
@@ -44,8 +46,12 @@ public static class TravelCoverageMapping
                         },
                         Buffers = new BufferInfo
                         {
+                            CompanyBufferMinutes = DefaultCompanyBufferMinutes,
+                            PreMeetingBufferMinutes = (outcome.Route?.TravelTimeMinutes ?? 0) + DefaultCompanyBufferMinutes,
+                            PostMeetingBufferMinutes = DefaultCompanyBufferMinutes,
                             MaxTravelTimeMinutes = outcome.Coverage?.MaxTravelTimeMinutes ?? profile.MaxTravelTimeMinutes ?? 0
                         },
+                        CompanyBufferMinutes = DefaultCompanyBufferMinutes,
                         TravelSnapshot = new TravelSnapshotResult
                         {
                             SourceLocationRef = profile.AdviserId,

@@ -158,6 +158,47 @@ public class AdviserPoolBuilderTests
         Assert.Equal(35, candidate.TravelMinutes);
     }
 
+    [Fact]
+    public async Task BuildAsync_InPerson_CarriesCompanyBuffer_ForOperationalSlotWindows()
+    {
+        var travelClient = new Mock<ILocationTravelCoverageClient>();
+        var profiles = new Mock<IAdviserProfileProjectionRepository>();
+        var sut = new AdviserPoolBuilder(
+            travelClient.Object,
+            profiles.Object,
+            NullLogger<AdviserPoolBuilder>.Instance);
+
+        var query = new GetAvailabilityQuery
+        {
+            ClientId = "client-1",
+            IsRemote = false,
+            PreferredStart = new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc),
+            Duration = 60
+        };
+
+        var prospect = new ClientDirectoryItem
+        {
+            PostalCode = "E1 1AA",
+            StreetName1 = "1 High Street",
+            Town = "London"
+        };
+
+        profiles.Setup(p => p.ListActiveAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new[] { MakeAdviserProfile(id: "adv-1") });
+
+        travelClient.Setup(t => t.EvaluateAsync(It.IsAny<LocationTravelCoverageRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(MakeSuccessfulCoverage(correlationId: "adv-1", travelMinutes: 35));
+
+        var (poolResult, error) = await sut.BuildAsync(query, prospect, CancellationToken.None);
+
+        Assert.Null(error);
+        var candidate = poolResult.TravelByAdviserId["adv-1"];
+        Assert.Equal(30, candidate.CompanyBufferMinutes);
+        Assert.Equal(30, candidate.Buffers.CompanyBufferMinutes);
+        Assert.Equal(65, candidate.Buffers.PreMeetingBufferMinutes);
+        Assert.Equal(30, candidate.Buffers.PostMeetingBufferMinutes);
+    }
+
     /// <summary>
     /// Remote meetings bypass Location entirely — no travel call is made.
     /// </summary>

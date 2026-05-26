@@ -22,8 +22,7 @@ internal static class BookingChangeRequestContext
         if (req.Headers.TryGetValues("Authorization", out var authValues))
             return authValues.FirstOrDefault();
 
-        return GetQueryValue(req.Url.Query, "token")
-            ?? GetQueryValue(req.Url.Query, "accessToken");
+        return GetQueryValue(req.Url.Query, "token");
     }
 
     public static async Task<Result<BookingChangeActorContext>> ValidateClientAsync(

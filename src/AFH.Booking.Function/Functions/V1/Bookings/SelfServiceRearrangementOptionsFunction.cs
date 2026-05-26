@@ -26,7 +26,7 @@ public sealed class SelfServiceRearrangementOptionsFunction
     [BookingOpenApiOperation(
         "Self-Service Bookings",
         "Get rearrangement options by secure client token",
-        Description = "Client-facing rearrangement options endpoint. Frontends must call this self-service route for client journeys, not internal/admin rearrangement routes. Provide the opaque client access token as the `token` query value; `accessToken` is also accepted as an alias. Invalid or expired tokens return 401. A valid token for a different booking returns 403. All returned slot times remain UTC.",
+        Description = "Client-facing rearrangement options endpoint. Frontends must call this self-service route for client journeys, not internal/admin rearrangement routes. Provide the opaque client access token as the `token` query value. Invalid or expired tokens return 401. A valid token for a different booking returns 403. All returned slot times remain UTC.",
         RequestBodyType = typeof(RearrangementOptionsRequest),
         RequestBodyRequired = false,
         ResponseType = typeof(RearrangementOptionsResponse),
@@ -40,7 +40,6 @@ public sealed class SelfServiceRearrangementOptionsFunction
                              }
                              """)]
     [BookingOpenApiQueryParameter("token", "string", Description = "Opaque client access token from the secure self-service link. Use this query parameter for the client self-service journey.", Example = "opaque-client-token")]
-    [BookingOpenApiQueryParameter("accessToken", "string", Description = "Alias for `token`. Supported for clients that already use this query name.", Example = "opaque-client-token")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/self-service/bookings/{bookingId}/rearrangement/options")]
         HttpRequestData req,

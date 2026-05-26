@@ -142,13 +142,9 @@ public class BookingOpenApiDocumentFactoryTests
         var tokenParameter = viewGet["parameters"]!.AsArray()
             .Select(x => x!.AsObject())
             .Single(x => x["name"]!.GetValue<string>() == "token");
-        var accessTokenParameter = viewGet["parameters"]!.AsArray()
-            .Select(x => x!.AsObject())
-            .Single(x => x["name"]!.GetValue<string>() == "accessToken");
-
         Assert.Equal("query", tokenParameter["in"]!.GetValue<string>());
         Assert.Equal("opaque-client-token", tokenParameter["example"]!.GetValue<string>());
-        Assert.Contains("Alias", accessTokenParameter["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(viewGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "accessToken");
 
         var viewExample = viewGet["responses"]!["200"]!["content"]!["application/json"]!["example"]!.AsObject();
         var viewExampleData = viewExample["data"]!.AsObject();

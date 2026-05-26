@@ -35,7 +35,7 @@
 
 ## Client Self-Service Booking Routes
 - Client self-service journeys must call the `/api/v1/self-service/bookings/{bookingId}` routes, not the internal/admin booking routes.
-- The secure client access token is opaque and server-validated. For frontend links, pass it as the `token` query string value. `accessToken` is also accepted as an alias.
+- The secure client access token is opaque and server-validated. For frontend links, pass it as the `token` query string value.
 - Invalid, missing, or expired client tokens return `401`. A valid token for a different booking returns `403`.
 - Implemented Sprint 2 self-service routes:
   - `GET /api/v1/self-service/bookings/{bookingId}?token={token}` views client-facing booking details.

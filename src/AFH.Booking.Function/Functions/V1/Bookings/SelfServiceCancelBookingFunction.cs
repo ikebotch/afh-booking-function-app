@@ -26,7 +26,7 @@ public sealed class SelfServiceCancelBookingFunction
     [BookingOpenApiOperation(
         "Self-Service Bookings",
         "Cancel booking by secure client token",
-        Description = "Client-facing cancellation endpoint. Frontends must call this self-service route for client journeys, not internal/admin cancellation routes. Provide the opaque client access token as the `token` query value; `accessToken` is also accepted as an alias. Invalid or expired tokens return 401. A valid token for a different booking returns 403.",
+        Description = "Client-facing cancellation endpoint. Frontends must call this self-service route for client journeys, not internal/admin cancellation routes. Provide the opaque client access token as the `token` query value. Invalid or expired tokens return 401. A valid token for a different booking returns 403.",
         RequestBodyType = typeof(CancelBookingRequest),
         RequestBodyRequired = false,
         ResponseType = typeof(CancelBookingResponse),
@@ -46,7 +46,6 @@ public sealed class SelfServiceCancelBookingFunction
                               }
                               """)]
     [BookingOpenApiQueryParameter("token", "string", Description = "Opaque client access token from the secure self-service link. Use this query parameter for the client self-service journey.", Example = "opaque-client-token")]
-    [BookingOpenApiQueryParameter("accessToken", "string", Description = "Alias for `token`. Supported for clients that already use this query name.", Example = "opaque-client-token")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/self-service/bookings/{bookingId}/cancel")]
         HttpRequestData req,

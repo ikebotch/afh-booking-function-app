@@ -1,5 +1,7 @@
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Booking.Domain.Options;
+using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Application.Bookings;
 
@@ -8,15 +10,21 @@ public sealed class BookingDetailsService : IBookingDetailsService
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
+    private readonly IBookingTokenService _tokenService;
+    private readonly NotificationsOptions _notificationOptions;
 
     public BookingDetailsService(
         IBookingHoldRepository holds,
         IBookingSlotRepository slots,
-        IBookingTransactionRepository transactions)
+        IBookingTransactionRepository transactions,
+        IBookingTokenService tokenService,
+        IOptions<NotificationsOptions> notificationOptions)
     {
         _holds = holds;
         _slots = slots;
         _transactions = transactions;
+        _tokenService = tokenService;
+        _notificationOptions = notificationOptions.Value;
     }
 
     public async Task<Result<BookingDetailsResponse>> HandleAsync(GetBookingDetailsQuery query, CancellationToken ct)
@@ -51,6 +59,8 @@ public sealed class BookingDetailsService : IBookingDetailsService
                 Errors.Conflict);
         }
 
+        var links = await BuildSelfServiceLinksAsync(hold.Id, ct);
+
         var response = new BookingDetailsResponse
         {
             BookingId = hold.Id,
@@ -67,9 +77,20 @@ public sealed class BookingDetailsService : IBookingDetailsService
             Status = hold.Status.ToString(),
             ConfirmedUtc = hold.ConfirmedUtc,
             CancelledUtc = hold.CancelledUtc,
-            CancelReason = hold.CancelReason
+            CancelReason = hold.CancelReason,
+            ViewBookingUrl = links?.ViewBookingUrl,
+            CancelBookingUrl = links?.CancelBookingUrl,
+            RescheduleBookingUrl = links?.RescheduleBookingUrl
         };
 
         return Result<BookingDetailsResponse>.Ok(response);
+    }
+
+    private async Task<BookingSelfServiceLinks?> BuildSelfServiceLinksAsync(string bookingId, CancellationToken ct)
+    {
+        var tokenResult = await _tokenService.GenerateClientAccessTokenAsync(bookingId, ct);
+        return tokenResult.IsSuccess
+            ? BookingSelfServiceLinkBuilder.Build(_notificationOptions.ClientPortalBaseUrl, bookingId, tokenResult.Value)
+            : null;
     }
 }

@@ -1,3 +1,5 @@
+using AFH.Booking.Application.Models.Bookings;
+
 namespace AFH.Booking.Application.Models.Notifications;
 
 public sealed record NotificationDispatchRequest(
@@ -8,4 +10,4 @@ public sealed record NotificationDispatchRequest(
     bool SendEmail,
     string? LifecycleEventId = null,
     string? CorrelationId = null,
-    string? ClientSelfServiceToken = null);
+    BookingSelfServiceLinks? SelfServiceLinks = null);

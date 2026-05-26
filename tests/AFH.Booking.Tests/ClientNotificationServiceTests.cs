@@ -94,8 +94,7 @@ public sealed class ClientNotificationServiceTests
             Options.Create(new NotificationsOptions
             {
                 EmailEnabled = true,
-                SmsEnabled = false,
-                ClientPortalBaseUrl = "https://client.example/app/"
+                SmsEnabled = false
             }),
             NullLogger<ClientNotificationService>.Instance);
 
@@ -106,7 +105,10 @@ public sealed class ClientNotificationServiceTests
                 Message: "Your appointment is confirmed.",
                 SendSms: false,
                 SendEmail: true,
-                ClientSelfServiceToken: "opaque+/= token"),
+                SelfServiceLinks: new BookingSelfServiceLinks(
+                    "https://client.example/app/bookings/hold-1?token=opaque%2B%2F%3D%20token",
+                    "https://client.example/app/bookings/hold-1/cancel?token=opaque%2B%2F%3D%20token",
+                    "https://client.example/app/bookings/hold-1/reschedule?token=opaque%2B%2F%3D%20token")),
             CancellationToken.None);
 
         Assert.NotNull(capturedMessage);

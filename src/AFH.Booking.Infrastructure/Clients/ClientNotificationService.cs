@@ -93,20 +93,6 @@ public sealed class ClientNotificationService : IClientNotificationService, INot
         if (string.IsNullOrWhiteSpace(clientDisplayName))
             clientDisplayName = null;
 
-        string? viewUrl = null;
-        string? cancelUrl = null;
-        string? rescheduleUrl = null;
-
-        if (!string.IsNullOrWhiteSpace(request.ClientSelfServiceToken) && !string.IsNullOrWhiteSpace(_options.ClientPortalBaseUrl))
-        {
-            var baseUrl = _options.ClientPortalBaseUrl.TrimEnd('/');
-            var bookingId = Uri.EscapeDataString(request.BookingId);
-            var token = Uri.EscapeDataString(request.ClientSelfServiceToken);
-            viewUrl = $"{baseUrl}/bookings/{bookingId}?token={token}";
-            cancelUrl = $"{baseUrl}/bookings/{bookingId}/cancel?token={token}";
-            rescheduleUrl = $"{baseUrl}/bookings/{bookingId}/reschedule?token={token}";
-        }
-
         var emailTemplate = BookingNotificationEmailTemplate.Build(
             eventType: request.EventType,
             clientDisplayName: clientDisplayName,
@@ -116,9 +102,9 @@ public sealed class ClientNotificationService : IClientNotificationService, INot
             timezoneId: tx.Timezone,
             isRemote: tx.IsRemote,
             customMessage: request.Message,
-            viewUrl: viewUrl,
-            cancelUrl: cancelUrl,
-            rescheduleUrl: rescheduleUrl);
+            viewUrl: request.SelfServiceLinks?.ViewBookingUrl,
+            cancelUrl: request.SelfServiceLinks?.CancelBookingUrl,
+            rescheduleUrl: request.SelfServiceLinks?.RescheduleBookingUrl);
 
         var smsStatus = request.SendSms ? "Pending" : "Skipped";
         var emailStatus = request.SendEmail ? "Pending" : "Skipped";

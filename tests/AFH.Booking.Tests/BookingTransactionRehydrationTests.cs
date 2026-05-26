@@ -11,10 +11,12 @@ using AFH.Booking.Application.Holds;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Common;
+using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Tests;
 
@@ -123,7 +125,8 @@ public sealed class BookingTransactionRehydrationTests
             audit.Object,
             notifications.Object,
             holdWindowFactory.Object,
-            tokenService.Object
+            tokenService.Object,
+            Options.Create(new NotificationsOptions { ClientPortalBaseUrl = "https://client.example" })
         );
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = "hold-1" }, CancellationToken.None);

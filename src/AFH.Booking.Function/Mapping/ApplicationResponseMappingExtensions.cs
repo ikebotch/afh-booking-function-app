@@ -89,7 +89,10 @@ public static class ApplicationResponseMappingExtensions
             Status = response.Status,
             ConfirmedUtc = AsUtc(response.ConfirmedUtc),
             CancelledUtc = AsUtc(response.CancelledUtc),
-            CancelReason = response.CancelReason
+            CancelReason = response.CancelReason,
+            ViewBookingUrl = response.ViewBookingUrl,
+            CancelBookingUrl = response.CancelBookingUrl,
+            RescheduleBookingUrl = response.RescheduleBookingUrl
         };
 
     public static ContractResponses.RearrangeBookingResponse ToContract(this AppBookings.RearrangeBookingResponse response)

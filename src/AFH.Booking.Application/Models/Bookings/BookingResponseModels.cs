@@ -58,6 +58,9 @@ public sealed class BookingDetailsResponse
     public DateTime? ConfirmedUtc { get; init; }
     public DateTime? CancelledUtc { get; init; }
     public string? CancelReason { get; init; }
+    public string? ViewBookingUrl { get; init; }
+    public string? CancelBookingUrl { get; init; }
+    public string? RescheduleBookingUrl { get; init; }
 }
 
 public sealed class RearrangeBookingResponse

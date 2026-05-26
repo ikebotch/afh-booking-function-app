@@ -5,9 +5,12 @@ using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
+using AFH.Booking.Domain.Options;
+using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Application.Holds;
 
@@ -27,6 +30,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     private readonly INotificationService _notifications;
     private readonly IHoldWindowFactory _holdWindowFactory;
     private readonly IBookingTokenService _tokenService;
+    private readonly NotificationsOptions _notificationOptions;
 
     public ConfirmBookingService(
         IBookingHoldRepository holds,
@@ -42,7 +46,8 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         ILifecycleAuditService audit,
         INotificationService notifications,
         IHoldWindowFactory holdWindowFactory,
-        IBookingTokenService tokenService)
+        IBookingTokenService tokenService,
+        IOptions<NotificationsOptions> notificationOptions)
     {
         _holds = holds;
         _slots = slots;
@@ -58,6 +63,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         _notifications = notifications;
         _holdWindowFactory = holdWindowFactory;
         _tokenService = tokenService;
+        _notificationOptions = notificationOptions.Value;
     }
 
     public async Task<Result<ConfirmBookingResponse>> HandleAsync(
@@ -341,7 +347,9 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         try
         {
             var tokenResult = await _tokenService.GenerateClientAccessTokenAsync(bookingId, ct);
-            var token = tokenResult.IsSuccess ? tokenResult.Value : null;
+            var links = tokenResult.IsSuccess
+                ? BookingSelfServiceLinkBuilder.Build(_notificationOptions.ClientPortalBaseUrl, bookingId, tokenResult.Value)
+                : null;
 
             await _notifications.SendBookingNotificationAsync(
                 new NotificationDispatchRequest(
@@ -352,7 +360,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                     true,
                     eventId,
                     null,
-                    token),
+                    links),
                 ct);
         }
         catch (Exception ex)

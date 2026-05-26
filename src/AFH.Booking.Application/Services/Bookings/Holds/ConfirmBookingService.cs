@@ -26,6 +26,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     private readonly ILifecycleAuditService _audit;
     private readonly INotificationService _notifications;
     private readonly IHoldWindowFactory _holdWindowFactory;
+    private readonly IBookingTokenService _tokenService;
 
     public ConfirmBookingService(
         IBookingHoldRepository holds,
@@ -40,7 +41,8 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         ISelectedSlotRouteTimeGuard routeTimeGuard,
         ILifecycleAuditService audit,
         INotificationService notifications,
-        IHoldWindowFactory holdWindowFactory)
+        IHoldWindowFactory holdWindowFactory,
+        IBookingTokenService tokenService)
     {
         _holds = holds;
         _slots = slots;
@@ -55,6 +57,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         _audit = audit;
         _notifications = notifications;
         _holdWindowFactory = holdWindowFactory;
+        _tokenService = tokenService;
     }
 
     public async Task<Result<ConfirmBookingResponse>> HandleAsync(
@@ -337,6 +340,9 @@ public sealed class ConfirmBookingService : IConfirmBookingService
 
         try
         {
+            var tokenResult = await _tokenService.GenerateClientAccessTokenAsync(bookingId, ct);
+            var token = tokenResult.IsSuccess ? tokenResult.Value : null;
+
             await _notifications.SendBookingNotificationAsync(
                 new NotificationDispatchRequest(
                     bookingId,
@@ -345,7 +351,8 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                     true,
                     true,
                     eventId,
-                    null),
+                    null,
+                    token),
                 ct);
         }
         catch (Exception ex)

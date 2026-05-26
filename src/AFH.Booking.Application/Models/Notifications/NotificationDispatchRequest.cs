@@ -7,4 +7,5 @@ public sealed record NotificationDispatchRequest(
     bool SendSms,
     bool SendEmail,
     string? LifecycleEventId = null,
-    string? CorrelationId = null);
+    string? CorrelationId = null,
+    string? ClientSelfServiceToken = null);

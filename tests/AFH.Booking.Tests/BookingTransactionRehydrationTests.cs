@@ -2,6 +2,7 @@ using AFH.Booking.Application.EmailTemplates;
 using Moq;
 
 ﻿using AFH.Booking.Application.Abstractions.Governance;
+using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Bookings;
@@ -103,6 +104,11 @@ public sealed class BookingTransactionRehydrationTests
                 EmailStatus = "Skipped", ProviderMessageId = "p-1", CreatedUtc = now
             });
 
+        var tokenService = new Mock<IBookingTokenService>();
+        tokenService
+            .Setup(t => t.GenerateClientAccessTokenAsync("hold-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<string>.Ok("client-token"));
+
         var sut = new ConfirmBookingService(
             holdRepo,
             slotRepo,
@@ -116,7 +122,8 @@ public sealed class BookingTransactionRehydrationTests
             routeTimeGuard.Object,
             audit.Object,
             notifications.Object,
-            holdWindowFactory.Object
+            holdWindowFactory.Object,
+            tokenService.Object
         );
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = "hold-1" }, CancellationToken.None);

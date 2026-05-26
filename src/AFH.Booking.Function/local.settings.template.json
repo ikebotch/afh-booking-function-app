@@ -65,6 +65,7 @@
     "Notifications:SmsSenderId": "AFH",
     "Notifications:EmailEnabled": "true",
     "Notifications:EmailProviderName": "Composed",
+    "Notifications:ClientPortalBaseUrl": "https://booking.example",
     "ApprovalRouting:TargetType": "Role",
     "ApprovalRouting:TargetValue": "booking-approvers",
     "ApprovalRouting:DisplayName": "Booking Approvers",

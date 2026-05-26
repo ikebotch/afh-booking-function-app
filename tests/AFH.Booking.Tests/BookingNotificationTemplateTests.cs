@@ -17,7 +17,10 @@ public sealed class BookingNotificationTemplateTests
             endUtc: new DateTime(2026, 03, 26, 10, 0, 0, DateTimeKind.Utc),
             timezoneId: "Europe/London",
             isRemote: true,
-            customMessage: "Please contact us if you need help rearranging.");
+            customMessage: "Please contact us if you need help rearranging.",
+            viewUrl: "https://client.example/bookings/booking-1?token=token",
+            cancelUrl: "https://client.example/bookings/booking-1/cancel?token=token",
+            rescheduleUrl: "https://client.example/bookings/booking-1/reschedule?token=token");
 
         Assert.Contains("<html", template.HtmlBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<html", template.TextBody, StringComparison.OrdinalIgnoreCase);
@@ -26,6 +29,12 @@ public sealed class BookingNotificationTemplateTests
         Assert.Contains("Appointment Cancelled", template.Subject);
         Assert.Contains("Please contact us if you need help rearranging.", template.TextBody);
         Assert.Contains("Meeting type: Remote meeting", template.CalendarDescription);
+        Assert.Contains("View: https://client.example/bookings/booking-1?token=token", template.TextBody);
+        Assert.Contains("Cancel: https://client.example/bookings/booking-1/cancel?token=token", template.TextBody);
+        Assert.Contains("Reschedule: https://client.example/bookings/booking-1/reschedule?token=token", template.TextBody);
+        Assert.Contains("View Booking", template.HtmlBody);
+        Assert.Contains("Reschedule", template.HtmlBody);
+        Assert.Contains("Cancel", template.HtmlBody);
     }
 
     [Fact]

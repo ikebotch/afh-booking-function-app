@@ -11,4 +11,6 @@ public sealed class NotificationsOptions
 
     public bool EmailEnabled { get; set; }
     public string? EmailProviderName { get; set; }
+
+    public string? ClientPortalBaseUrl { get; set; }
 }

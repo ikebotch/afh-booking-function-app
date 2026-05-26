@@ -94,25 +94,35 @@ public sealed class ClientNotificationServiceTests
             Options.Create(new NotificationsOptions
             {
                 EmailEnabled = true,
-                SmsEnabled = false
+                SmsEnabled = false,
+                ClientPortalBaseUrl = "https://client.example/app/"
             }),
             NullLogger<ClientNotificationService>.Instance);
 
         var response = await service.SendBookingNotificationAsync(
-            bookingId: "hold-1",
-            eventType: "Confirmed",
-            message: "Your appointment is confirmed.",
-            sendSms: false,
-            sendEmail: true,
-            ct: CancellationToken.None);
+            new NotificationDispatchRequest(
+                BookingId: "hold-1",
+                EventType: "Confirmed",
+                Message: "Your appointment is confirmed.",
+                SendSms: false,
+                SendEmail: true,
+                ClientSelfServiceToken: "opaque+/= token"),
+            CancellationToken.None);
 
         Assert.NotNull(capturedMessage);
         Assert.Contains("<html", capturedMessage!.HtmlBody, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<html", capturedMessage.TextBody, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("jane@example.com", capturedMessage.RecipientEmail);
+        Assert.Contains("https://client.example/app/bookings/hold-1?token=opaque%2B%2F%3D%20token", capturedMessage.TextBody);
+        Assert.Contains("https://client.example/app/bookings/hold-1/cancel?token=opaque%2B%2F%3D%20token", capturedMessage.TextBody);
+        Assert.Contains("https://client.example/app/bookings/hold-1/reschedule?token=opaque%2B%2F%3D%20token", capturedMessage.TextBody);
+        Assert.Contains("View Booking", capturedMessage.HtmlBody);
+        Assert.Contains("Reschedule", capturedMessage.HtmlBody);
+        Assert.Contains("Cancel", capturedMessage.HtmlBody);
 
         Assert.NotNull(persistedRecord);
         Assert.DoesNotContain("<html", persistedRecord!.MessageBody ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("https://client.example/app/bookings/hold-1?token=opaque%2B%2F%3D%20token", persistedRecord.MessageBody ?? string.Empty);
         Assert.Equal("Sent", response.EmailStatus);
     }
 

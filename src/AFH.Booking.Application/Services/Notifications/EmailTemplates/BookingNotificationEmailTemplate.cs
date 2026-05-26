@@ -12,7 +12,10 @@ public static class BookingNotificationEmailTemplate
         DateTime? endUtc,
         string? timezoneId,
         bool isRemote,
-        string? customMessage = null)
+        string? customMessage = null,
+        string? viewUrl = null,
+        string? cancelUrl = null,
+        string? rescheduleUrl = null)
     {
         var safeEventType = string.IsNullOrWhiteSpace(eventType) ? "Update" : eventType.Trim();
         var heading = GetHeading(safeEventType);
@@ -27,6 +30,17 @@ public static class BookingNotificationEmailTemplate
         var note = string.IsNullOrWhiteSpace(customMessage)
             ? "You can review the details in the booking portal."
             : customMessage.Trim();
+        var hasSelfServiceLinks = HasSelfServiceLinks(viewUrl, cancelUrl, rescheduleUrl);
+
+        var textLinks = hasSelfServiceLinks
+            ? string.Join(Environment.NewLine, [
+                string.Empty,
+                "Manage your booking:",
+                $"- View: {viewUrl}",
+                $"- Cancel: {cancelUrl}",
+                $"- Reschedule: {rescheduleUrl}"
+              ])
+            : string.Empty;
 
         var subject = $"AFH Booking: {heading}";
         var textBody = string.Join(
@@ -40,6 +54,7 @@ public static class BookingNotificationEmailTemplate
                 $"Meeting type: {locationLine}",
                 string.Empty,
                 note,
+                textLinks,
                 string.Empty,
                 "This is an automated AFH booking notification."
             ]);
@@ -51,8 +66,19 @@ public static class BookingNotificationEmailTemplate
                 $"When: {whenLine}",
                 $"Adviser: {adviser}",
                 $"Meeting type: {locationLine}",
-                $"Note: {note}"
+                $"Note: {note}",
+                textLinks
             ]);
+
+        var htmlLinks = hasSelfServiceLinks
+            ? $@"
+                <div style=""margin:24px 0 0;padding:16px;background:#ffffff;border:1px solid #cbd5e1;border-radius:8px;text-align:center;"">
+                  <p style=""margin:0 0 12px;font-size:14px;color:#475569;font-weight:600;"">Manage your appointment</p>
+                  <a href=""{Escape(viewUrl)}"" style=""display:inline-block;padding:10px 20px;margin:0 4px 8px;background:{accent};color:#ffffff;text-decoration:none;border-radius:6px;font-size:14px;font-weight:500;"">View Booking</a>
+                  <a href=""{Escape(rescheduleUrl)}"" style=""display:inline-block;padding:10px 20px;margin:0 4px 8px;background:#f1f5f9;color:#334155;text-decoration:none;border-radius:6px;font-size:14px;font-weight:500;border:1px solid #cbd5e1;"">Reschedule</a>
+                  <a href=""{Escape(cancelUrl)}"" style=""display:inline-block;padding:10px 20px;margin:0 4px 8px;background:#f1f5f9;color:#b42318;text-decoration:none;border-radius:6px;font-size:14px;font-weight:500;border:1px solid #cbd5e1;"">Cancel</a>
+                </div>"
+            : string.Empty;
 
         var htmlBody = $@"
 <!doctype html>
@@ -100,6 +126,7 @@ public static class BookingNotificationEmailTemplate
                 <div style=""margin:18px 0 0;padding:14px 16px;background:#eef6ff;border-left:4px solid {accent};border-radius:8px;font-size:14px;line-height:1.6;color:#1e293b;"">
                   {Escape(note)}
                 </div>
+                {htmlLinks}
               </td>
             </tr>
             <tr>
@@ -158,6 +185,11 @@ public static class BookingNotificationEmailTemplate
 
     private static string FormatUtc(DateTime utc)
         => utc.ToUniversalTime().ToString("ddd dd MMM yyyy HH:mm", CultureInfo.InvariantCulture) + " UTC";
+
+    private static bool HasSelfServiceLinks(string? viewUrl, string? cancelUrl, string? rescheduleUrl)
+        => !string.IsNullOrWhiteSpace(viewUrl) &&
+           !string.IsNullOrWhiteSpace(cancelUrl) &&
+           !string.IsNullOrWhiteSpace(rescheduleUrl);
 
     private static string Escape(string? value)
     {

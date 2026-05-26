@@ -17,7 +17,9 @@ internal sealed class BookingOpenApiOperationAttribute : Attribute
     public string? HttpMethod { get; init; }
     public Type? RequestBodyType { get; init; }
     public bool RequestBodyRequired { get; init; } = true;
+    public string? RequestExampleJson { get; init; }
     public Type? ResponseType { get; init; }
+    public string? ResponseExampleJson { get; init; }
     public HttpStatusCode SuccessStatusCode { get; init; } = HttpStatusCode.OK;
 }
 
@@ -46,6 +48,7 @@ internal sealed class BookingOpenApiQueryParameterAttribute : Attribute
     public bool IsRequired { get; init; }
     public string? Description { get; init; }
     public string? Format { get; init; }
+    public string? Example { get; init; }
 }
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]

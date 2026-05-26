@@ -119,4 +119,55 @@ public class BookingOpenApiDocumentFactoryTests
 
         Assert.Equal("#/components/schemas/ApiResponseOfBookingDetailsResponse", successSchemaRef);
     }
+
+    [Fact]
+    public void CreateOpenApiJson_SelfServiceRoutesDocumentTokenContractAndExamples()
+    {
+        var json = BookingOpenApiDocumentFactory.CreateOpenApiJson(new Uri("https://localhost/api/openapi/v1.json"));
+        var document = JsonNode.Parse(json)!.AsObject();
+        var paths = document["paths"]!.AsObject();
+        var schemas = document["components"]!["schemas"]!.AsObject();
+
+        var viewGet = paths["/v1/self-service/bookings/{bookingId}"]!["get"]!.AsObject();
+        var cancelPost = paths["/v1/self-service/bookings/{bookingId}/cancel"]!["post"]!.AsObject();
+        var optionsPost = paths["/v1/self-service/bookings/{bookingId}/rearrangement/options"]!["post"]!.AsObject();
+        var rearrangePost = paths["/v1/self-service/bookings/{bookingId}/rearrange"]!["post"]!.AsObject();
+
+        Assert.Equal("Self-Service Bookings", viewGet["tags"]![0]!.GetValue<string>());
+        Assert.Equal("View booking by secure client token", viewGet["summary"]!.GetValue<string>());
+        Assert.Contains("not the internal/admin booking details route", viewGet["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Invalid or expired tokens return 401", viewGet["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("different booking returns 403", viewGet["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+
+        var tokenParameter = viewGet["parameters"]!.AsArray()
+            .Select(x => x!.AsObject())
+            .Single(x => x["name"]!.GetValue<string>() == "token");
+        var accessTokenParameter = viewGet["parameters"]!.AsArray()
+            .Select(x => x!.AsObject())
+            .Single(x => x["name"]!.GetValue<string>() == "accessToken");
+
+        Assert.Equal("query", tokenParameter["in"]!.GetValue<string>());
+        Assert.Equal("opaque-client-token", tokenParameter["example"]!.GetValue<string>());
+        Assert.Contains("Alias", accessTokenParameter["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+
+        var viewExample = viewGet["responses"]!["200"]!["content"]!["application/json"]!["example"]!.AsObject();
+        var viewExampleData = viewExample["data"]!.AsObject();
+        Assert.True(viewExampleData.ContainsKey("viewBookingUrl"));
+        Assert.True(viewExampleData.ContainsKey("cancelBookingUrl"));
+        Assert.True(viewExampleData.ContainsKey("rescheduleBookingUrl"));
+
+        Assert.Equal("#/components/schemas/CancelBookingRequest", cancelPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+        Assert.False(cancelPost["requestBody"]!["required"]!.GetValue<bool>());
+        Assert.Equal("#/components/schemas/RearrangementOptionsRequest", optionsPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+        Assert.Equal("#/components/schemas/RearrangeBookingRequest", rearrangePost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+        Assert.Equal("CLIENT_RESCHEDULE", rearrangePost["requestBody"]!["content"]!["application/json"]!["example"]!["reasonCode"]!.GetValue<string>());
+        Assert.Contains("old token must not be reused", rearrangePost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("missing, invalid, or expired", rearrangePost["responses"]!["401"]!["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("does not match the route booking", rearrangePost["responses"]!["403"]!["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+
+        var bookingDetailsProperties = schemas["BookingDetailsResponse"]!["properties"]!.AsObject();
+        Assert.True(bookingDetailsProperties.ContainsKey("viewBookingUrl"));
+        Assert.True(bookingDetailsProperties.ContainsKey("cancelBookingUrl"));
+        Assert.True(bookingDetailsProperties.ContainsKey("rescheduleBookingUrl"));
+    }
 }

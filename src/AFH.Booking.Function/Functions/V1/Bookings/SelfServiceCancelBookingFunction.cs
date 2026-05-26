@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -7,7 +8,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
 
-[BookingOpenApiTag("Bookings")]
+[BookingOpenApiTag("Self-Service Bookings")]
 public sealed class SelfServiceCancelBookingFunction
 {
     private readonly IBookingChangeAccessService _accessService;
@@ -22,6 +23,30 @@ public sealed class SelfServiceCancelBookingFunction
     }
 
     [Function("Bookings_SelfServiceCancel")]
+    [BookingOpenApiOperation(
+        "Self-Service Bookings",
+        "Cancel booking by secure client token",
+        Description = "Client-facing cancellation endpoint. Frontends must call this self-service route for client journeys, not internal/admin cancellation routes. Provide the opaque client access token as the `token` query value; `accessToken` is also accepted as an alias. Invalid or expired tokens return 401. A valid token for a different booking returns 403.",
+        RequestBodyType = typeof(CancelBookingRequest),
+        RequestBodyRequired = false,
+        ResponseType = typeof(CancelBookingResponse),
+        RequestExampleJson = """
+                             {
+                               "reasonCode": "CLIENT_REQUEST",
+                               "reason": "No longer needed"
+                             }
+                             """,
+        ResponseExampleJson = """
+                              {
+                                "data": {
+                                  "bookingId": "booking-123",
+                                  "cancelledUtc": "2026-05-26T10:30:00Z",
+                                  "status": "Cancelled"
+                                }
+                              }
+                              """)]
+    [BookingOpenApiQueryParameter("token", "string", Description = "Opaque client access token from the secure self-service link. Use this query parameter for the client self-service journey.", Example = "opaque-client-token")]
+    [BookingOpenApiQueryParameter("accessToken", "string", Description = "Alias for `token`. Supported for clients that already use this query name.", Example = "opaque-client-token")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/self-service/bookings/{bookingId}/cancel")]
         HttpRequestData req,

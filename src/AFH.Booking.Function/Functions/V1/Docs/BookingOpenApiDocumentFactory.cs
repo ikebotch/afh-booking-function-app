@@ -3,6 +3,7 @@ using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Extensions.Http;
 using System.Reflection;
+using System.Text.Json.Nodes;
 
 namespace AFH.Booking.Function.Functions.V1.Docs;
 
@@ -83,7 +84,7 @@ internal static class BookingOpenApiDocumentFactory
                 var pathItem = (Dictionary<string, object>)pathItemObj;
                 var metadata = ResolveOperationMetadata(type, method);
 
-                foreach (var httpMethod in httpTrigger.Methods.Select(x => x.ToLowerInvariant()))
+                foreach (var httpMethod in (httpTrigger.Methods ?? []).Select(x => x.ToLowerInvariant()))
                 {
                     var operation = ResolveMetadataForHttpMethod(metadata, httpMethod);
                     var parameters = BuildParameters(route, method);
@@ -92,7 +93,10 @@ internal static class BookingOpenApiDocumentFactory
                         schemaTypes.Add(operation.RequestBodyType);
 
                     if (operation.ResponseType is not null)
+                    {
+                        schemaTypes.Add(operation.ResponseType);
                         schemaTypes.Add(GetSuccessEnvelopeType(operation.ResponseType));
+                    }
 
                     pathItem[httpMethod] = BuildOperation(httpMethod, operation, parameters);
                 }
@@ -122,15 +126,20 @@ internal static class BookingOpenApiDocumentFactory
 
         if (operation.RequestBodyType is not null && httpMethod is "post" or "put" or "patch")
         {
+            var media = new Dictionary<string, object>
+            {
+                ["schema"] = SchemaRef(operation.RequestBodyType)
+            };
+
+            if (TryParseJsonExample(operation.RequestExampleJson, out var requestExample))
+                media["example"] = requestExample;
+
             value["requestBody"] = new Dictionary<string, object>
             {
                 ["required"] = operation.RequestBodyRequired,
                 ["content"] = new Dictionary<string, object>
                 {
-                    ["application/json"] = new Dictionary<string, object>
-                    {
-                        ["schema"] = SchemaRef(operation.RequestBodyType)
-                    }
+                    ["application/json"] = media
                 }
             };
         }
@@ -144,24 +153,34 @@ internal static class BookingOpenApiDocumentFactory
         {
             [((int)operation.SuccessStatusCode).ToString()] = operation.ResponseType is null
                 ? new Dictionary<string, object> { ["description"] = "Success" }
-                : new Dictionary<string, object>
-                {
-                    ["description"] = "Success",
-                    ["content"] = new Dictionary<string, object>
-                    {
-                        ["application/json"] = new Dictionary<string, object>
-                        {
-                            ["schema"] = SchemaRef(GetSuccessEnvelopeType(operation.ResponseType))
-                        }
-                    }
-                }
+                : SuccessResponse(operation)
         };
 
-        responses["400"] = ProblemResponse();
-        responses["401"] = ProblemResponse();
-        responses["403"] = ProblemResponse();
-        responses["500"] = ProblemResponse();
+        responses["400"] = ProblemResponse("Bad request.");
+        responses["401"] = ProblemResponse("Unauthorized. For self-service endpoints, the client access token is missing, invalid, or expired.");
+        responses["403"] = ProblemResponse("Forbidden. For self-service endpoints, the token is valid but does not match the route booking.");
+        responses["500"] = ProblemResponse("Unexpected server error.");
         return responses;
+    }
+
+    private static Dictionary<string, object> SuccessResponse(BookingOpenApiOperationAttribute operation)
+    {
+        var media = new Dictionary<string, object>
+        {
+            ["schema"] = SchemaRef(GetSuccessEnvelopeType(operation.ResponseType!))
+        };
+
+        if (TryParseJsonExample(operation.ResponseExampleJson, out var responseExample))
+            media["example"] = responseExample;
+
+        return new Dictionary<string, object>
+        {
+            ["description"] = "Success",
+            ["content"] = new Dictionary<string, object>
+            {
+                ["application/json"] = media
+            }
+        };
     }
 
     private static IReadOnlyList<object> BuildParameters(string route, MethodInfo method)
@@ -197,6 +216,9 @@ internal static class BookingOpenApiDocumentFactory
 
             if (!string.IsNullOrWhiteSpace(query.Description))
                 parameter["description"] = query.Description!;
+
+            if (!string.IsNullOrWhiteSpace(query.Example))
+                parameter["example"] = query.Example!;
 
             parameters.Add(parameter);
         }
@@ -269,10 +291,20 @@ internal static class BookingOpenApiDocumentFactory
         return new string(buffer.ToArray()).Trim();
     }
 
-    private static Dictionary<string, object> ProblemResponse()
+    private static bool TryParseJsonExample(string? json, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? example)
+    {
+        example = null;
+        if (string.IsNullOrWhiteSpace(json))
+            return false;
+
+        example = JsonNode.Parse(json)?.Deserialize<object>();
+        return example is not null;
+    }
+
+    private static Dictionary<string, object> ProblemResponse(string description)
         => new()
         {
-            ["description"] = "Problem",
+            ["description"] = description,
             ["content"] = new Dictionary<string, object>
             {
                 ["application/json"] = new Dictionary<string, object>

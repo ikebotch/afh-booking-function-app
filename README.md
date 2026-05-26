@@ -33,6 +33,18 @@
 - Frontends should use the `/me` response for UX shaping only; Booking remains the source of truth for authorization and policy checks.
 - Configure Entra validation and role mapping with `DomainUserAuth:*` in `src/AFH.Booking.Functions/local.settings.template.json`.
 
+## Client Self-Service Booking Routes
+- Client self-service journeys must call the `/api/v1/self-service/bookings/{bookingId}` routes, not the internal/admin booking routes.
+- The secure client access token is opaque and server-validated. For frontend links, pass it as the `token` query string value. `accessToken` is also accepted as an alias.
+- Invalid, missing, or expired client tokens return `401`. A valid token for a different booking returns `403`.
+- Implemented Sprint 2 self-service routes:
+  - `GET /api/v1/self-service/bookings/{bookingId}?token={token}` views client-facing booking details.
+  - `POST /api/v1/self-service/bookings/{bookingId}/cancel?token={token}` cancels the booking for the client journey.
+  - `POST /api/v1/self-service/bookings/{bookingId}/rearrangement/options?token={token}` returns UTC rearrangement options.
+  - `POST /api/v1/self-service/bookings/{bookingId}/rearrange?token={token}` rearranges the booking from a selected slot.
+- Booking details responses include `viewBookingUrl`, `cancelBookingUrl`, and `rescheduleBookingUrl` when self-service links can be generated.
+- After rearrange, the replacement booking requires its own new token. Do not reuse the old booking token for the new booking.
+
 ## Build And Test
 - `dotnet test AFH.BookingService.sln`
 - `tests/AFH.Booking.Tests` now covers the current lifecycle sequencing and governance paths in the active repo state.

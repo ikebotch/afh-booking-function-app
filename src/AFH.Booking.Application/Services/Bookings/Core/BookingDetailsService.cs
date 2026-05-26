@@ -60,6 +60,7 @@ public sealed class BookingDetailsService : IBookingDetailsService
         }
 
         var links = await BuildSelfServiceLinksAsync(hold.Id, ct);
+        var canUseActionLinks = BookingSelfServiceStatusRules.CanUseActionLinks(hold.Status);
 
         var response = new BookingDetailsResponse
         {
@@ -79,8 +80,8 @@ public sealed class BookingDetailsService : IBookingDetailsService
             CancelledUtc = hold.CancelledUtc,
             CancelReason = hold.CancelReason,
             ViewBookingUrl = links?.ViewBookingUrl,
-            CancelBookingUrl = links?.CancelBookingUrl,
-            RescheduleBookingUrl = links?.RescheduleBookingUrl
+            CancelBookingUrl = canUseActionLinks ? links?.CancelBookingUrl : null,
+            RescheduleBookingUrl = canUseActionLinks ? links?.RescheduleBookingUrl : null
         };
 
         return Result<BookingDetailsResponse>.Ok(response);

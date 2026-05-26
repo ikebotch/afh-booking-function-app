@@ -27,6 +27,36 @@ public sealed class SelfServiceFunctionTests
     }
 
     [Fact]
+    public async Task ViewBooking_GeneratedLinkEncodedToken_ValidatesDecodedToken()
+    {
+        var access = new StubAccessService();
+        var details = new StubBookingDetailsService();
+        var sut = new SelfServiceGetBookingDetailsFunction(access, details);
+        var request = TestHttpRequestData.Create(
+            new Uri("https://localhost/api/v1/self-service/bookings/booking-1?token=opaque%2B%2F%3D%20token"));
+
+        var response = await sut.Run(request, "booking-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("opaque+/= token", access.LastToken);
+    }
+
+    [Fact]
+    public async Task ViewBooking_AccessTokenAlias_ValidatesToken()
+    {
+        var access = new StubAccessService();
+        var details = new StubBookingDetailsService();
+        var sut = new SelfServiceGetBookingDetailsFunction(access, details);
+        var request = TestHttpRequestData.Create(
+            new Uri("https://localhost/api/v1/self-service/bookings/booking-1?accessToken=client-token"));
+
+        var response = await sut.Run(request, "booking-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("client-token", access.LastToken);
+    }
+
+    [Fact]
     public async Task ViewBooking_InvalidToken_ReturnsUnauthorizedAndDoesNotCallDetails()
     {
         var access = new StubAccessService(Result<BookingChangeActorContext>.Fail(

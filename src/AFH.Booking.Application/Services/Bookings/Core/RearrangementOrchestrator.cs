@@ -105,6 +105,10 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         if (hold is null)
             return Result<ExistingBookingContext>.NotFound($"Booking '{cmd.BookingId}' was not found.");
 
+        var actionable = BookingSelfServiceStatusRules.EnsureActionable(hold, "rearranged");
+        if (!actionable.IsSuccess)
+            return FailLike<ExistingBookingContext>(actionable);
+
         var slot = await _slots.GetAsync(hold.SlotId, ct);
         if (slot is null)
             return Result<ExistingBookingContext>.Fail(HttpStatusCode.Conflict, $"Old slot '{hold.SlotId}' was not found.", Errors.Conflict);

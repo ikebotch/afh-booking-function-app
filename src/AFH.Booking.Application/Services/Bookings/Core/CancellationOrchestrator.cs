@@ -61,7 +61,21 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
 
         var hold = holdResult.Value;
         if (hold.Status == BookingHoldStatus.Cancelled)
+        {
+            if (string.Equals(cmd.RequestedBy, LifecycleActors.Client, StringComparison.OrdinalIgnoreCase))
+            {
+                return Result<CancelBookingResponse>.Fail(
+                    HttpStatusCode.Conflict,
+                    $"Booking '{hold.Id}' is already cancelled.",
+                    Errors.Conflict);
+            }
+
             return OkResponse(hold, utcNow);
+        }
+
+        var actionable = BookingSelfServiceStatusRules.EnsureActionable(hold, "cancelled");
+        if (!actionable.IsSuccess)
+            return FailLike<CancelBookingResponse>(actionable);
 
         var contextResult = await LoadCancellationContextAsync(hold, ct);
         if (!contextResult.IsSuccess || contextResult.Value is null)

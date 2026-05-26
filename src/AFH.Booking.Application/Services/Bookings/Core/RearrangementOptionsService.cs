@@ -40,6 +40,15 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
         if (hold is null)
             return Result<RearrangementOptionsResponse>.NotFound($"Booking '{cmd.BookingId}' was not found.");
 
+        var actionable = BookingSelfServiceStatusRules.EnsureActionable(hold, "rearranged");
+        if (!actionable.IsSuccess)
+        {
+            return Result<RearrangementOptionsResponse>.Fail(
+                actionable.StatusCode,
+                actionable.ErrorMessage ?? "Booking cannot be rearranged.",
+                actionable.ErrorCode);
+        }
+
         var slot = await _slots.GetAsync(hold.SlotId, ct);
         if (slot is null)
         {

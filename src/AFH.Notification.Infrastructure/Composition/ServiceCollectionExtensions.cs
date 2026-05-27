@@ -27,13 +27,12 @@ public static class ServiceCollectionExtensions
 
         var connectionString = configuration.GetConnectionString("BookingDb")
             ?? configuration["Values:ConnectionStrings:BookingDb"]
-            ?? configuration["Values:BookingDb:ConnectionString"];
+            ?? configuration["ConnectionStrings:BookingDb"]
+            ?? configuration["Values:BookingDb:ConnectionString"]
+            ?? throw new InvalidOperationException("BookingDb connection string is not configured.");
 
-        if (!string.IsNullOrEmpty(connectionString))
-        {
-            services.AddDbContext<NotificationDbContext>(options =>
-                options.UseSqlServer(connectionString));
-        }
+        services.AddDbContext<NotificationDbContext>(options =>
+            options.UseSqlServer(connectionString));
 
         services.AddScoped<INotificationOutboxStore, NotificationOutboxStore>();
         AddQueuePublisher(services, configuration);

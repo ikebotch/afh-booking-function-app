@@ -1,7 +1,0 @@
-commit fa5cd7b672dc1df0d2f69605787ca91561bb784d
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 18:28:38 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 18:28:38 2026 +0100
-
-    docs(notification): document queue-backed notification settings #sprint7

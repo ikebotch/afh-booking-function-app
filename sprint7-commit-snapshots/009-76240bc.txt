@@ -1,7 +1,0 @@
-commit 76240bca017062a8d8dd178d7776f9077d1a8c7c
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 16:43:31 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 16:43:31 2026 +0100
-
-    feat(notification): send booking confirmation through notification boundary #5358 #sprint7

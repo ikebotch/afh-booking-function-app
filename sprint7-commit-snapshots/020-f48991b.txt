@@ -1,7 +1,0 @@
-commit f48991b4741de2b5957b930e90e68a5a69d5d0b7
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 17:45:57 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 17:45:57 2026 +0100
-
-    docs(notification): update sprint 7 notification architecture notes #sprint7

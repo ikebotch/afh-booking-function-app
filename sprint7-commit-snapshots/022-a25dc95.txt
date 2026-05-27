@@ -1,7 +1,0 @@
-commit a25dc95a8c213dc695cdb9ab29ab1e479973ea18
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 18:01:24 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 18:01:24 2026 +0100
-
-    feat(notification): add notification outbox persistence #sprint7

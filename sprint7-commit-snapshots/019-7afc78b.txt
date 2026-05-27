@@ -1,7 +1,0 @@
-commit 7afc78bd7d431e8d77ad194ebcb3b848e22d8fc6
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 17:42:25 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 17:42:25 2026 +0100
-
-    fix(notification): swap preview EF Core for stable Microsoft.Data.SqlClient #5365 #sprint7

@@ -1,7 +1,0 @@
-commit 59c660c14a0ee0b2a1b8ea5ddc8df0a02c309a2f
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 16:22:22 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 16:22:22 2026 +0100
-
-    feat(notification): add versioned booking confirmed template #5356 #sprint7

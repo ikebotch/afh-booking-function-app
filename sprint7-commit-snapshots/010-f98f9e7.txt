@@ -1,7 +1,0 @@
-commit f98f9e774d4305c17c3445fab8aa2797dfeacaa8
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 16:48:48 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 16:48:48 2026 +0100
-
-    refactor(notification): remove booking-specific notification enums #5358 #sprint7

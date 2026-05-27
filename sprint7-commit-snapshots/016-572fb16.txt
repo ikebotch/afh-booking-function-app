@@ -1,7 +1,0 @@
-commit 572fb162a094607f96723dfb626fecaae9010c1a
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 17:31:29 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 17:31:29 2026 +0100
-
-    feat(notification): add email bounceback processing #5364 #sprint7

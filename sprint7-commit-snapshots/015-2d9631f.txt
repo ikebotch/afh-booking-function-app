@@ -1,7 +1,0 @@
-commit 2d9631fcce1b6885eb42b9636e0d38ba68a65094
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 17:26:35 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 17:26:35 2026 +0100
-
-    refactor(notification): centralise booking notification publishing in lifecycle step #sprint7

@@ -1,7 +1,0 @@
-commit 03a428dca722bf3cba83a3a5a00b984f2ba77368
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 17:08:45 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 17:08:45 2026 +0100
-
-    feat(notification): send booking hold through notification boundary #sprint7

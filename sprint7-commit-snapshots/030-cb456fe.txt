@@ -1,7 +1,0 @@
-commit cb456fe43c70afd65e2676615fe5df5e4a2a905e
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 20:21:10 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 20:21:10 2026 +0100
-
-    feat(notification): add graph email delivery adapter #sprint7

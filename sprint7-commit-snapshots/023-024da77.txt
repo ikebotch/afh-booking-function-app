@@ -1,7 +1,0 @@
-commit 024da77e54730c400c4e48a58e149aab2693ba2e
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 18:06:37 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 18:06:37 2026 +0100
-
-    refactor(notification): use EF for notification outbox persistence #sprint7

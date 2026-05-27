@@ -1,7 +1,0 @@
-commit 5d9668310745a8a60560f525d1f20584a82cfe3a
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 18:55:36 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 19:27:49 2026 +0100
-
-    feat: introduce policy-based strategies for notification idempotency, routing, and templating to decouple business logic from core notification services.

@@ -1,7 +1,0 @@
-commit da1d4989651355033df90bded3a760936414fb02
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 16:26:33 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 16:26:33 2026 +0100
-
-    feat(notification): add versioned booking rescheduled template #5356 #sprint7

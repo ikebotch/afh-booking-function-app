@@ -1,7 +1,0 @@
-commit feb1d23794659b783f63e0ad4c935f960e3dd5e2
-Author:     ikebotch <ikebotch@gmail.com>
-AuthorDate: Wed May 27 16:28:56 2026 +0100
-Commit:     ikebotch <ikebotch@gmail.com>
-CommitDate: Wed May 27 16:28:56 2026 +0100
-
-    feat(notification): add versioned booking hold template #5356 #sprint7

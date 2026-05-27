@@ -104,7 +104,8 @@
 ## SQL Migration Note
 - Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.
 - Create and apply an EF migration from the infrastructure project before deploying to shared environments.
-- Notification outbox dispatch also requires applying `src/AFH.Notification.Infrastructure/Sql/notification-outbox.sql` before enabling the queued notification path.
+- `NotificationOutbox` schema is deployed through EF migrations for `NotificationDbContext`.
+- Do not manually maintain `notification-outbox.sql` as the source of truth.
 - Treat that migration as required infra work for this backend phase.
 - Current `NotificationOutboxStore` persistence tests depend on a local SQL Server instance; add CI-backed SQL integration coverage before production cutover.
 

@@ -8,7 +8,7 @@ public sealed class NotificationOutboxConfiguration : IEntityTypeConfiguration<N
 {
     public void Configure(EntityTypeBuilder<NotificationOutboxModel> builder)
     {
-        builder.ToTable("NotificationOutbox");
+        builder.ToTable("NotificationOutbox", "dbo");
         builder.HasKey(x => x.Id);
         
         builder.Property(x => x.SourceApplication)
@@ -37,6 +37,7 @@ public sealed class NotificationOutboxConfiguration : IEntityTypeConfiguration<N
             .IsRequired();
             
         builder.Property(x => x.AttemptCount)
+            .HasDefaultValue(0)
             .IsRequired();
             
         builder.Property(x => x.CreatedUtc)

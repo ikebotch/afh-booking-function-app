@@ -186,6 +186,47 @@ Manage your booking:
         Assert.Null(content.HtmlBody);
     }
 
+    [Fact]
+    public async Task RenderAsync_BookingCancelledVersionedTemplate_MatchesExistingGenericTextOutput()
+    {
+        var links = CreateLinks();
+        var existing = BookingNotificationEmailTemplate.Build(
+            eventType: "Cancelled",
+            clientDisplayName: "Jane Client",
+            adviserName: "Alex Adviser",
+            startUtc: new DateTime(2026, 03, 26, 9, 0, 0, DateTimeKind.Utc),
+            endUtc: new DateTime(2026, 03, 26, 10, 0, 0, DateTimeKind.Utc),
+            timezoneId: "Europe/London",
+            isRemote: true,
+            customMessage: "Please contact us if you need help rearranging.",
+            viewUrl: links.ViewBookingUrl,
+            cancelUrl: links.CancelBookingUrl,
+            rescheduleUrl: links.RescheduleBookingUrl);
+
+        var renderer = new NotificationTemplateRenderer();
+        var rendered = await renderer.RenderAsync(
+            NotificationRequested.BookingCancelled(
+                "booking-1",
+                new NotificationActor(NotificationActorType.Client, null, null, null),
+                [],
+                new Dictionary<string, string>
+                {
+                    ["greetingName"] = "Jane Client",
+                    ["whenLine"] = "Thu 26 Mar 2026 09:00 (Europe/London) to Thu 26 Mar 2026 10:00 (Europe/London)",
+                    ["adviserName"] = "Alex Adviser",
+                    ["locationLine"] = "Remote meeting",
+                    ["note"] = "Please contact us if you need help rearranging.",
+                    ["manageBookingLinks"] = BuildGenericManageLinks(links)
+                }),
+            CancellationToken.None);
+
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal(NotificationChannel.Email, content.Channel);
+        Assert.Equal(existing.Subject, content.Subject);
+        Assert.Equal(existing.TextBody, content.TextBody);
+        Assert.Null(content.HtmlBody);
+    }
+
     private static BookingSelfServiceLinks CreateLinks()
         => new(
             "https://client.example/bookings/booking-1?token=token",

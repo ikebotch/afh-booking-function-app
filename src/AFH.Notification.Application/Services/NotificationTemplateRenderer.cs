@@ -32,6 +32,7 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
         {
             NotificationType.BookingConfirmed => "Booking.booking-confirmed.v1.txt",
             NotificationType.BookingRescheduled => "Booking.booking-rescheduled.v1.txt",
+            NotificationType.BookingCancelled => "Booking.booking-cancelled.v1.txt",
             _ => throw new NotSupportedException($"Notification template '{notificationType}' is not supported yet.")
         };
 

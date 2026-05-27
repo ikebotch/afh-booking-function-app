@@ -1,0 +1,14 @@
+subject=AFH Booking: Appointment Cancelled
+channel=Email
+---
+Hello {{greetingName}},
+
+Your booking has been updated: Appointment Cancelled.
+When: {{whenLine}}
+Adviser: {{adviserName}}
+Meeting type: {{locationLine}}
+
+{{note}}
+{{manageBookingLinks}}
+
+This is an automated AFH booking notification.

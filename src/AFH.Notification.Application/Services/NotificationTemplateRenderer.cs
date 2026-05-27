@@ -13,10 +13,7 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
         NotificationRequested notification,
         CancellationToken ct)
     {
-        if (notification.Type != NotificationType.BookingConfirmed)
-            throw new NotSupportedException($"Notification template '{notification.Type}' is not supported yet.");
-
-        var template = await LoadTemplateAsync("Booking.booking-confirmed.v1.txt", ct);
+        var template = await LoadTemplateAsync(GetTemplateName(notification.Type), ct);
         var parsed = ParseTemplate(template);
         var body = ReplaceTokens(parsed.Body, notification.Data);
 
@@ -29,6 +26,14 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
                 body)
         ]);
     }
+
+    private static string GetTemplateName(NotificationType notificationType)
+        => notificationType switch
+        {
+            NotificationType.BookingConfirmed => "Booking.booking-confirmed.v1.txt",
+            NotificationType.BookingRescheduled => "Booking.booking-rescheduled.v1.txt",
+            _ => throw new NotSupportedException($"Notification template '{notificationType}' is not supported yet.")
+        };
 
     private static async Task<string> LoadTemplateAsync(string templateName, CancellationToken ct)
     {

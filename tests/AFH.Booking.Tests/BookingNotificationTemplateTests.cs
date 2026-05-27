@@ -145,11 +145,60 @@ Manage your booking:
         Assert.Null(content.HtmlBody);
     }
 
+    [Fact]
+    public async Task RenderAsync_BookingRescheduledVersionedTemplate_MatchesExistingGenericTextOutput()
+    {
+        var links = CreateLinks();
+        var existing = BookingNotificationEmailTemplate.Build(
+            eventType: "Rescheduled",
+            clientDisplayName: "Jane Client",
+            adviserName: "Alex Adviser",
+            startUtc: new DateTime(2026, 03, 26, 9, 0, 0, DateTimeKind.Utc),
+            endUtc: new DateTime(2026, 03, 26, 10, 0, 0, DateTimeKind.Utc),
+            timezoneId: "Europe/London",
+            isRemote: true,
+            customMessage: "Your booking has been moved to the selected time.",
+            viewUrl: links.ViewBookingUrl,
+            cancelUrl: links.CancelBookingUrl,
+            rescheduleUrl: links.RescheduleBookingUrl);
+
+        var renderer = new NotificationTemplateRenderer();
+        var rendered = await renderer.RenderAsync(
+            NotificationRequested.BookingRescheduled(
+                "booking-1",
+                new NotificationActor(NotificationActorType.Client, null, null, null),
+                [],
+                new Dictionary<string, string>
+                {
+                    ["greetingName"] = "Jane Client",
+                    ["whenLine"] = "Thu 26 Mar 2026 09:00 (Europe/London) to Thu 26 Mar 2026 10:00 (Europe/London)",
+                    ["adviserName"] = "Alex Adviser",
+                    ["locationLine"] = "Remote meeting",
+                    ["note"] = "Your booking has been moved to the selected time.",
+                    ["manageBookingLinks"] = BuildGenericManageLinks(links)
+                }),
+            CancellationToken.None);
+
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal(NotificationChannel.Email, content.Channel);
+        Assert.Equal(existing.Subject, content.Subject);
+        Assert.Equal(existing.TextBody, content.TextBody);
+        Assert.Null(content.HtmlBody);
+    }
+
     private static BookingSelfServiceLinks CreateLinks()
         => new(
             "https://client.example/bookings/booking-1?token=token",
             "https://client.example/bookings/booking-1/cancel?token=token",
             "https://client.example/bookings/booking-1/reschedule?token=token");
+
+    private static string BuildGenericManageLinks(BookingSelfServiceLinks links)
+        =>
+$@"
+Manage your booking:
+- View: {links.ViewBookingUrl}
+- Cancel: {links.CancelBookingUrl}
+- Reschedule: {links.RescheduleBookingUrl}";
 
     private static BookingTransaction CreateTransaction(DateTime now, bool isRemote) =>
         BookingTransaction.Rehydrate(

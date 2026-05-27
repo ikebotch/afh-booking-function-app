@@ -64,31 +64,29 @@
   - The function app identity or connection string must be allowed to create the queue if `CreateIfNotExistsAsync` remains enabled.
   - Built-in poison queue behavior exists through Azure Functions for retry-exhausted queue messages; invalid persisted payloads are marked `DeadLettered` by the trigger and should be monitored from `NotificationOutbox`.
   - If Azure enqueue succeeds but marking the outbox row `Queued` fails, the publisher throws and the row remains `Pending`; operations should repair/requeue those rows until a dedicated requeue function is added.
-- Queued email delivery is currently composed-only. `Notifications:Email:ProviderName=Composed` returns `NonProductionComposed` and logs a warning; any named production provider fails fast until a real adapter is wired.
-- Queued notification email delivery is architecture-ready but not production email cutover-ready. It is not production-ready until the Microsoft Graph email adapter is wired.
+- Queued email delivery sends via Microsoft Graph when `Notifications:Email:ProviderName=Graph` and valid Graph settings are configured.
+- `Notifications:Email:ProviderName=Composed` keeps the non-production composed behavior and returns `NonProductionComposed`.
+- Production deployment requires Key Vault/App Settings for Graph credentials and mailbox permissions for SendMail.
 - Contact-centre copies require `Notifications:Email:ContactCentreEmailAddress`.
 - Bounceback auditing currently persists `EmailBounceEvents` and correlates with the legacy `NotificationDispatches` model. Treat old dispatch correlation and new `NotificationOutbox` dispatch as parallel models until bounceback storage is migrated.
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
 
-## Notification Follow-Up: Microsoft Graph Email
-- Wire queued notification email delivery to Microsoft Graph before production cutover.
-- Add Notification-owned Graph email options:
+## Microsoft Graph Email Delivery
+- Configure queued notification email delivery with:
+  - `Notifications:Email:Enabled=true`
   - `Notifications:Email:ProviderName=Graph`
   - `Notifications:Email:Graph:UseManagedIdentity`
   - `Notifications:Email:Graph:TenantId`
   - `Notifications:Email:Graph:ClientId`
   - `Notifications:Email:Graph:ClientSecret`
   - `Notifications:Email:Graph:SenderMailbox`
-- Add `src/AFH.Notification.Infrastructure/Delivery/Email/Graph/GraphEmailDeliveryGateway.cs`.
-- Add `src/AFH.Notification.Infrastructure/Delivery/Email/Graph/GraphEmailOptions.cs`.
-- Prefer Managed Identity when `UseManagedIdentity=true`.
-- Use Key Vault/App Settings for secrets.
-- Do not commit secrets to source-controlled config.
-- Do not reuse Calendar/SharePoint Graph options unless a shared options contract is explicitly approved.
-- If `ProviderName=Graph`, actually send via Microsoft Graph.
-- If Graph configuration is missing, fail fast with a clear configuration error.
-- If `ProviderName=Composed`, retain current non-production composed behavior.
-- Add tests for missing Graph configuration, composed mode, Graph mode selection, and Graph send failure handling.
+- Prefer Managed Identity with `Notifications:Email:Graph:UseManagedIdentity=true`.
+- Use `ClientSecretCredential` only with `Notifications:Email:Graph:UseManagedIdentity=false`.
+- Secrets belong in Key Vault/App Settings only; do not commit real secrets to source-controlled configuration.
+- The Graph app registration or managed identity must have permission to send as/from `Notifications:Email:Graph:SenderMailbox`; deployment requires admin consent and the appropriate Microsoft Graph SendMail permissions/mailbox access.
+- Templates remain `.txt` only for now, so Graph sends plain text bodies. HTML/multipart delivery is intentionally out of scope.
+- Microsoft Graph `sendMail` returns `202 Accepted` without a provider message id. The service stores an internal provider correlation id as `ProviderMessageId` for tracing successful sends.
+- Because the Graph `ProviderMessageId` is internal rather than a Graph-generated message id, bounceback correlation remains limited until notification bounceback storage is migrated to use Graph/webhook metadata that can be matched to the internal correlation id.
 - Legacy direct Booking email paths remain during transition.
 
 ## SQL Migration Note

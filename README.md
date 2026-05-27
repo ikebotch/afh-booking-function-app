@@ -60,7 +60,7 @@
 - Old direct Booking email paths are still intentionally present for transition. Do not remove them until tests prove safe replacement.
 - Notification dispatch is now durable and queue-backed via Azure Storage Queues.
   - No Event Grid subscription is needed for sending; the queue trigger listens automatically.
-  - Requires `NotificationQueueQueueName` and `NotificationQueueConnectionString` app settings.
+  - Requires `NotificationQueue__QueueName` and `NotificationQueue__ConnectionString` app settings.
   - Built-in poison queue behavior exists through Azure Functions.
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
 

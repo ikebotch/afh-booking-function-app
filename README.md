@@ -57,8 +57,14 @@
 - Bouncebacks are provider feedback handled explicitly by Notification Infrastructure.
 - Contact-centre copy is a Booking routing policy evaluated through Notification policy interfaces, not hardcoded template logic.
 - Hold notifications are enabled; they should be configuration-gated before production if the business has not explicitly approved them.
-- Old direct Booking email paths are still intentionally present for transition. Do not remove them until tests prove safe replacement.
-- The notification system uses a hybrid dispatch model.
+- Both notification paths are intentionally active during the Sprint 7 transition.
+- New hybrid queued path:
+  - `BookingNotificationStep` -> `NotificationOutbox` -> Azure Queue message containing only `outboxId` -> `SendNotificationQueueTrigger` -> `NotificationService` -> `GraphEmailDeliveryGateway` -> `NotificationOutbox` status update.
+  - `NotificationOutbox` is the new hybrid queued dispatcher and its schema is deployed through EF migrations for `NotificationDbContext`.
+- Legacy direct Booking path:
+  - `ClientNotificationService` / Booking `INotificationService` -> `IEmailNotificationSender` -> `NotificationDispatches`.
+  - `NotificationDispatches` remains active for legacy direct notification audit and bounceback correlation. Do not drop it yet.
+- The new path uses a hybrid dispatch model.
   - SQL stores the full notification payload, processing state, idempotency key, and audit metadata in `NotificationOutbox`.
   - Azure Storage Queue is used only as a wake-up signal and contains only `outboxId`.
   - Flow: Booking lifecycle event -> `NotificationOutbox` row in SQL -> Azure Queue message containing only `outboxId` -> queue trigger loads full payload from SQL -> `NotificationService` dispatches through Graph -> SQL status is updated.
@@ -75,8 +81,25 @@
 - `Notifications:Email:ProviderName=Composed` keeps the non-production composed behavior and returns `NonProductionComposed`.
 - Production deployment requires Key Vault/App Settings for Graph credentials and mailbox permissions for SendMail.
 - Contact-centre copies require `Notifications:Email:ContactCentreEmailAddress`.
-- Bounceback auditing currently persists `EmailBounceEvents` and correlates with the legacy `NotificationDispatches` model. Treat old dispatch correlation and new `NotificationOutbox` dispatch as parallel models until bounceback storage is migrated.
+- Bounceback auditing currently persists `EmailBounceEvents` and correlates with the legacy `NotificationDispatches` model. Bounceback correlation for queued Graph delivery is not unified yet.
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
+
+## Notification Configuration Split
+- Legacy Booking notification options are flat keys under `Notifications`:
+  - `Notifications:EmailEnabled`
+  - `Notifications:SmsEnabled`
+  - `Notifications:SmsBaseUrl`
+  - `Notifications:SmsApiKey`
+  - `Notifications:SmsSenderId`
+  - `Notifications:ClientPortalBaseUrl`
+- New Notification infrastructure options are nested:
+  - `Notifications:Queue:QueueName`
+  - `Notifications:Queue:ConnectionString`
+  - `Notifications:Email:Enabled`
+  - `Notifications:Email:ProviderName`
+  - `Notifications:Email:ContactCentreEmailAddress`
+  - `Notifications:Email:Graph:*`
+- Keep both sets configured until the legacy Booking notification path is migrated or retired.
 
 ## Microsoft Graph Email Delivery
 - Configure queued notification email delivery with:
@@ -100,6 +123,13 @@
 - Hybrid notification dispatch requires:
   - `Notifications__Queue__QueueName=notifications-send`
   - `Notifications__Queue__ConnectionString=<Azure Storage Account connection string>`
+
+## Notification Transition Follow-Ups
+- Persist queued Graph delivery audit records into `NotificationDispatches` or a unified dispatch model.
+- Migrate bounceback correlation to the queued delivery audit model.
+- Move the manual `Bookings_SendNotification` endpoint to the new outbox path or retire it.
+- Retire `ClientNotificationService` only after production cutover proves the queued path.
+- Decide retention and schema cleanup for `NotificationDispatches` after migration and data-retention review.
 
 ## SQL Migration Note
 - Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.

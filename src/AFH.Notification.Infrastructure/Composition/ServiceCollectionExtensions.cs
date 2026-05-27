@@ -1,6 +1,7 @@
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Infrastructure.Delivery.Email;
 using AFH.Notification.Infrastructure.Options;
+using AFH.Notification.Infrastructure.Bouncebacks;
 using AFH.Notification.Infrastructure.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,10 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<INotificationAuditStore, NotificationAuditStore>();
         services.AddScoped<INotificationDeliveryGateway, EmailNotificationDeliveryGateway>();
+
+        services.AddSingleton<EmailBouncebackParser>();
+        services.AddScoped<INotificationBouncebackStore, EmailBouncebackStore>();
+        services.AddScoped<INotificationBouncebackProcessor, EmailBouncebackProcessor>();
 
         return services;
     }

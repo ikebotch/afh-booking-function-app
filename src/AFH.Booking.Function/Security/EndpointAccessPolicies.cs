@@ -16,6 +16,7 @@ public static class EndpointAccessPolicies
             ["Approvals_Review"] = EndpointAccessPolicy.InternalOnly,
             ["Booking_OpenApiV1"] = EndpointAccessPolicy.Public,
             ["Booking_ScalarUi"] = EndpointAccessPolicy.Public,
+            ["EmailBouncebackFunctionV1"] = EndpointAccessPolicy.Public,
             ["Bookings_CancelBooking"] = EndpointAccessPolicy.Public,
             ["Bookings_ConfirmHold"] = EndpointAccessPolicy.Public,
             ["Bookings_CreateApprovalRequest"] = EndpointAccessPolicy.InternalOnly,

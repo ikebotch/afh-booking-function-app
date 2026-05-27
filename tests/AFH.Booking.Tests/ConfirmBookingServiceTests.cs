@@ -157,7 +157,7 @@ public class ConfirmBookingServiceTests
             conflicts,
             new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
-            new StubNotificationService(), new StubNotificationPublisher(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
+            new StubNotificationService(), new StubBookingNotificationStep(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -230,7 +230,7 @@ public class ConfirmBookingServiceTests
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
             new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
-            new StubNotificationService(), new StubNotificationPublisher(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
+            new StubNotificationService(), new StubBookingNotificationStep(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -252,7 +252,7 @@ public class ConfirmBookingServiceTests
         var tx = InPersonTransaction(now);
         var audit = new StubLifecycleAuditService();
         var notifications = new StubNotificationService();
-        var notificationPublisher = new StubNotificationPublisher();
+        var notificationStep = new StubBookingNotificationStep();
         var clients = new StubClientDirectory();
         var sut = new ConfirmBookingService(
             new StubHoldRepository(hold),
@@ -266,7 +266,7 @@ public class ConfirmBookingServiceTests
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
             new StubRouteTimeGuard(),
             audit,
-            notifications, notificationPublisher, new StubHoldWindowFactory(), new StubBookingTokenService("client-token-1"), TestNotificationOptions(), clients);
+            notifications, notificationStep, new StubHoldWindowFactory(), new StubBookingTokenService("client-token-1"), TestNotificationOptions(), clients);
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -283,16 +283,14 @@ public class ConfirmBookingServiceTests
         Assert.Equal("https://client.example/bookings/hold-test?token=client-token-1", notifications.LastRequest?.SelfServiceLinks?.ViewBookingUrl);
         Assert.Equal("https://client.example/bookings/hold-test/cancel?token=client-token-1", notifications.LastRequest?.SelfServiceLinks?.CancelBookingUrl);
         Assert.Equal("https://client.example/bookings/hold-test/reschedule?token=client-token-1", notifications.LastRequest?.SelfServiceLinks?.RescheduleBookingUrl);
-        Assert.NotNull(notificationPublisher.LastNotification);
-        Assert.Equal(BookingNotificationTypes.BookingConfirmed, notificationPublisher.LastNotification!.Type);
-        Assert.Equal("Booking", notificationPublisher.LastNotification.SourceSystem);
-        Assert.Equal(hold.Id, notificationPublisher.LastNotification.CorrelationId);
-        Assert.Equal(LifecycleActors.Client, notificationPublisher.LastNotification.Actor.ActorType);
-        Assert.Equal("Booking", notificationPublisher.LastNotification.Actor.SourceApplication);
-        Assert.Equal("client-token-1", notificationPublisher.LastNotification.Data["viewBookingUrl"].Split("token=", StringSplitOptions.None)[1]);
-        Assert.Equal("lifecycle-event-1", notificationPublisher.LastNotification.Data["eventId"]);
-        Assert.Equal(slot.Id, notificationPublisher.LastNotification.Data["slotId"]);
-        var recipient = Assert.Single(notificationPublisher.LastNotification.Recipients);
+        Assert.NotNull(notificationStep.LastNotificationEventType);
+        Assert.Equal(LifecycleEventTypes.Booked, notificationStep.LastNotificationEventType);
+        Assert.Equal(hold.Id, notificationStep.LastCorrelationId);
+        Assert.Equal(LifecycleActors.Client, notificationStep.LastActorType);
+        Assert.Equal("client-token-1", notificationStep.LastData?["viewBookingUrl"].Split("token=", StringSplitOptions.None)[1]);
+        Assert.Equal("lifecycle-event-1", notificationStep.LastData?["eventId"]);
+        Assert.Equal(slot.Id, notificationStep.LastData?["slotId"]);
+        var recipient = Assert.Single(notificationStep.LastRecipients ?? Array.Empty<NotificationRecipient>());
         Assert.Equal(BookingNotificationRecipientTypes.Client, recipient.RecipientType);
         Assert.Equal("jane.client@example.test", recipient.Email);
         Assert.Equal("+447700900123", recipient.MobileNumber);
@@ -361,7 +359,7 @@ public class ConfirmBookingServiceTests
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
             new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
-            new StubNotificationService(), new StubNotificationPublisher(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
+            new StubNotificationService(), new StubBookingNotificationStep(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
 
         var handleTask = sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -414,7 +412,7 @@ public class ConfirmBookingServiceTests
             new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
             new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
-            new StubNotificationService(), new StubNotificationPublisher(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
+            new StubNotificationService(), new StubBookingNotificationStep(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -458,7 +456,7 @@ public class ConfirmBookingServiceTests
             new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
             new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
-            new StubNotificationService(), new StubNotificationPublisher(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
+            new StubNotificationService(), new StubBookingNotificationStep(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -503,7 +501,7 @@ public class ConfirmBookingServiceTests
             new BookingConflictService(calendar, new StubOperationalIssueRepository(), new StubUnitOfWork(), new StubClock(now)),
             new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
-            new StubNotificationService(), new StubNotificationPublisher(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
+            new StubNotificationService(), new StubBookingNotificationStep(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -526,7 +524,7 @@ public class ConfirmBookingServiceTests
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
             new StubRouteTimeGuard(),
             new StubLifecycleAuditService(),
-            new StubNotificationService(), new StubNotificationPublisher(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
+            new StubNotificationService(), new StubBookingNotificationStep(), new StubHoldWindowFactory(), new StubBookingTokenService(), TestNotificationOptions());
     }
 
     private static IOptions<NotificationsOptions> TestNotificationOptions()
@@ -830,14 +828,28 @@ public class ConfirmBookingServiceTests
         }
     }
 
-    private sealed class StubNotificationPublisher : INotificationPublisher
+    private sealed class StubBookingNotificationStep : IBookingNotificationStep
     {
-        public NotificationRequested? LastNotification { get; private set; }
+        public string? LastNotificationEventType { get; private set; }
+        public string? LastCorrelationId { get; private set; }
+        public string? LastActorType { get; private set; }
+        public IReadOnlyList<NotificationRecipient>? LastRecipients { get; private set; }
+        public IReadOnlyDictionary<string, string>? LastData { get; private set; }
 
-        public Task PublishAsync(NotificationRequested notification, CancellationToken ct)
+        public Task<(string Status, string? ErrorCode, string? ErrorDetails)> ExecuteAsync(
+            string lifecycleEventType,
+            string correlationId,
+            string actorType,
+            IReadOnlyList<NotificationRecipient> recipients,
+            IReadOnlyDictionary<string, string> data,
+            CancellationToken ct)
         {
-            LastNotification = notification;
-            return Task.CompletedTask;
+            LastNotificationEventType = lifecycleEventType;
+            LastCorrelationId = correlationId;
+            LastActorType = actorType;
+            LastRecipients = recipients;
+            LastData = data;
+            return Task.FromResult((LifecycleStepStatuses.Succeeded, (string?)null, (string?)null));
         }
     }
 

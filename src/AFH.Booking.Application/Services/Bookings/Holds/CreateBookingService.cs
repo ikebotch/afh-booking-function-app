@@ -9,6 +9,7 @@ using AFH.Notification.Contract.Abstractions;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Extensions.Logging;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 
 namespace AFH.Booking.Application.Holds;
 
@@ -19,7 +20,7 @@ public sealed class CreateBookingService : ICreateBookingService
     private readonly IBookingCalendarService _calendarService;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
-    private readonly INotificationPublisher _notificationPublisher;
+    private readonly IBookingNotificationStep _notificationStep;
     private readonly IClientDirectory? _clients;
     private readonly ILogger<CreateBookingService> _logger;
 
@@ -29,7 +30,7 @@ public sealed class CreateBookingService : ICreateBookingService
         IBookingCalendarService calendarService,
         IUnitOfWork uow,
         IClock clock,
-        INotificationPublisher notificationPublisher,
+        IBookingNotificationStep notificationStep,
         ILogger<CreateBookingService> logger,
         IClientDirectory? clients = null)
     {
@@ -38,7 +39,7 @@ public sealed class CreateBookingService : ICreateBookingService
         _calendarService = calendarService;
         _uow = uow;
         _clock = clock;
-        _notificationPublisher = notificationPublisher;
+        _notificationStep = notificationStep;
         _logger = logger;
         _clients = clients;
     }
@@ -110,18 +111,12 @@ public sealed class CreateBookingService : ICreateBookingService
                 ? null
                 : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
 
-            await _notificationPublisher.PublishAsync(
-                new NotificationRequested(
-                    BookingNotificationTypes.BookingHoldCreated,
-                    hold.Id,
-                    new NotificationActor(
-                        LifecycleActors.System,
-                        "Booking",
-                        null,
-                        null,
-                        null),
-                    BuildHoldCreatedRecipients(client),
-                    BuildHoldCreatedNotificationData(hold, context)),
+            await _notificationStep.ExecuteAsync(
+                LifecycleEventTypes.HoldCreated,
+                hold.Id,
+                LifecycleActors.System,
+                BuildHoldCreatedRecipients(client),
+                BuildHoldCreatedNotificationData(hold, context),
                 ct);
         }
         catch (Exception ex)

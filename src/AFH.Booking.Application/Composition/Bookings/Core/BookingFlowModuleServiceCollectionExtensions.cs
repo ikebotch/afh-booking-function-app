@@ -11,6 +11,7 @@ using AFH.Booking.Application.Governance;
 using AFH.Booking.Application.Holds;
 using AFH.Booking.Application.Lifecycle;
 using AFH.Booking.Application.Services.Bookings.Core;
+using AFH.Booking.Application.Services.Lifecycle;
 
 namespace AFH.Booking.Application.Composition;
 
@@ -32,6 +33,7 @@ internal static class BookingFlowModuleServiceCollectionExtensions
         services.AddScoped<ILifecycleAuditService, LifecycleAuditService>();
         services.AddScoped<IAvailabilityRulesService, AvailabilityRulesService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
+        services.AddScoped<IBookingNotificationStep, BookingNotificationStep>();
 
         return services;
     }

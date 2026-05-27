@@ -6,6 +6,7 @@ public static class LifecycleEventTypes
     public const string Cancelled = "Cancelled";
     public const string Rearranged = "Rearranged";
     public const string NoShow = "No Show";
+    public const string HoldCreated = "HoldCreated";
 }
 
 public static class LifecycleStates

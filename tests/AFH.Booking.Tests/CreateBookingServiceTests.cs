@@ -8,7 +8,7 @@ using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Holds;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
-using AFH.Notification.Contract.Abstractions;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
@@ -42,7 +42,7 @@ public class CreateBookingServiceTests
             _calendarService.Object,
             _uow.Object,
             _clock.Object,
-            Mock.Of<INotificationPublisher>(),
+            Mock.Of<IBookingNotificationStep>(),
             NullLogger<CreateBookingService>.Instance);
     }
 

@@ -20,7 +20,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private readonly IConfirmBookingService _confirm;
     private readonly ICancellationOrchestrator _cancel;
     private readonly INotificationService _notifications;
-    private readonly INotificationPublisher _notificationPublisher;
+    private readonly IBookingNotificationStep _notificationStep;
     private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
     private readonly ILifecycleAuditService _audit;
@@ -35,7 +35,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         IConfirmBookingService confirm,
         ICancellationOrchestrator cancel,
         INotificationService notifications,
-        INotificationPublisher notificationPublisher,
+        IBookingNotificationStep notificationStep,
         IDownstreamUpdateService downstreamUpdates,
         ILifecycleAuditService audit,
         IUnitOfWork uow,
@@ -49,7 +49,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         _confirm = confirm;
         _cancel = cancel;
         _notifications = notifications;
-        _notificationPublisher = notificationPublisher;
+        _notificationStep = notificationStep;
         _clients = clients;
         _downstreamUpdates = downstreamUpdates;
         _audit = audit;
@@ -258,14 +258,17 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
                 ? null
                 : await _clients.GetAsync(existingBooking.Transaction.TransactionRef, ct);
 
-            await _notificationPublisher.PublishAsync(
-                new NotificationRequested(
-                    BookingNotificationTypes.BookingRescheduled,
-                    newBookingId,
-                    new NotificationActor(ResolveNotificationActorType(cmd), "Booking", cmd.ActorId, cmd.RequestedBy, null),
-                    BuildBookingRescheduledRecipients(client),
-                    BuildBookingRescheduledNotificationData(cmd, existingBooking, newBooking, eventId, notificationSummary)),
+            var result = await _notificationStep.ExecuteAsync(
+                LifecycleEventTypes.Rearranged,
+                newBookingId,
+                ResolveNotificationActorType(cmd),
+                BuildBookingRescheduledRecipients(client),
+                BuildBookingRescheduledNotificationData(cmd, existingBooking, newBooking, eventId, notificationSummary),
                 ct);
+
+            notificationStatus = result.Status;
+            notificationErrorCode = result.ErrorCode;
+            notificationErrorDetails = result.ErrorDetails;
         }
         catch (Exception ex)
         {

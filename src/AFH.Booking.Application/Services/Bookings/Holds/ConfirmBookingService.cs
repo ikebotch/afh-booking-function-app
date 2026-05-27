@@ -32,7 +32,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     private readonly ISelectedSlotRouteTimeGuard _routeTimeGuard;
     private readonly ILifecycleAuditService _audit;
     private readonly INotificationService _notifications;
-    private readonly INotificationPublisher _notificationPublisher;
+    private readonly IBookingNotificationStep _notificationStep;
     private readonly IHoldWindowFactory _holdWindowFactory;
     private readonly IBookingTokenService _tokenService;
     private readonly NotificationsOptions _notificationOptions;
@@ -51,7 +51,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         ISelectedSlotRouteTimeGuard routeTimeGuard,
         ILifecycleAuditService audit,
         INotificationService notifications,
-        INotificationPublisher notificationPublisher,
+        IBookingNotificationStep notificationStep,
         IHoldWindowFactory holdWindowFactory,
         IBookingTokenService tokenService,
         IOptions<NotificationsOptions> notificationOptions,
@@ -69,7 +69,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         _routeTimeGuard = routeTimeGuard;
         _audit = audit;
         _notifications = notifications;
-        _notificationPublisher = notificationPublisher;
+        _notificationStep = notificationStep;
         _holdWindowFactory = holdWindowFactory;
         _tokenService = tokenService;
         _notificationOptions = notificationOptions.Value;
@@ -376,19 +376,22 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 ? null
                 : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
 
-            await _notificationPublisher.PublishAsync(
-                new NotificationRequested(
-                    BookingNotificationTypes.BookingConfirmed,
-                    context.Hold.Id,
-                    new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
-                    BuildBookingConfirmedRecipients(client),
-                    BuildBookingConfirmedNotificationData(
-                        context,
-                        _holdWindowFactory.Create(context.Slot, context.Transaction),
-                        eventId,
-                        joinUrl,
-                        links)),
+            var result = await _notificationStep.ExecuteAsync(
+                LifecycleEventTypes.Booked,
+                context.Hold.Id,
+                LifecycleActors.Client,
+                BuildBookingConfirmedRecipients(client),
+                BuildBookingConfirmedNotificationData(
+                    context,
+                    _holdWindowFactory.Create(context.Slot, context.Transaction),
+                    eventId,
+                    joinUrl,
+                    links),
                 ct);
+
+            notificationStatus = result.Status;
+            notificationErrorCode = result.ErrorCode;
+            notificationErrorDetails = result.ErrorDetails;
         }
         catch (Exception ex)
         {

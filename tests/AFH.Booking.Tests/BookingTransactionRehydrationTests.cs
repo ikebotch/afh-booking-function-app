@@ -15,7 +15,8 @@ using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
-using AFH.Notification.Contract.Abstractions;
+using AFH.Booking.Application.Abstractions.Lifecycle;
+using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -108,10 +109,10 @@ public sealed class BookingTransactionRehydrationTests
                 EmailStatus = "Skipped", ProviderMessageId = "p-1", CreatedUtc = now
             });
 
-        var notificationPublisher = new Mock<INotificationPublisher>();
+        var notificationPublisher = new Mock<IBookingNotificationStep>();
         notificationPublisher
-            .Setup(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
+            .Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<NotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LifecycleStepStatuses.Succeeded, null, null));
 
         var tokenService = new Mock<IBookingTokenService>();
         tokenService

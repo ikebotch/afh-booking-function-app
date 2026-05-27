@@ -1,0 +1,18 @@
+subject=AFH Booking: Booking Confirmed
+channel=Email
+---
+Hello,
+
+Your booking is now confirmed.
+
+Transaction reference: {{transactionRef}}
+Booking ID: {{bookingId}}
+Adviser: {{adviserName}}
+Meeting type: {{meetingType}}
+When: {{when}}
+{{whereLine}}
+
+{{travelLine}}
+{{manageBookingLinks}}
+
+This is an automated AFH booking notification.

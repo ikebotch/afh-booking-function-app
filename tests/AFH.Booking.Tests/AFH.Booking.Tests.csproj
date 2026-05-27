@@ -24,6 +24,8 @@
     <ProjectReference Include="..\..\src\AFH.Booking.Domain\AFH.Booking.Domain.csproj" />
     <ProjectReference Include="..\..\src\AFH.Booking.Infrastructure\AFH.Booking.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\AFH.Booking.Function\AFH.Booking.Function.csproj" />
+    <ProjectReference Include="..\..\src\AFH.Notification.Application\AFH.Notification.Application.csproj" />
+    <ProjectReference Include="..\..\src\AFH.Notification.Contract\AFH.Notification.Contract.csproj" />
   </ItemGroup>
 
 </Project>

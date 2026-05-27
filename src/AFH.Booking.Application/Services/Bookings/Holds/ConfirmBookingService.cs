@@ -10,6 +10,9 @@ using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Options;
+using AFH.Notification.Contract.Abstractions;
+using AFH.Notification.Contract.V1.Dtos;
+using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Application.Holds;
@@ -28,6 +31,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     private readonly ISelectedSlotRouteTimeGuard _routeTimeGuard;
     private readonly ILifecycleAuditService _audit;
     private readonly INotificationService _notifications;
+    private readonly INotificationPublisher _notificationPublisher;
     private readonly IHoldWindowFactory _holdWindowFactory;
     private readonly IBookingTokenService _tokenService;
     private readonly NotificationsOptions _notificationOptions;
@@ -45,6 +49,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         ISelectedSlotRouteTimeGuard routeTimeGuard,
         ILifecycleAuditService audit,
         INotificationService notifications,
+        INotificationPublisher notificationPublisher,
         IHoldWindowFactory holdWindowFactory,
         IBookingTokenService tokenService,
         IOptions<NotificationsOptions> notificationOptions)
@@ -61,6 +66,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         _routeTimeGuard = routeTimeGuard;
         _audit = audit;
         _notifications = notifications;
+        _notificationPublisher = notificationPublisher;
         _holdWindowFactory = holdWindowFactory;
         _tokenService = tokenService;
         _notificationOptions = notificationOptions.Value;
@@ -361,6 +367,14 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                     null,
                     links),
                 ct);
+
+            await _notificationPublisher.PublishAsync(
+                NotificationRequested.BookingConfirmed(
+                    bookingId,
+                    new NotificationActor(NotificationActorType.Client, null, null, null),
+                    Array.Empty<NotificationRecipient>(),
+                    BuildBookingConfirmedNotificationData(slot, eventId, links)),
+                ct);
         }
         catch (Exception ex)
         {
@@ -435,6 +449,31 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     {
         return
             $"Your meeting with {slot.AdviserName} on {slot.StartUtc:yyyy-MM-dd HH:mm} has been booked.";
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildBookingConfirmedNotificationData(
+        BookingSlot slot,
+        string eventId,
+        BookingSelfServiceLinks? links)
+    {
+        var data = new Dictionary<string, string>
+        {
+            ["eventId"] = eventId,
+            ["slotId"] = slot.Id,
+            ["adviserId"] = slot.AdviserId,
+            ["adviserName"] = slot.AdviserName,
+            ["startUtc"] = slot.StartUtc.ToString("O"),
+            ["endUtc"] = slot.EndUtc.ToString("O")
+        };
+
+        if (links is not null)
+        {
+            data["viewBookingUrl"] = links.ViewBookingUrl;
+            data["cancelBookingUrl"] = links.CancelBookingUrl;
+            data["rescheduleBookingUrl"] = links.RescheduleBookingUrl;
+        }
+
+        return data;
     }
 
     private static Result<T> FailLike<T>(Result failure)

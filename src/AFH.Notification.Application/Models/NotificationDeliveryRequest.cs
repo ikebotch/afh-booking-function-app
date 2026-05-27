@@ -4,7 +4,9 @@ namespace AFH.Notification.Application.Models;
 
 public sealed record NotificationDeliveryRequest(
     string CorrelationId,
+    NotificationChannel Channel,
     NotificationRecipient Recipient,
-    string Subject,
-    string HtmlBody,
-    string TextBody);
+    string? Subject,
+    string? HtmlBody,
+    string TextBody,
+    IReadOnlyDictionary<string, string>? ProviderMetadata = null);

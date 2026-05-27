@@ -14,6 +14,8 @@ public static class ServiceCollectionExtensions
     {
         services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.SectionName));
         services.Configure<EmailDeliveryOptions>(configuration.GetSection(EmailDeliveryOptions.SectionName));
+        services.Configure<SmsDeliveryOptions>(configuration.GetSection(SmsDeliveryOptions.SectionName));
+        services.Configure<PushDeliveryOptions>(configuration.GetSection(PushDeliveryOptions.SectionName));
 
         services.AddScoped<INotificationAuditStore, NotificationAuditStore>();
 

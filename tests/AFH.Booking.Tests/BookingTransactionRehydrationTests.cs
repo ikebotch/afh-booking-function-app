@@ -15,6 +15,8 @@ using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
+using AFH.Notification.Contract.Abstractions;
+using AFH.Notification.Contract.V1.Requests;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -106,6 +108,11 @@ public sealed class BookingTransactionRehydrationTests
                 EmailStatus = "Skipped", ProviderMessageId = "p-1", CreatedUtc = now
             });
 
+        var notificationPublisher = new Mock<INotificationPublisher>();
+        notificationPublisher
+            .Setup(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
         var tokenService = new Mock<IBookingTokenService>();
         tokenService
             .Setup(t => t.GenerateClientAccessTokenAsync("hold-1", It.IsAny<CancellationToken>()))
@@ -124,6 +131,7 @@ public sealed class BookingTransactionRehydrationTests
             routeTimeGuard.Object,
             audit.Object,
             notifications.Object,
+            notificationPublisher.Object,
             holdWindowFactory.Object,
             tokenService.Object,
             Options.Create(new NotificationsOptions { ClientPortalBaseUrl = "https://client.example" })

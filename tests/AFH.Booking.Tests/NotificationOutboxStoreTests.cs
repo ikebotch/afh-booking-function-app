@@ -1,80 +1,60 @@
-using System.Data;
+using AFH.Booking.Infrastructure.Persistence;
 using AFH.Notification.Application.Models;
 using AFH.Notification.Infrastructure.Persistence;
-using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace AFH.Booking.Tests;
 
-[Trait("Category", "Integration")]
 public class NotificationOutboxStoreTests : IAsyncLifetime
 {
-    private readonly string _connectionString;
-    private readonly NotificationOutboxStore _sut;
+    private BookingDbContext _dbContext = default!;
+    private NotificationOutboxStore _sut = default!;
     private bool _dbAvailable;
+    private readonly DbContextOptions<BookingDbContext> _options;
 
     public NotificationOutboxStoreTests()
     {
-        var config = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Values:BookingDb:ConnectionString"] = "Server=localhost;Database=AFH.Booking.Test;Trusted_Connection=True;TrustServerCertificate=True"
-            })
-            .Build();
-
-        _connectionString = config["Values:BookingDb:ConnectionString"]!;
-        _sut = new NotificationOutboxStore(config, NullLogger<NotificationOutboxStore>.Instance);
+        _options = new DbContextOptionsBuilder<BookingDbContext>()
+            .UseSqlServer("Server=localhost;Database=AFH.Booking.Test;Trusted_Connection=True;TrustServerCertificate=True")
+            .Options;
     }
 
     public async Task InitializeAsync()
     {
         try
         {
-            await using var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync();
+            _dbContext = new BookingDbContext(_options);
+            await _dbContext.Database.EnsureDeletedAsync();
+            await _dbContext.Database.EnsureCreatedAsync();
+
+            // Add schema manually if EnsureCreated doesn't pick up the exact schema we want
+            // but EnsureCreated should create the NotificationOutbox table via BookingDbContext
             _dbAvailable = true;
-
-            await using var cmd = conn.CreateCommand();
-            cmd.CommandText = @"
-                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='NotificationOutbox' AND xtype='U')
-                CREATE TABLE [dbo].[NotificationOutbox] (
-                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
-                    [SourceApplication] nvarchar(100) NOT NULL,
-                    [NotificationType] nvarchar(150) NOT NULL,
-                    [IdempotencyKey] nvarchar(500) NOT NULL,
-                    [PayloadJson] nvarchar(max) NOT NULL,
-                    [Status] nvarchar(50) NOT NULL,
-                    [QueueMessageId] nvarchar(200) NULL,
-                    [AttemptCount] int NOT NULL DEFAULT 0,
-                    [LastError] nvarchar(max) NULL,
-                    [CreatedUtc] datetime2 NOT NULL,
-                    [UpdatedUtc] datetime2 NOT NULL,
-                    [ProcessedUtc] datetime2 NULL,
-                    CONSTRAINT [IX_NotificationOutbox_IdempotencyKey] UNIQUE ([IdempotencyKey])
-                )";
-            await cmd.ExecuteNonQueryAsync();
-
-            await using var clearCmd = conn.CreateCommand();
-            clearCmd.CommandText = "DELETE FROM NotificationOutbox";
-            await clearCmd.ExecuteNonQueryAsync();
+            _sut = new NotificationOutboxStore(_dbContext, NullLogger<NotificationOutboxStore>.Instance);
         }
-        catch (SqlException)
+        catch (Exception)
         {
             _dbAvailable = false;
         }
     }
 
-    public Task DisposeAsync() => Task.CompletedTask;
+    public async Task DisposeAsync()
+    {
+        if (_dbAvailable)
+        {
+            await _dbContext.Database.EnsureDeletedAsync();
+            await _dbContext.DisposeAsync();
+        }
+    }
 
     private bool SkipIfNoDb() => !_dbAvailable;
 
     [Fact]
-    public async Task CreateOrGetAsync_CreatesNewItem()
+    public async Task CreateOrGetAsync_CreatesNewItem_ReturnsCreatedTrue()
     {
         if (SkipIfNoDb()) return;
-
         var item = new NotificationOutboxItem(
             Guid.NewGuid(),
             "Booking",
@@ -82,92 +62,80 @@ public class NotificationOutboxStoreTests : IAsyncLifetime
             $"Booking:BookingConfirmed:{Guid.NewGuid()}",
             "{}",
             NotificationDispatchStatus.Pending,
+            null,
+            0,
+            null,
             DateTime.UtcNow,
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            null);
 
         var result = await _sut.CreateOrGetAsync(item, CancellationToken.None);
 
-        Assert.Equal(item.Id, result.Id);
+        Assert.True(result.Created);
+        Assert.Equal(item.Id, result.Item.Id);
+
         var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
         Assert.NotNull(loaded);
         Assert.Equal(NotificationDispatchStatus.Pending, loaded.Status);
     }
 
     [Fact]
-    public async Task CreateOrGetAsync_DuplicateIdempotencyKey_ReturnsExistingItem()
+    public async Task CreateOrGetAsync_DuplicateIdempotencyKey_ReturnsExistingItem_CreatedFalse()
     {
         if (SkipIfNoDb()) return;
-
         var idempotency = $"Booking:Duplicate:{Guid.NewGuid()}";
         var firstId = Guid.NewGuid();
         var item1 = new NotificationOutboxItem(
-            firstId, "App", "Type", idempotency, "{}", NotificationDispatchStatus.Pending, DateTime.UtcNow, DateTime.UtcNow);
+            firstId, "App", "Type", idempotency, "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
 
         await _sut.CreateOrGetAsync(item1, CancellationToken.None);
 
         var item2 = new NotificationOutboxItem(
-            Guid.NewGuid(), "App2", "Type2", idempotency, "{}", NotificationDispatchStatus.Pending, DateTime.UtcNow, DateTime.UtcNow);
+            Guid.NewGuid(), "App2", "Type2", idempotency, "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
 
         var result = await _sut.CreateOrGetAsync(item2, CancellationToken.None);
 
-        // Should return the first item because the idempotency key matches
-        Assert.Equal(firstId, result.Id);
-        Assert.Equal("App", result.SourceApplication);
+        Assert.False(result.Created);
+        Assert.Equal(firstId, result.Item.Id);
+        Assert.Equal("App", result.Item.SourceApplication);
     }
 
     [Fact]
-    public async Task MarkQueuedAsync_UpdatesStatusAndQueueMessageId()
+    public async Task TryMarkProcessingAsync_ClaimsValidStatus_IncrementsAttemptCount()
     {
         if (SkipIfNoDb()) return;
-
-        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, DateTime.UtcNow, DateTime.UtcNow);
+        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
         await _sut.CreateOrGetAsync(item, CancellationToken.None);
 
-        await _sut.MarkQueuedAsync(item.Id, "queue-123", CancellationToken.None);
-
-        var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
-        Assert.NotNull(loaded);
-        Assert.Equal(NotificationDispatchStatus.Queued, loaded.Status);
-        
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT QueueMessageId FROM NotificationOutbox WHERE Id = @id";
-        cmd.Parameters.AddWithValue("@id", item.Id);
-        var qid = (string?)await cmd.ExecuteScalarAsync();
-        Assert.Equal("queue-123", qid);
-    }
-
-    [Fact]
-    public async Task MarkProcessingAsync_IncrementsAttemptCount()
-    {
-        if (SkipIfNoDb()) return;
-
-        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, DateTime.UtcNow, DateTime.UtcNow);
-        await _sut.CreateOrGetAsync(item, CancellationToken.None);
-
-        await _sut.MarkProcessingAsync(item.Id, CancellationToken.None);
-        await _sut.MarkProcessingAsync(item.Id, CancellationToken.None);
+        var claimed = await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
+        Assert.True(claimed);
 
         var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
         Assert.NotNull(loaded);
         Assert.Equal(NotificationDispatchStatus.Processing, loaded.Status);
-
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT AttemptCount FROM NotificationOutbox WHERE Id = @id";
-        cmd.Parameters.AddWithValue("@id", item.Id);
-        var count = (int)await cmd.ExecuteScalarAsync();
-        Assert.Equal(2, count);
+        Assert.Equal(1, loaded.AttemptCount);
     }
 
     [Fact]
-    public async Task MarkSentAsync_SetsProcessedUtc()
+    public async Task TryMarkProcessingAsync_AlreadyProcessingOrSent_ReturnsFalse()
     {
         if (SkipIfNoDb()) return;
+        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        await _sut.CreateOrGetAsync(item, CancellationToken.None);
 
-        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, DateTime.UtcNow, DateTime.UtcNow);
+        // Claim it
+        await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
+
+        // Try to claim again
+        var claimedAgain = await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
+        Assert.False(claimedAgain);
+    }
+
+    [Fact]
+    public async Task MarkSentAsync_SetsProcessedUtc_AndStatus()
+    {
+        if (SkipIfNoDb()) return;
+        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
         await _sut.CreateOrGetAsync(item, CancellationToken.None);
 
         await _sut.MarkSentAsync(item.Id, CancellationToken.None);
@@ -175,22 +143,14 @@ public class NotificationOutboxStoreTests : IAsyncLifetime
         var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
         Assert.NotNull(loaded);
         Assert.Equal(NotificationDispatchStatus.Sent, loaded.Status);
-
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT ProcessedUtc FROM NotificationOutbox WHERE Id = @id";
-        cmd.Parameters.AddWithValue("@id", item.Id);
-        var processed = await cmd.ExecuteScalarAsync();
-        Assert.NotEqual(DBNull.Value, processed);
+        Assert.NotNull(loaded.ProcessedUtc);
     }
 
     [Fact]
     public async Task MarkFailedAsync_RecordsLastError()
     {
         if (SkipIfNoDb()) return;
-
-        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, DateTime.UtcNow, DateTime.UtcNow);
+        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
         await _sut.CreateOrGetAsync(item, CancellationToken.None);
 
         await _sut.MarkFailedAsync(item.Id, "error-details", CancellationToken.None);
@@ -198,23 +158,22 @@ public class NotificationOutboxStoreTests : IAsyncLifetime
         var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
         Assert.NotNull(loaded);
         Assert.Equal(NotificationDispatchStatus.Failed, loaded.Status);
-
-        await using var conn = new SqlConnection(_connectionString);
-        await conn.OpenAsync();
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT LastError FROM NotificationOutbox WHERE Id = @id";
-        cmd.Parameters.AddWithValue("@id", item.Id);
-        var err = (string?)await cmd.ExecuteScalarAsync();
-        Assert.Equal("error-details", err);
+        Assert.Equal("error-details", loaded.LastError);
     }
 
     [Fact]
-    public void SqlInjectionSafety_VerifiedByParameterUsage()
+    public async Task MarkDeadLetteredAsync_SetsProcessedUtc_RecordsLastError()
     {
-        // Verified by inspection: NotificationOutboxStore uses @id, @sourceApp, etc.
-        // No string interpolation is used for values.
-        var code = File.ReadAllText("../../../../../src/AFH.Notification.Infrastructure/Persistence/NotificationOutboxStore.cs");
-        Assert.DoesNotContain("CommandText = $\"", code);
-        Assert.DoesNotContain("CommandText = string.Format", code);
+        if (SkipIfNoDb()) return;
+        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        await _sut.CreateOrGetAsync(item, CancellationToken.None);
+
+        await _sut.MarkDeadLetteredAsync(item.Id, "dead-error", CancellationToken.None);
+
+        var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
+        Assert.NotNull(loaded);
+        Assert.Equal(NotificationDispatchStatus.DeadLettered, loaded.Status);
+        Assert.Equal("dead-error", loaded.LastError);
+        Assert.NotNull(loaded.ProcessedUtc);
     }
 }

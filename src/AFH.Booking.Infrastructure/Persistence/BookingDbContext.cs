@@ -1,4 +1,4 @@
-﻿using AFH.Booking.Infrastructure.Persistence.Configurations;
+using AFH.Booking.Infrastructure.Persistence.Configurations;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using AFH.Common.Errors.EntityFramework.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -15,6 +15,7 @@ public sealed class BookingDbContext : DbContext
     public DbSet<ApprovalRequestModel> ApprovalRequests => Set<ApprovalRequestModel>();
     public DbSet<ApprovalHistoryModel> ApprovalHistory => Set<ApprovalHistoryModel>();
     public DbSet<NotificationDispatchModel> NotificationDispatches => Set<NotificationDispatchModel>();
+    public DbSet<AFH.Notification.Infrastructure.Persistence.Models.NotificationOutboxModel> NotificationOutbox => Set<AFH.Notification.Infrastructure.Persistence.Models.NotificationOutboxModel>();
     public DbSet<LifecycleEventModel> LifecycleEvents => Set<LifecycleEventModel>();
     public DbSet<LifecycleStepModel> LifecycleSteps => Set<LifecycleStepModel>();
     public DbSet<EmailBounceEventModel> EmailBounceEvents => Set<EmailBounceEventModel>();
@@ -55,6 +56,7 @@ public sealed class BookingDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);
+        modelBuilder.ApplyConfiguration(new AFH.Notification.Infrastructure.Persistence.Configurations.NotificationOutboxConfiguration());
         modelBuilder.ApplyConfiguration(new AdviserProfileProjectionModelConfiguration());
         modelBuilder.AddErrorRecordEntity();
 

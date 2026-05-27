@@ -1,193 +1,189 @@
-using System.Data;
+using Microsoft.EntityFrameworkCore;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
-using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
+using AFH.Notification.Infrastructure.Persistence.Models;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace AFH.Notification.Infrastructure.Persistence;
 
 public sealed class NotificationOutboxStore : INotificationOutboxStore
 {
-    private readonly string _connectionString;
+    private readonly DbContext _dbContext;
     private readonly ILogger<NotificationOutboxStore> _logger;
 
-    public NotificationOutboxStore(IConfiguration configuration, ILogger<NotificationOutboxStore> logger)
+    public NotificationOutboxStore(DbContext dbContext, ILogger<NotificationOutboxStore> logger)
     {
-        _connectionString = configuration.GetConnectionString("BookingDb")
-            ?? configuration["Values:ConnectionStrings:BookingDb"]
-            ?? configuration["Values:BookingDb:ConnectionString"]
-            ?? throw new InvalidOperationException("BookingDb connection string is not configured.");
+        _dbContext = dbContext;
         _logger = logger;
     }
 
-    public async Task<NotificationOutboxItem> CreateOrGetAsync(NotificationOutboxItem item, CancellationToken ct)
+    public async Task<NotificationOutboxCreateResult> CreateOrGetAsync(NotificationOutboxItem item, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        var existing = await _dbContext.Set<NotificationOutboxModel>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.IdempotencyKey == item.IdempotencyKey, ct);
+
+        if (existing != null)
+        {
+            _logger.LogInformation("Duplicate IdempotencyKey '{IdempotencyKey}' detected. Returning existing outbox item.", item.IdempotencyKey);
+            return new NotificationOutboxCreateResult(MapToItem(existing), false);
+        }
+
+        var model = new NotificationOutboxModel
+        {
+            Id = item.Id,
+            SourceApplication = item.SourceApplication,
+            NotificationType = item.NotificationType,
+            IdempotencyKey = item.IdempotencyKey,
+            PayloadJson = item.PayloadJson,
+            Status = item.Status.ToString(),
+            QueueMessageId = item.QueueMessageId,
+            AttemptCount = item.AttemptCount,
+            LastError = item.LastError,
+            CreatedUtc = item.CreatedUtc,
+            UpdatedUtc = item.UpdatedUtc,
+            ProcessedUtc = item.ProcessedUtc
+        };
+
+        _dbContext.Set<NotificationOutboxModel>().Add(model);
 
         try
         {
-            await using var insertCmd = connection.CreateCommand();
-            insertCmd.CommandText = @"
-                INSERT INTO NotificationOutbox (
-                    Id, SourceApplication, NotificationType, IdempotencyKey, 
-                    PayloadJson, Status, AttemptCount, CreatedUtc, UpdatedUtc
-                )
-                VALUES (
-                    @id, @sourceApp, @type, @idempotency,
-                    @payload, @status, @attempt, @created, @updated
-                )";
-
-            insertCmd.Parameters.AddWithValue("@id", item.Id);
-            insertCmd.Parameters.AddWithValue("@sourceApp", item.SourceApplication);
-            insertCmd.Parameters.AddWithValue("@type", item.NotificationType);
-            insertCmd.Parameters.AddWithValue("@idempotency", item.IdempotencyKey);
-            insertCmd.Parameters.AddWithValue("@payload", item.PayloadJson);
-            insertCmd.Parameters.AddWithValue("@status", item.Status.ToString());
-            insertCmd.Parameters.AddWithValue("@attempt", 0);
-            insertCmd.Parameters.AddWithValue("@created", item.CreatedUtc);
-            insertCmd.Parameters.AddWithValue("@updated", item.UpdatedUtc);
-
-            await insertCmd.ExecuteNonQueryAsync(ct);
-            return item;
+            await _dbContext.SaveChangesAsync(ct);
+            return new NotificationOutboxCreateResult(item, true);
         }
-        catch (SqlException ex) when (ex.Number == 2601 || ex.Number == 2627) // Unique constraint violation
+        catch (DbUpdateException ex)
         {
-            _logger.LogInformation("Duplicate IdempotencyKey '{IdempotencyKey}' detected. Returning existing outbox item.", item.IdempotencyKey);
-            
-            await using var selectCmd = connection.CreateCommand();
-            selectCmd.CommandText = @"
-                SELECT Id, SourceApplication, NotificationType, IdempotencyKey, PayloadJson, Status, CreatedUtc, UpdatedUtc 
-                FROM NotificationOutbox 
-                WHERE IdempotencyKey = @idempotency";
-            selectCmd.Parameters.AddWithValue("@idempotency", item.IdempotencyKey);
+            // Concurrency/Duplicate Key check
+            _logger.LogInformation(ex, "DbUpdateException on IdempotencyKey '{IdempotencyKey}'. Assuming race condition duplicate.", item.IdempotencyKey);
 
-            await using var reader = await selectCmd.ExecuteReaderAsync(ct);
-            if (await reader.ReadAsync(ct))
+            // Clear change tracker so we don't hold the failed insert
+            _dbContext.ChangeTracker.Clear();
+
+            var raceExisting = await _dbContext.Set<NotificationOutboxModel>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.IdempotencyKey == item.IdempotencyKey, ct);
+
+            if (raceExisting != null)
             {
-                return new NotificationOutboxItem(
-                    reader.GetGuid(0),
-                    reader.GetString(1),
-                    reader.GetString(2),
-                    reader.GetString(3),
-                    reader.GetString(4),
-                    Enum.Parse<NotificationDispatchStatus>(reader.GetString(5)),
-                    reader.GetDateTime(6),
-                    reader.GetDateTime(7)
-                );
+                return new NotificationOutboxCreateResult(MapToItem(raceExisting), false);
             }
 
-            // Fallback in case of highly concurrent deletion (rare in outbox)
-            throw new InvalidOperationException($"Failed to retrieve duplicate outbox item for key {item.IdempotencyKey}", ex);
+            throw; // Real DbUpdateException unrelated to unique constraint
         }
     }
 
     public async Task<NotificationOutboxItem?> GetAsync(Guid id, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        var model = await _dbContext.Set<NotificationOutboxModel>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Id == id, ct);
 
-        await using var selectCmd = connection.CreateCommand();
-        selectCmd.CommandText = @"
-            SELECT Id, SourceApplication, NotificationType, IdempotencyKey, PayloadJson, Status, CreatedUtc, UpdatedUtc 
-            FROM NotificationOutbox 
-            WHERE Id = @id";
-        selectCmd.Parameters.AddWithValue("@id", id);
-
-        await using var reader = await selectCmd.ExecuteReaderAsync(ct);
-        if (await reader.ReadAsync(ct))
-        {
-            return new NotificationOutboxItem(
-                reader.GetGuid(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetString(4),
-                Enum.Parse<NotificationDispatchStatus>(reader.GetString(5)),
-                reader.GetDateTime(6),
-                reader.GetDateTime(7)
-            );
-        }
-
-        return null;
+        return model != null ? MapToItem(model) : null;
     }
 
     public async Task MarkQueuedAsync(Guid id, string queueMessageId, CancellationToken ct)
     {
-        await UpdateInternalAsync(id, NotificationDispatchStatus.Queued, queueMessageId, null, ct);
+        var affected = await _dbContext.Set<NotificationOutboxModel>()
+            .Where(x => x.Id == id && x.Status == NotificationDispatchStatus.Pending.ToString())
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, NotificationDispatchStatus.Queued.ToString())
+                .SetProperty(x => x.QueueMessageId, queueMessageId)
+                .SetProperty(x => x.UpdatedUtc, DateTime.UtcNow), ct);
+
+        if (affected == 0)
+        {
+            throw new InvalidOperationException($"Notification outbox item '{id}' was not found or is not in Pending status.");
+        }
     }
 
-    public async Task MarkProcessingAsync(Guid id, CancellationToken ct)
+    public async Task<bool> TryMarkProcessingAsync(Guid id, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        var validStatuses = new[]
+        {
+            NotificationDispatchStatus.Pending.ToString(),
+            NotificationDispatchStatus.Queued.ToString(),
+            NotificationDispatchStatus.Failed.ToString()
+        };
 
-        await using var updateCmd = connection.CreateCommand();
-        updateCmd.CommandText = @"
-            UPDATE NotificationOutbox 
-            SET Status = @status, 
-                AttemptCount = AttemptCount + 1,
-                UpdatedUtc = @now 
-            WHERE Id = @id";
-        
-        updateCmd.Parameters.AddWithValue("@id", id);
-        updateCmd.Parameters.AddWithValue("@status", NotificationDispatchStatus.Processing.ToString());
-        updateCmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
+        var affected = await _dbContext.Set<NotificationOutboxModel>()
+            .Where(x => x.Id == id && validStatuses.Contains(x.Status))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, NotificationDispatchStatus.Processing.ToString())
+                .SetProperty(x => x.AttemptCount, x => x.AttemptCount + 1)
+                .SetProperty(x => x.UpdatedUtc, DateTime.UtcNow), ct);
 
-        await updateCmd.ExecuteNonQueryAsync(ct);
+        return affected > 0;
     }
 
     public async Task MarkSentAsync(Guid id, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        var now = DateTime.UtcNow;
+        var affected = await _dbContext.Set<NotificationOutboxModel>()
+            .Where(x => x.Id == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, NotificationDispatchStatus.Sent.ToString())
+                .SetProperty(x => x.ProcessedUtc, now)
+                .SetProperty(x => x.UpdatedUtc, now), ct);
 
-        await using var updateCmd = connection.CreateCommand();
-        updateCmd.CommandText = @"
-            UPDATE NotificationOutbox 
-            SET Status = @status, 
-                ProcessedUtc = @now,
-                UpdatedUtc = @now 
-            WHERE Id = @id";
-        
-        updateCmd.Parameters.AddWithValue("@id", id);
-        updateCmd.Parameters.AddWithValue("@status", NotificationDispatchStatus.Sent.ToString());
-        updateCmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
-
-        await updateCmd.ExecuteNonQueryAsync(ct);
+        if (affected == 0)
+        {
+            throw new InvalidOperationException($"Notification outbox item '{id}' was not found.");
+        }
     }
 
     public async Task MarkFailedAsync(Guid id, string lastError, CancellationToken ct)
     {
-        await UpdateInternalAsync(id, NotificationDispatchStatus.Failed, null, lastError, ct);
+        var affected = await _dbContext.Set<NotificationOutboxModel>()
+            .Where(x => x.Id == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, NotificationDispatchStatus.Failed.ToString())
+                .SetProperty(x => x.LastError, lastError)
+                .SetProperty(x => x.UpdatedUtc, DateTime.UtcNow), ct);
+
+        if (affected == 0)
+        {
+            throw new InvalidOperationException($"Notification outbox item '{id}' was not found.");
+        }
     }
 
     public async Task MarkDeadLetteredAsync(Guid id, string lastError, CancellationToken ct)
     {
-        await UpdateInternalAsync(id, NotificationDispatchStatus.DeadLettered, null, lastError, ct);
+        var now = DateTime.UtcNow;
+        var affected = await _dbContext.Set<NotificationOutboxModel>()
+            .Where(x => x.Id == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, NotificationDispatchStatus.DeadLettered.ToString())
+                .SetProperty(x => x.LastError, lastError)
+                .SetProperty(x => x.ProcessedUtc, now)
+                .SetProperty(x => x.UpdatedUtc, now), ct);
+
+        if (affected == 0)
+        {
+            throw new InvalidOperationException($"Notification outbox item '{id}' was not found.");
+        }
     }
 
-    private async Task UpdateInternalAsync(Guid id, NotificationDispatchStatus status, string? queueMessageId, string? lastError, CancellationToken ct)
+    private static NotificationOutboxItem MapToItem(NotificationOutboxModel model)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
+        if (!Enum.TryParse<NotificationDispatchStatus>(model.Status, out var status))
+        {
+            throw new InvalidOperationException($"Unknown database status '{model.Status}' for outbox item {model.Id}");
+        }
 
-        await using var updateCmd = connection.CreateCommand();
-        updateCmd.CommandText = @"
-            UPDATE NotificationOutbox 
-            SET Status = @status, 
-                QueueMessageId = ISNULL(@queueMessageId, QueueMessageId),
-                LastError = @lastError,
-                UpdatedUtc = @now 
-            WHERE Id = @id";
-        
-        updateCmd.Parameters.AddWithValue("@id", id);
-        updateCmd.Parameters.AddWithValue("@status", status.ToString());
-        updateCmd.Parameters.AddWithValue("@queueMessageId", queueMessageId ?? (object)DBNull.Value);
-        updateCmd.Parameters.AddWithValue("@lastError", lastError ?? (object)DBNull.Value);
-        updateCmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
-
-        await updateCmd.ExecuteNonQueryAsync(ct);
+        return new NotificationOutboxItem(
+            model.Id,
+            model.SourceApplication,
+            model.NotificationType,
+            model.IdempotencyKey,
+            model.PayloadJson,
+            status,
+            model.QueueMessageId,
+            model.AttemptCount,
+            model.LastError,
+            model.CreatedUtc,
+            model.UpdatedUtc,
+            model.ProcessedUtc);
     }
 }

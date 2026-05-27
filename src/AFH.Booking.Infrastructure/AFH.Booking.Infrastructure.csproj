@@ -46,4 +46,8 @@
     <Folder Include="Migrations\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\AFH.Notification.Infrastructure\AFH.Notification.Infrastructure.csproj" />
+  </ItemGroup>
+
 </Project>

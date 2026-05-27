@@ -7,5 +7,9 @@ public sealed record NotificationOutboxItem(
     string IdempotencyKey,
     string PayloadJson,
     NotificationDispatchStatus Status,
+    string? QueueMessageId,
+    int AttemptCount,
+    string? LastError,
     DateTime CreatedUtc,
-    DateTime UpdatedUtc);
+    DateTime UpdatedUtc,
+    DateTime? ProcessedUtc);

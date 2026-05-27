@@ -14,4 +14,6 @@ public sealed class NotificationOutboxModel
     public DateTime CreatedUtc { get; set; }
     public DateTime UpdatedUtc { get; set; }
     public DateTime? ProcessedUtc { get; set; }
+    public DateTime? NextAttemptUtc { get; set; }
+    public DateTime? LockedUntilUtc { get; set; }
 }

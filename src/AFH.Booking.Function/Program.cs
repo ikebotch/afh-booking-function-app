@@ -76,7 +76,9 @@ static void AddFlattenedValuesSection(IConfigurationBuilder cfg)
         .GetSection("Values")
         .AsEnumerable()
         .Where(kv => kv.Value is not null)
-        .ToDictionary(kv => kv.Key.Replace("Values:", ""), kv => kv.Value!);
+        .ToDictionary<KeyValuePair<string, string?>, string, string?>(
+            kv => kv.Key.Replace("Values:", "").Replace("__", ":"),
+            kv => kv.Value);
 
     cfg.AddInMemoryCollection(values);
 }

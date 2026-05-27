@@ -12,4 +12,6 @@ public sealed record NotificationOutboxItem(
     string? LastError,
     DateTime CreatedUtc,
     DateTime UpdatedUtc,
-    DateTime? ProcessedUtc);
+    DateTime? ProcessedUtc,
+    DateTime? NextAttemptUtc = null,
+    DateTime? LockedUntilUtc = null);

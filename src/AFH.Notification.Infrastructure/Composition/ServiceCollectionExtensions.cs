@@ -1,4 +1,6 @@
 using AFH.Notification.Application.Abstractions;
+using AFH.Notification.Application.Options;
+using AFH.Notification.Application.Services;
 using AFH.Notification.Infrastructure.Delivery.Email;
 using AFH.Notification.Infrastructure.Delivery.Email.Graph;
 using AFH.Notification.Infrastructure.Options;
@@ -22,7 +24,10 @@ public static class ServiceCollectionExtensions
         services.Configure<GraphEmailOptions>(configuration.GetSection(GraphEmailOptions.SectionName));
         services.Configure<SmsDeliveryOptions>(configuration.GetSection(SmsDeliveryOptions.SectionName));
         services.Configure<PushDeliveryOptions>(configuration.GetSection(PushDeliveryOptions.SectionName));
-        services.Configure<NotificationQueueOptions>(configuration.GetSection(NotificationQueueOptions.SectionName));
+        services.AddOptions<NotificationOutboxDispatchOptions>()
+            .Bind(configuration.GetSection(NotificationOutboxDispatchOptions.SectionName))
+            .ValidateOnStart();
+        services.Configure<NotificationQueueOptions>(options => BindNotificationQueueOptions(configuration, options));
 
         var connectionString = configuration.GetConnectionString("BookingDb")
             ?? configuration["Values:ConnectionStrings:BookingDb"]
@@ -35,7 +40,7 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddScoped<INotificationOutboxStore, NotificationOutboxStore>();
-        services.AddScoped<INotificationQueuePublisher, AzureStorageNotificationQueuePublisher>();
+        AddQueuePublisher(services, configuration);
 
         services.AddScoped<INotificationAuditStore, NotificationAuditStore>();
         AddEmailDeliveryGateway(services, configuration);
@@ -74,5 +79,29 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddScoped<INotificationDeliveryGateway, EmailNotificationDeliveryGateway>();
+    }
+
+    private static void AddQueuePublisher(IServiceCollection services, IConfiguration configuration)
+    {
+        var dispatchOptions = configuration.GetSection(NotificationOutboxDispatchOptions.SectionName).Get<NotificationOutboxDispatchOptions>()
+            ?? new NotificationOutboxDispatchOptions();
+        dispatchOptions.Validate();
+
+        if (dispatchOptions.IsAzureQueueMode)
+        {
+            var queueOptions = new NotificationQueueOptions();
+            BindNotificationQueueOptions(configuration, queueOptions);
+            queueOptions.ValidateForAzureQueueMode();
+            services.AddScoped<INotificationQueuePublisher, AzureStorageNotificationQueuePublisher>();
+            return;
+        }
+
+        services.AddScoped<INotificationQueuePublisher, NoOpNotificationQueuePublisher>();
+    }
+
+    private static void BindNotificationQueueOptions(IConfiguration configuration, NotificationQueueOptions options)
+    {
+        configuration.GetSection(NotificationQueueOptions.LegacySectionName).Bind(options);
+        configuration.GetSection(NotificationQueueOptions.SectionName).Bind(options);
     }
 }

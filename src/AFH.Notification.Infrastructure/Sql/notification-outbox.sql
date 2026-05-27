@@ -10,9 +10,13 @@ CREATE TABLE [dbo].[NotificationOutbox] (
     [LastError] nvarchar(max) NULL,
     [CreatedUtc] datetime2 NOT NULL,
     [UpdatedUtc] datetime2 NOT NULL,
-    [ProcessedUtc] datetime2 NULL
+    [ProcessedUtc] datetime2 NULL,
+    [NextAttemptUtc] datetime2 NULL,
+    [LockedUntilUtc] datetime2 NULL
 );
 
 CREATE UNIQUE INDEX [IX_NotificationOutbox_IdempotencyKey] ON [dbo].[NotificationOutbox] ([IdempotencyKey]);
 
 CREATE INDEX [IX_NotificationOutbox_Status_CreatedUtc] ON [dbo].[NotificationOutbox] ([Status], [CreatedUtc]);
+CREATE INDEX [IX_NotificationOutbox_Status_NextAttemptUtc] ON [dbo].[NotificationOutbox] ([Status], [NextAttemptUtc]);
+CREATE INDEX [IX_NotificationOutbox_Status_LockedUntilUtc] ON [dbo].[NotificationOutbox] ([Status], [LockedUntilUtc]);

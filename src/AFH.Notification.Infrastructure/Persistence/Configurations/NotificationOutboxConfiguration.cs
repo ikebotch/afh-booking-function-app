@@ -44,7 +44,12 @@ public sealed class NotificationOutboxConfiguration : IEntityTypeConfiguration<N
             
         builder.Property(x => x.UpdatedUtc)
             .IsRequired();
-            
+
+        builder.Property(x => x.NextAttemptUtc);
+        builder.Property(x => x.LockedUntilUtc);
+
         builder.HasIndex(x => new { x.Status, x.CreatedUtc });
+        builder.HasIndex(x => new { x.Status, x.NextAttemptUtc });
+        builder.HasIndex(x => new { x.Status, x.LockedUntilUtc });
     }
 }

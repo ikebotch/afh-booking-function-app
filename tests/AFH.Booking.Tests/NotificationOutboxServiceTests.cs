@@ -153,7 +153,7 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Email, recipient);
 
-        Assert.Equal("App:Type:book-456:Email:Client:john@test.com:v1", key);
+        Assert.Equal("app:type:a11dcc96204ec72c1b6f580ea5de6a1382a1d13a693c45b4b851da136916d527", key);
     }
 
     [Fact]
@@ -170,7 +170,7 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Email, recipient);
 
-        Assert.Equal("App:Type:hold-789:Email:Client:john@test.com:v1", key);
+        Assert.Equal("app:type:799a0ef5969cb34c72d2288bf79d3abe742534d1c708adb2c84e19fbbcacacb5", key);
     }
 
     [Fact]
@@ -187,7 +187,7 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Email, recipient);
 
-        Assert.Equal("App:Type:tx-abc:Email:Client:john@test.com:v1", key);
+        Assert.Equal("app:type:3af99c3070abb6ae0c46be19a9aa98fbc8717f7f50ccfe63b5ae88d0154ebe8d", key);
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Email, recipient);
 
-        Assert.Equal("App:Type:corr-123:Email:Client:john@test.com:v1", key);
+        Assert.Equal("app:type:23810f4961f31e45f351a0ca3269a389cc39242b307a2f7f35b6266be76d6dc5", key);
     }
 
     [Fact]
@@ -221,6 +221,21 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Sms, recipient);
 
-        Assert.Equal("App:Type:corr-123:Sms:Client:1234567890:v1", key);
+        Assert.Equal("app:type:5d63d0555ead69e366e3e52be466df87d840cb4fec61db3f34167b619232c3f9", key);
+    }
+
+    [Fact]
+    public void GenerateKey_ThrowsInvalidOperationException_WhenTargetIsMissing()
+    {
+        var request = new NotificationRequested(
+            new NotificationType("App", "Type"),
+            "corr-123",
+            new NotificationActor("Sys", "App", null, null, null),
+            Array.Empty<NotificationRecipient>(),
+            new Dictionary<string, string>());
+
+        var recipient = new NotificationRecipient("Client", "John", null, null, null, null);
+
+        Assert.Throws<InvalidOperationException>(() => _sut.GenerateKey(request, NotificationChannel.Email, recipient));
     }
 }

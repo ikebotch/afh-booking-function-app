@@ -32,7 +32,7 @@ public sealed class NotificationOutboxService : INotificationPublisher
     public async Task PublishAsync(NotificationRequested notification, CancellationToken ct)
     {
         var route = await _recipientResolver.ResolveAsync(notification, ct);
-        
+
         var payloadJson = JsonSerializer.Serialize(notification);
         var activeRecipients = route.Recipients.ToList();
 
@@ -51,7 +51,7 @@ public sealed class NotificationOutboxService : INotificationPublisher
             foreach (var channel in channels)
             {
                 var key = _keyGenerator.GenerateKey(notification, channel, recipient);
-                
+
                 var outboxItem = new NotificationOutboxItem(
                     Guid.NewGuid(),
                     notification.SourceSystem,
@@ -78,6 +78,9 @@ public sealed class NotificationOutboxService : INotificationPublisher
                     };
 
                     await _queuePublisher.PublishAsync(queueMessage, ct);
+
+                    // The queue message ID might be returned from a robust queue publisher, but since we don't have it on the model yet, we pass a dummy or empty.
+                    await _outboxStore.MarkQueuedAsync(result.Item.Id, "queued", ct);
                 }
             }
         }

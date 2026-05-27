@@ -14,7 +14,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationPublisher, NotificationOutboxService>();
 
         services.AddScoped<INotificationIdempotencyKeyGenerator, NotificationIdempotencyKeyGenerator>();
-        services.AddScoped<INotificationQueuePublisher, NoOpNotificationQueuePublisher>();
         services.AddScoped<INotificationTemplateRenderer, NotificationTemplateRenderer>();
         services.AddScoped<INotificationRecipientResolver, NotificationRecipientResolver>();
 

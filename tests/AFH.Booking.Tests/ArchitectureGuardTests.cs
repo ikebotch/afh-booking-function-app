@@ -162,6 +162,43 @@ public sealed class ArchitectureGuardTests
     }
 
     [Fact]
+    public void LocalSettingsTemplate_DoesNotConfigureSqlTimerNotificationDispatcher()
+    {
+        var templatePath = Path.Combine(GetProjectPath("AFH.Booking.Function"), "local.settings.template.json");
+        var template = File.ReadAllText(templatePath);
+
+        Assert.DoesNotContain("Notifications:Outbox:DispatchSchedule", template, StringComparison.Ordinal);
+        Assert.DoesNotContain("Notifications__Outbox__DispatchSchedule", template, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NotificationDispatchesLegacyComponents_RemainPresentDuringTransition()
+    {
+        var bookingInfrastructure = Assembly.Load("AFH.Booking.Infrastructure");
+        var bookingApplication = Assembly.Load("AFH.Booking.Application");
+
+        AssertLegacyTypeIsPresentAndNotObsolete(bookingInfrastructure, "AFH.Booking.Infrastructure.Persistence.Models.NotificationDispatchModel");
+        AssertLegacyTypeIsPresentAndNotObsolete(bookingInfrastructure, "AFH.Booking.Infrastructure.Persistence.Repositories.NotificationDispatchRepository");
+        AssertLegacyTypeIsPresentAndNotObsolete(bookingInfrastructure, "AFH.Booking.Infrastructure.Clients.ClientNotificationService");
+        AssertLegacyTypeIsPresentAndNotObsolete(bookingApplication, "AFH.Booking.Application.Abstractions.Persistence.INotificationDispatchRepository");
+    }
+
+    [Fact]
+    public void NotificationOutboxMigrations_DoNotDropNotificationDispatches()
+    {
+        var notificationInfrastructurePath = GetProjectPath("AFH.Notification.Infrastructure");
+        var migrationFiles = Directory.GetFiles(Path.Combine(notificationInfrastructurePath, "Migrations"), "*.cs", SearchOption.TopDirectoryOnly);
+
+        foreach (var file in migrationFiles)
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("DropTable(\n                name: \"NotificationDispatches\"", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("DROP TABLE [NotificationDispatches]", text, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("DROP TABLE [dbo].[NotificationDispatches]", text, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
     public void NotificationContract_RemainsSourceNeutral()
     {
         var contractProjectPath = GetProjectPath("AFH.Notification.Contract");
@@ -208,6 +245,14 @@ public sealed class ArchitectureGuardTests
     {
         var references = Assembly.Load(assemblyName).GetReferencedAssemblies().Select(reference => reference.Name).ToArray();
         Assert.Contains(expectedAssemblyName, references);
+    }
+
+    private static void AssertLegacyTypeIsPresentAndNotObsolete(Assembly assembly, string typeName)
+    {
+        var type = assembly.GetType(typeName);
+
+        Assert.NotNull(type);
+        Assert.Null(type!.GetCustomAttribute<ObsoleteAttribute>());
     }
 
     private static void AssertDoesNotReferencePrefix(string assemblyName, string forbiddenPrefix)

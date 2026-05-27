@@ -1,12 +1,10 @@
 using System.Text.Json;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
-using AFH.Notification.Application.Options;
 using AFH.Notification.Contract.Abstractions;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace AFH.Notification.Application.Services;
 
@@ -17,7 +15,6 @@ public sealed class NotificationOutboxService : INotificationPublisher
     private readonly INotificationIdempotencyKeyGenerator _keyGenerator;
     private readonly INotificationRecipientResolver _recipientResolver;
     private readonly IContactCentreRoutingResolver _contactCentreResolver;
-    private readonly NotificationOutboxDispatchOptions _dispatchOptions;
     private readonly ILogger<NotificationOutboxService> _logger;
 
     public NotificationOutboxService(
@@ -26,7 +23,6 @@ public sealed class NotificationOutboxService : INotificationPublisher
         INotificationIdempotencyKeyGenerator keyGenerator,
         INotificationRecipientResolver recipientResolver,
         IContactCentreRoutingResolver contactCentreResolver,
-        IOptions<NotificationOutboxDispatchOptions> dispatchOptions,
         ILogger<NotificationOutboxService> logger)
     {
         _outboxStore = outboxStore;
@@ -34,8 +30,6 @@ public sealed class NotificationOutboxService : INotificationPublisher
         _keyGenerator = keyGenerator;
         _recipientResolver = recipientResolver;
         _contactCentreResolver = contactCentreResolver;
-        _dispatchOptions = dispatchOptions.Value;
-        _dispatchOptions.Validate();
         _logger = logger;
     }
 
@@ -78,13 +72,11 @@ public sealed class NotificationOutboxService : INotificationPublisher
 
                 var result = await _outboxStore.CreateOrGetAsync(outboxItem, ct);
 
-                if (result.Created && _dispatchOptions.IsAzureQueueMode)
+                if (result.Created)
                 {
                     var queueMessage = new NotificationQueueMessage
                     {
-                        NotificationOutboxId = result.Item.Id,
-                        SourceApplication = result.Item.SourceApplication,
-                        NotificationType = result.Item.NotificationType
+                        OutboxId = result.Item.Id
                     };
 
                     var publishResult = await _queuePublisher.PublishAsync(queueMessage, ct);
@@ -102,12 +94,6 @@ public sealed class NotificationOutboxService : INotificationPublisher
                             publishResult.QueueMessageId);
                         throw;
                     }
-                }
-                else if (result.Created && _dispatchOptions.IsSqlMode)
-                {
-                    _logger.LogInformation(
-                        "Notification outbox item {OutboxId} persisted for SQL dispatch mode. Queue publish skipped.",
-                        result.Item.Id);
                 }
             }
         }

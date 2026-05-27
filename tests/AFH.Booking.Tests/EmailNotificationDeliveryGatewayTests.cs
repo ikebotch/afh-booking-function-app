@@ -148,7 +148,9 @@ public sealed class EmailNotificationDeliveryGatewayTests
                 ["Notifications:Email:Enabled"] = "true",
                 ["Notifications:Email:ProviderName"] = "Graph",
                 ["Notifications:Email:Graph:UseManagedIdentity"] = "true",
-                ["Notifications:Email:Graph:SenderMailbox"] = "sender@example.test"
+                ["Notifications:Email:Graph:SenderMailbox"] = "sender@example.test",
+                ["NotificationQueue:QueueName"] = "notifications-send",
+                ["NotificationQueue:ConnectionString"] = "UseDevelopmentStorage=true"
             })
             .Build();
         var services = new ServiceCollection();

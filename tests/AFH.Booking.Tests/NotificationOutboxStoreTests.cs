@@ -280,72 +280,17 @@ public class NotificationOutboxStoreTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task ClaimDueBatchAsync_ClaimsDuePendingRows()
-    {
-        if (SkipIfNoDb()) return;
-        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
-        await _sut.CreateOrGetAsync(item, CancellationToken.None);
-
-        var claimed = await _sut.ClaimDueBatchAsync(10, DateTime.UtcNow, TimeSpan.FromMinutes(5), CancellationToken.None);
-
-        var single = Assert.Single(claimed);
-        Assert.Equal(item.Id, single.Id);
-        Assert.Equal(NotificationDispatchStatus.Processing, single.Status);
-        Assert.Equal(1, single.AttemptCount);
-        Assert.NotNull(single.LockedUntilUtc);
-    }
-
-    [Fact]
-    public async Task ClaimDueBatchAsync_RetriesFailedRowsOnlyAfterNextAttemptUtc()
-    {
-        if (SkipIfNoDb()) return;
-        var notDue = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
-        var due = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
-        await _sut.CreateOrGetAsync(notDue, CancellationToken.None);
-        await _sut.CreateOrGetAsync(due, CancellationToken.None);
-
-        await _sut.TryMarkProcessingAsync(notDue.Id, CancellationToken.None);
-        await _sut.MarkFailedAsync(notDue.Id, "not due", DateTime.UtcNow.AddMinutes(10), CancellationToken.None);
-        await _sut.TryMarkProcessingAsync(due.Id, CancellationToken.None);
-        await _sut.MarkFailedAsync(due.Id, "due", DateTime.UtcNow.AddMinutes(-1), CancellationToken.None);
-
-        var claimed = await _sut.ClaimDueBatchAsync(10, DateTime.UtcNow, TimeSpan.FromMinutes(5), CancellationToken.None);
-
-        var single = Assert.Single(claimed);
-        Assert.Equal(due.Id, single.Id);
-    }
-
-    [Fact]
-    public async Task ClaimDueBatchAsync_ReclaimsExpiredProcessingRows()
+    public async Task TryMarkProcessingAsync_ReclaimsExpiredProcessingRows()
     {
         if (SkipIfNoDb()) return;
         var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
         await _sut.CreateOrGetAsync(item, CancellationToken.None);
         await _sut.TryMarkProcessingAsync(item.Id, DateTime.UtcNow.AddMinutes(-10), TimeSpan.FromMinutes(1), CancellationToken.None);
 
-        var claimed = await _sut.ClaimDueBatchAsync(10, DateTime.UtcNow, TimeSpan.FromMinutes(5), CancellationToken.None);
+        var claimed = await _sut.TryMarkProcessingAsync(item.Id, DateTime.UtcNow, TimeSpan.FromMinutes(5), CancellationToken.None);
 
-        var single = Assert.Single(claimed);
-        Assert.Equal(item.Id, single.Id);
-        Assert.Equal(2, single.AttemptCount);
-    }
-
-    [Fact]
-    public async Task ClaimDueBatchAsync_DoesNotProcessSentOrDeadLetteredRows()
-    {
-        if (SkipIfNoDb()) return;
-        var sent = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
-        var dead = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
-        await _sut.CreateOrGetAsync(sent, CancellationToken.None);
-        await _sut.CreateOrGetAsync(dead, CancellationToken.None);
-
-        await _sut.TryMarkProcessingAsync(sent.Id, CancellationToken.None);
-        await _sut.MarkSentAsync(sent.Id, CancellationToken.None);
-        await _sut.TryMarkProcessingAsync(dead.Id, CancellationToken.None);
-        await _sut.MarkDeadLetteredAsync(dead.Id, "dead", CancellationToken.None);
-
-        var claimed = await _sut.ClaimDueBatchAsync(10, DateTime.UtcNow, TimeSpan.FromMinutes(5), CancellationToken.None);
-
-        Assert.Empty(claimed);
+        Assert.NotNull(claimed);
+        Assert.Equal(item.Id, claimed.Id);
+        Assert.Equal(2, claimed.AttemptCount);
     }
 }

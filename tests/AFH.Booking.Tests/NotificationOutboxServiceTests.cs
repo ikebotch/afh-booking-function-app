@@ -1,13 +1,11 @@
 using System.Text.Json;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
-using AFH.Notification.Application.Options;
 using AFH.Notification.Application.Policies.Booking;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
@@ -31,7 +29,6 @@ public class NotificationOutboxServiceTests
             _keyGeneratorMock.Object,
             _recipientResolverMock.Object,
             _contactCentreResolverMock.Object,
-            Options.Create(new NotificationOutboxDispatchOptions { DispatcherMode = NotificationOutboxDispatchOptions.AzureQueueMode }),
             NullLogger<NotificationOutboxService>.Instance);
     }
 
@@ -72,9 +69,7 @@ public class NotificationOutboxServiceTests
             i.IdempotencyKey == "TestApp:TestType:corr-123:Email:Client:test@test.com:v1"), It.IsAny<CancellationToken>()), Times.Once);
 
         _queuePublisherMock.Verify(x => x.PublishAsync(It.Is<NotificationQueueMessage>(m => 
-            m.NotificationOutboxId == outboxItem.Id &&
-            m.SourceApplication == "TestApp" &&
-            m.NotificationType == "TestType"), It.IsAny<CancellationToken>()), Times.Once);
+            m.OutboxId == outboxItem.Id), It.IsAny<CancellationToken>()), Times.Once);
         _outboxStoreMock.Verify(x => x.MarkQueuedAsync(outboxItem.Id, "azure-message-123", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -108,41 +103,6 @@ public class NotificationOutboxServiceTests
         await _sut.PublishAsync(request, CancellationToken.None);
 
         _outboxStoreMock.Verify(x => x.CreateOrGetAsync(It.IsAny<NotificationOutboxItem>(), It.IsAny<CancellationToken>()), Times.Once);
-        _queuePublisherMock.Verify(x => x.PublishAsync(It.IsAny<NotificationQueueMessage>(), It.IsAny<CancellationToken>()), Times.Never);
-        _outboxStoreMock.Verify(x => x.MarkQueuedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task PublishAsync_SqlDispatcherMode_DoesNotPublishQueueMessage()
-    {
-        var sut = new NotificationOutboxService(
-            _outboxStoreMock.Object,
-            _queuePublisherMock.Object,
-            _keyGeneratorMock.Object,
-            _recipientResolverMock.Object,
-            _contactCentreResolverMock.Object,
-            Options.Create(new NotificationOutboxDispatchOptions { DispatcherMode = NotificationOutboxDispatchOptions.SqlMode }),
-            NullLogger<NotificationOutboxService>.Instance);
-        var request = new NotificationRequested(
-            new NotificationType("TestApp", "TestType"),
-            "corr-123",
-            new NotificationActor("System", "TestApp", null, null, null),
-            new[] { new NotificationRecipient("Client", "John", "test@test.com", null, null, null) },
-            new Dictionary<string, string>());
-        var recipient = new NotificationRecipient("Client", "John", "test@test.com", null, null, new[] { NotificationChannel.Email });
-        var resolvedRoute = new NotificationRoute(new[] { recipient }, false);
-        var outboxItem = new NotificationOutboxItem(
-            Guid.NewGuid(), "TestApp", "TestType", "key", "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
-
-        _recipientResolverMock.Setup(x => x.ResolveAsync(request, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(resolvedRoute);
-        _keyGeneratorMock.Setup(x => x.GenerateKey(request, NotificationChannel.Email, recipient))
-            .Returns("key");
-        _outboxStoreMock.Setup(x => x.CreateOrGetAsync(It.IsAny<NotificationOutboxItem>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new NotificationOutboxCreateResult(outboxItem, true));
-
-        await sut.PublishAsync(request, CancellationToken.None);
-
         _queuePublisherMock.Verify(x => x.PublishAsync(It.IsAny<NotificationQueueMessage>(), It.IsAny<CancellationToken>()), Times.Never);
         _outboxStoreMock.Verify(x => x.MarkQueuedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -215,6 +175,35 @@ public class NotificationOutboxServiceTests
         Assert.Equal("mark failed", ex.Message);
         _queuePublisherMock.Verify(x => x.PublishAsync(It.IsAny<NotificationQueueMessage>(), It.IsAny<CancellationToken>()), Times.Once);
         _outboxStoreMock.Verify(x => x.MarkQueuedAsync(outboxItem.Id, "azure-message-123", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task PublishAsync_QueuePublishFailure_LeavesPendingAndThrows()
+    {
+        var request = new NotificationRequested(
+            new NotificationType("TestApp", "TestType"),
+            "corr-123",
+            new NotificationActor("System", "TestApp", null, null, null),
+            new[] { new NotificationRecipient("Client", "John", "test@test.com", null, null, null) },
+            new Dictionary<string, string>());
+        var recipient = new NotificationRecipient("Client", "John", "test@test.com", null, null, new[] { NotificationChannel.Email });
+        var resolvedRoute = new NotificationRoute(new[] { recipient }, false);
+        var outboxItem = new NotificationOutboxItem(
+            Guid.NewGuid(), "TestApp", "TestType", "key", "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+
+        _recipientResolverMock.Setup(x => x.ResolveAsync(request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(resolvedRoute);
+        _keyGeneratorMock.Setup(x => x.GenerateKey(request, NotificationChannel.Email, recipient))
+            .Returns("key");
+        _outboxStoreMock.Setup(x => x.CreateOrGetAsync(It.IsAny<NotificationOutboxItem>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotificationOutboxCreateResult(outboxItem, true));
+        _queuePublisherMock.Setup(x => x.PublishAsync(It.IsAny<NotificationQueueMessage>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("queue unavailable"));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.PublishAsync(request, CancellationToken.None));
+
+        Assert.Equal("queue unavailable", ex.Message);
+        _outboxStoreMock.Verify(x => x.MarkQueuedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }
 

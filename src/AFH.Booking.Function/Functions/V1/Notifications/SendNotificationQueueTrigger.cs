@@ -1,27 +1,22 @@
 using System.Text.Json;
 using AFH.Notification.Application.Models;
-using AFH.Notification.Application.Options;
 using AFH.Notification.Application.Services;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Function.Functions.V1.Notifications;
 
 public class SendNotificationQueueTrigger
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private readonly NotificationOutboxDispatcher _dispatcher;
-    private readonly NotificationOutboxDispatchOptions _options;
     private readonly ILogger<SendNotificationQueueTrigger> _logger;
 
     public SendNotificationQueueTrigger(
         NotificationOutboxDispatcher dispatcher,
-        IOptions<NotificationOutboxDispatchOptions> options,
         ILogger<SendNotificationQueueTrigger> logger)
     {
         _dispatcher = dispatcher;
-        _options = options.Value;
-        _options.Validate();
         _logger = logger;
     }
 
@@ -32,16 +27,10 @@ public class SendNotificationQueueTrigger
     {
         var cancellationToken = context.CancellationToken;
 
-        if (_options.IsSqlMode)
-        {
-            _logger.LogInformation("Queue notification dispatch skipped because DispatcherMode=Sql.");
-            return;
-        }
-
         NotificationQueueMessage? queueMessage;
         try
         {
-            queueMessage = JsonSerializer.Deserialize<NotificationQueueMessage>(queueMessageJson);
+            queueMessage = JsonSerializer.Deserialize<NotificationQueueMessage>(queueMessageJson, SerializerOptions);
         }
         catch (JsonException ex)
         {
@@ -55,7 +44,6 @@ public class SendNotificationQueueTrigger
             return;
         }
 
-        var outboxId = queueMessage.NotificationOutboxId;
-        await _dispatcher.DispatchQueuedAsync(outboxId, cancellationToken);
+        await _dispatcher.DispatchQueuedAsync(queueMessage.OutboxId, cancellationToken);
     }
 }

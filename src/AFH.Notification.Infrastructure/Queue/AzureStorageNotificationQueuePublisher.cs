@@ -8,6 +8,7 @@ namespace AFH.Notification.Infrastructure.Queue;
 
 public sealed class AzureStorageNotificationQueuePublisher : INotificationQueuePublisher
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private readonly QueueClient _queueClient;
 
     public AzureStorageNotificationQueuePublisher(IOptions<NotificationQueueOptions> options)
@@ -28,7 +29,7 @@ public sealed class AzureStorageNotificationQueuePublisher : INotificationQueueP
     {
         await _queueClient.CreateIfNotExistsAsync(cancellationToken: ct);
 
-        var payload = JsonSerializer.Serialize(message);
+        var payload = JsonSerializer.Serialize(message, SerializerOptions);
         var response = await _queueClient.SendMessageAsync(payload, cancellationToken: ct);
         return new NotificationQueuePublishResult(response.Value.MessageId);
     }

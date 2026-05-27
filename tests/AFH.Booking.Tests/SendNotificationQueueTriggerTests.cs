@@ -2,14 +2,12 @@ using System.Text.Json;
 using AFH.Booking.Function.Functions.V1.Notifications;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
-using AFH.Notification.Application.Options;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Contract.Abstractions;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
@@ -17,6 +15,7 @@ namespace AFH.Booking.Tests;
 
 public class SendNotificationQueueTriggerTests
 {
+    private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
     private readonly Mock<INotificationOutboxStore> _outboxStoreMock = new();
     private readonly Mock<INotificationService> _notificationServiceMock = new();
     private readonly Mock<FunctionContext> _functionContextMock = new();
@@ -27,108 +26,138 @@ public class SendNotificationQueueTriggerTests
     }
 
     [Fact]
-    public async Task RunAsync_SqlMode_NoOps()
+    public async Task RunAsync_ProcessesOutboxIdOnlyMessage()
     {
-        var sut = CreateSut(NotificationOutboxDispatchOptions.SqlMode);
-        var message = new NotificationQueueMessage { NotificationOutboxId = Guid.NewGuid(), SourceApplication = "App", NotificationType = "Type" };
+        var sut = CreateSut();
+        var outboxId = Guid.NewGuid();
+        var outboxItem = CreateOutboxItem(outboxId, JsonSerializer.Serialize(CreateRequest("corr")));
 
-        await sut.RunAsync(JsonSerializer.Serialize(message), _functionContextMock.Object);
+        _outboxStoreMock.Setup(x => x.GetAsync(outboxId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(outboxItem);
+        _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(outboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(outboxItem);
+
+        await sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object);
+
+        _notificationServiceMock.Verify(x => x.PublishAsync(It.Is<NotificationRequested>(r => r.CorrelationId == "corr"), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxStoreMock.Verify(x => x.MarkSentAsync(outboxId, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task RunAsync_DeserializationFails_ThrowsException()
+    {
+        var sut = CreateSut();
+
+        await Assert.ThrowsAsync<JsonException>(() => sut.RunAsync("{ invalid json }", _functionContextMock.Object));
+    }
+
+    [Fact]
+    public async Task RunAsync_OutboxItemMissing_ExitsSafely()
+    {
+        var sut = CreateSut();
+        var outboxId = Guid.NewGuid();
+
+        _outboxStoreMock.Setup(x => x.GetAsync(outboxId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((NotificationOutboxItem?)null);
+
+        await sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object);
 
         _outboxStoreMock.Verify(x => x.TryMarkProcessingAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
         _notificationServiceMock.Verify(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task RunAsync_DeserializationFails_ThrowsException()
+    public async Task RunAsync_ClaimFailure_ExitsSafely()
     {
-        var sut = CreateSut(NotificationOutboxDispatchOptions.AzureQueueMode);
+        var sut = CreateSut();
+        var outboxId = Guid.NewGuid();
+        var outboxItem = CreateOutboxItem(outboxId, JsonSerializer.Serialize(CreateRequest("corr")));
 
-        await Assert.ThrowsAsync<JsonException>(() => sut.RunAsync("{ invalid json }", _functionContextMock.Object));
-    }
-
-    [Fact]
-    public async Task RunAsync_TryMarkProcessingReturnsNull_ExitsSafely()
-    {
-        var sut = CreateSut(NotificationOutboxDispatchOptions.AzureQueueMode);
-        var message = new NotificationQueueMessage { NotificationOutboxId = Guid.NewGuid(), SourceApplication = "App", NotificationType = "Type" };
-
-        _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(message.NotificationOutboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+        _outboxStoreMock.Setup(x => x.GetAsync(outboxId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(outboxItem);
+        _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(outboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync((NotificationOutboxItem?)null);
 
-        await sut.RunAsync(JsonSerializer.Serialize(message), _functionContextMock.Object);
+        await sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object);
 
         _notificationServiceMock.Verify(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task RunAsync_PayloadDeserializationFails_MarksDeadLettered()
+    public async Task RunAsync_InvalidPersistedPayload_MarksDeadLettered()
     {
-        var sut = CreateSut(NotificationOutboxDispatchOptions.AzureQueueMode);
-        var message = new NotificationQueueMessage { NotificationOutboxId = Guid.NewGuid(), SourceApplication = "App", NotificationType = "Type" };
-        var outboxItem = new NotificationOutboxItem(message.NotificationOutboxId, "App", "Type", "key", "{ invalid payload }", NotificationDispatchStatus.Processing, null, 1, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        var sut = CreateSut();
+        var outboxId = Guid.NewGuid();
+        var outboxItem = CreateOutboxItem(outboxId, "{ invalid payload }");
 
-        _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(message.NotificationOutboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+        _outboxStoreMock.Setup(x => x.GetAsync(outboxId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(outboxItem);
+        _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(outboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outboxItem);
 
-        await sut.RunAsync(JsonSerializer.Serialize(message), _functionContextMock.Object);
+        await sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object);
 
-        _outboxStoreMock.Verify(x => x.MarkDeadLetteredAsync(message.NotificationOutboxId, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxStoreMock.Verify(x => x.MarkDeadLetteredAsync(outboxId, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
         _notificationServiceMock.Verify(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task RunAsync_Success_DispatchesAndMarksSent()
+    public async Task RunAsync_DeliverySuccess_MarksSent()
     {
-        var sut = CreateSut(NotificationOutboxDispatchOptions.AzureQueueMode);
-        var message = new NotificationQueueMessage { NotificationOutboxId = Guid.NewGuid(), SourceApplication = "App", NotificationType = "Type" };
-        var request = new NotificationRequested(new NotificationType("App", "Type"), "corr", new NotificationActor("sys", "App", null, null, null), Array.Empty<NotificationRecipient>(), new Dictionary<string, string>());
-        var outboxItem = new NotificationOutboxItem(message.NotificationOutboxId, "App", "Type", "key", JsonSerializer.Serialize(request), NotificationDispatchStatus.Processing, null, 1, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        var sut = CreateSut();
+        var outboxId = Guid.NewGuid();
+        var outboxItem = CreateOutboxItem(outboxId, JsonSerializer.Serialize(CreateRequest("corr")));
 
-        _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(message.NotificationOutboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+        _outboxStoreMock.Setup(x => x.GetAsync(outboxId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(outboxItem);
+        _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(outboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outboxItem);
 
-        await sut.RunAsync(JsonSerializer.Serialize(message), _functionContextMock.Object);
+        await sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object);
 
-        _notificationServiceMock.Verify(x => x.PublishAsync(It.Is<NotificationRequested>(r => r.CorrelationId == "corr"), It.IsAny<CancellationToken>()), Times.Once);
-        _outboxStoreMock.Verify(x => x.MarkSentAsync(message.NotificationOutboxId, It.IsAny<CancellationToken>()), Times.Once);
+        _outboxStoreMock.Verify(x => x.MarkSentAsync(outboxId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task RunAsync_DispatcherThrows_MarksFailedAndRethrows()
+    public async Task RunAsync_DeliveryFailure_MarksFailedAndRethrows()
     {
-        var sut = CreateSut(NotificationOutboxDispatchOptions.AzureQueueMode);
-        var message = new NotificationQueueMessage { NotificationOutboxId = Guid.NewGuid(), SourceApplication = "App", NotificationType = "Type" };
-        var request = new NotificationRequested(new NotificationType("App", "Type"), "corr", new NotificationActor("sys", "App", null, null, null), Array.Empty<NotificationRecipient>(), new Dictionary<string, string>());
-        var outboxItem = new NotificationOutboxItem(message.NotificationOutboxId, "App", "Type", "key", JsonSerializer.Serialize(request), NotificationDispatchStatus.Processing, null, 1, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        var sut = CreateSut();
+        var outboxId = Guid.NewGuid();
+        var outboxItem = CreateOutboxItem(outboxId, JsonSerializer.Serialize(CreateRequest("corr")));
 
-        _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(message.NotificationOutboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
+        _outboxStoreMock.Setup(x => x.GetAsync(outboxId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(outboxItem);
+        _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(outboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outboxItem);
         _notificationServiceMock.Setup(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Dispatcher failure"));
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => sut.RunAsync(JsonSerializer.Serialize(message), _functionContextMock.Object));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object));
 
-        _outboxStoreMock.Verify(x => x.MarkFailedAsync(message.NotificationOutboxId, "Dispatcher failure", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()), Times.Once);
+        _outboxStoreMock.Verify(x => x.MarkFailedAsync(outboxId, "Dispatcher failure", It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    private SendNotificationQueueTrigger CreateSut(string mode)
+    private SendNotificationQueueTrigger CreateSut()
     {
-        var options = Options.Create(new NotificationOutboxDispatchOptions
-        {
-            DispatcherMode = mode,
-            MaxAttempts = 5,
-            RetryDelaySeconds = 300,
-            ProcessingLockSeconds = 300
-        });
         var dispatcher = new NotificationOutboxDispatcher(
             _outboxStoreMock.Object,
             _notificationServiceMock.Object,
-            options,
             NullLogger<NotificationOutboxDispatcher>.Instance);
 
         return new SendNotificationQueueTrigger(
             dispatcher,
-            options,
             NullLogger<SendNotificationQueueTrigger>.Instance);
     }
+
+    private static NotificationRequested CreateRequest(string correlationId)
+        => new(
+            new NotificationType("App", "Type"),
+            correlationId,
+            new NotificationActor("sys", "App", null, null, null),
+            Array.Empty<NotificationRecipient>(),
+            new Dictionary<string, string>());
+
+    private static NotificationOutboxItem CreateOutboxItem(Guid outboxId, string payloadJson)
+        => new(outboxId, "App", "Type", "key", payloadJson, NotificationDispatchStatus.Processing, null, 1, null, DateTime.UtcNow, DateTime.UtcNow, null);
 }

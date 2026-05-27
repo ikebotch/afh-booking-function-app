@@ -11,9 +11,9 @@ public sealed class NotificationQueueOptions
     public void ValidateForAzureQueueMode()
     {
         if (string.IsNullOrWhiteSpace(QueueName))
-            throw new InvalidOperationException("NotificationQueue:QueueName is required when Notifications:Outbox:DispatcherMode=AzureQueue.");
+            throw new InvalidOperationException("NotificationQueue:QueueName is required for hybrid notification dispatch.");
 
         if (string.IsNullOrWhiteSpace(ConnectionString))
-            throw new InvalidOperationException("NotificationQueue:ConnectionString is required when Notifications:Outbox:DispatcherMode=AzureQueue.");
+            throw new InvalidOperationException("NotificationQueue:ConnectionString is required for hybrid notification dispatch.");
     }
 }

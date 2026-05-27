@@ -1,5 +1,4 @@
 using AFH.Notification.Application.Abstractions;
-using AFH.Notification.Application.Options;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Infrastructure.Delivery.Email;
 using AFH.Notification.Infrastructure.Delivery.Email.Graph;
@@ -24,9 +23,6 @@ public static class ServiceCollectionExtensions
         services.Configure<GraphEmailOptions>(configuration.GetSection(GraphEmailOptions.SectionName));
         services.Configure<SmsDeliveryOptions>(configuration.GetSection(SmsDeliveryOptions.SectionName));
         services.Configure<PushDeliveryOptions>(configuration.GetSection(PushDeliveryOptions.SectionName));
-        services.AddOptions<NotificationOutboxDispatchOptions>()
-            .Bind(configuration.GetSection(NotificationOutboxDispatchOptions.SectionName))
-            .ValidateOnStart();
         services.Configure<NotificationQueueOptions>(options => BindNotificationQueueOptions(configuration, options));
 
         var connectionString = configuration.GetConnectionString("BookingDb")
@@ -83,20 +79,10 @@ public static class ServiceCollectionExtensions
 
     private static void AddQueuePublisher(IServiceCollection services, IConfiguration configuration)
     {
-        var dispatchOptions = configuration.GetSection(NotificationOutboxDispatchOptions.SectionName).Get<NotificationOutboxDispatchOptions>()
-            ?? new NotificationOutboxDispatchOptions();
-        dispatchOptions.Validate();
-
-        if (dispatchOptions.IsAzureQueueMode)
-        {
-            var queueOptions = new NotificationQueueOptions();
-            BindNotificationQueueOptions(configuration, queueOptions);
-            queueOptions.ValidateForAzureQueueMode();
-            services.AddScoped<INotificationQueuePublisher, AzureStorageNotificationQueuePublisher>();
-            return;
-        }
-
-        services.AddScoped<INotificationQueuePublisher, NoOpNotificationQueuePublisher>();
+        var queueOptions = new NotificationQueueOptions();
+        BindNotificationQueueOptions(configuration, queueOptions);
+        queueOptions.ValidateForAzureQueueMode();
+        services.AddScoped<INotificationQueuePublisher, AzureStorageNotificationQueuePublisher>();
     }
 
     private static void BindNotificationQueueOptions(IConfiguration configuration, NotificationQueueOptions options)

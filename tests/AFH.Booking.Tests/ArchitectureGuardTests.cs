@@ -134,6 +134,61 @@ public sealed class ArchitectureGuardTests
         }
     }
 
+    [Fact]
+    public void NotificationQueueMessage_RemainsOutboxIdOnly()
+    {
+        var messageType = Assembly.Load("AFH.Notification.Application")
+            .GetType("AFH.Notification.Application.Models.NotificationQueueMessage");
+
+        Assert.NotNull(messageType);
+        var property = Assert.Single(messageType!.GetProperties(BindingFlags.Instance | BindingFlags.Public));
+        Assert.Equal("OutboxId", property.Name);
+        Assert.Equal(typeof(Guid), property.PropertyType);
+    }
+
+    [Fact]
+    public void FunctionAssembly_DoesNotContainSqlTimerNotificationDispatcher()
+    {
+        var functionProjectPath = GetProjectPath("AFH.Booking.Function");
+        var files = Directory.GetFiles(functionProjectPath, "*.cs", SearchOption.AllDirectories);
+
+        Assert.DoesNotContain(files, file => Path.GetFileName(file).Equals("DispatchNotificationOutboxFunction.cs", StringComparison.Ordinal));
+
+        foreach (var file in files.Where(file => file.Contains($"{Path.DirectorySeparatorChar}Notifications{Path.DirectorySeparatorChar}", StringComparison.Ordinal)))
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("[TimerTrigger", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void NotificationContract_RemainsSourceNeutral()
+    {
+        var contractProjectPath = GetProjectPath("AFH.Notification.Contract");
+        var forbiddenTerms = new[]
+        {
+            "BookingId",
+            "HoldId",
+            "TransactionId",
+            "ClientId",
+            "AdviserName",
+            "ClientName"
+        };
+
+        foreach (var file in Directory.GetFiles(contractProjectPath, "*.cs", SearchOption.AllDirectories))
+        {
+            var text = File.ReadAllText(file);
+            foreach (var term in forbiddenTerms)
+                Assert.DoesNotContain(term, text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void BookingInfrastructure_DoesNotReferenceNotificationInfrastructure()
+    {
+        AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Notification.Infrastructure");
+    }
+
     private static string[] GetHttpFunctionNames(Assembly functionAssembly) =>
         functionAssembly.GetTypes()
             .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static))

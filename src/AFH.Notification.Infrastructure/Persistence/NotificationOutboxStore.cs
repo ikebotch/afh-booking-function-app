@@ -84,60 +84,6 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
         return model != null ? MapToItem(model) : null;
     }
 
-    public async Task<IReadOnlyList<NotificationOutboxItem>> ClaimDueBatchAsync(
-        int batchSize,
-        DateTime utcNow,
-        TimeSpan processingLock,
-        CancellationToken ct)
-    {
-        var dueStatuses = new[]
-        {
-            NotificationDispatchStatus.Pending.ToString(),
-            NotificationDispatchStatus.Failed.ToString()
-        };
-
-        var dueIds = await _dbContext.NotificationOutbox
-            .AsNoTracking()
-            .Where(x =>
-                (dueStatuses.Contains(x.Status) && (x.NextAttemptUtc == null || x.NextAttemptUtc <= utcNow)) ||
-                (x.Status == NotificationDispatchStatus.Processing.ToString() && x.LockedUntilUtc != null && x.LockedUntilUtc <= utcNow))
-            .OrderBy(x => x.NextAttemptUtc ?? x.CreatedUtc)
-            .ThenBy(x => x.CreatedUtc)
-            .Select(x => x.Id)
-            .Take(batchSize)
-            .ToListAsync(ct);
-
-        if (dueIds.Count == 0)
-            return [];
-
-        var lockedUntilUtc = utcNow.Add(processingLock);
-        var affected = await _dbContext.NotificationOutbox
-            .Where(x =>
-                dueIds.Contains(x.Id) &&
-                ((dueStatuses.Contains(x.Status) && (x.NextAttemptUtc == null || x.NextAttemptUtc <= utcNow)) ||
-                 (x.Status == NotificationDispatchStatus.Processing.ToString() && x.LockedUntilUtc != null && x.LockedUntilUtc <= utcNow)))
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(x => x.Status, NotificationDispatchStatus.Processing.ToString())
-                .SetProperty(x => x.AttemptCount, x => x.AttemptCount + 1)
-                .SetProperty(x => x.LastError, (string?)null)
-                .SetProperty(x => x.NextAttemptUtc, (DateTime?)null)
-                .SetProperty(x => x.LockedUntilUtc, lockedUntilUtc)
-                .SetProperty(x => x.ProcessedUtc, (DateTime?)null)
-                .SetProperty(x => x.UpdatedUtc, utcNow), ct);
-
-        if (affected == 0)
-            return [];
-
-        var claimed = await _dbContext.NotificationOutbox
-            .AsNoTracking()
-            .Where(x => dueIds.Contains(x.Id) && x.Status == NotificationDispatchStatus.Processing.ToString() && x.LockedUntilUtc == lockedUntilUtc)
-            .OrderBy(x => x.UpdatedUtc)
-            .Select(x => MapToItem(x))
-            .ToListAsync(ct);
-
-        return claimed;
-    }
-
     public async Task MarkQueuedAsync(Guid id, string queueMessageId, CancellationToken ct)
     {
         var affected = await _dbContext.NotificationOutbox
@@ -171,7 +117,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
         var affected = await _dbContext.NotificationOutbox
             .Where(x =>
                 x.Id == id &&
-                ((validStatuses.Contains(x.Status) && (x.NextAttemptUtc == null || x.NextAttemptUtc <= utcNow)) ||
+                (validStatuses.Contains(x.Status) ||
                  (x.Status == NotificationDispatchStatus.Processing.ToString() && x.LockedUntilUtc != null && x.LockedUntilUtc <= utcNow)))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.Processing.ToString())
@@ -233,7 +179,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
     }
 
     public Task MarkFailedAsync(Guid id, string lastError, CancellationToken ct)
-        => MarkFailedAsync(id, lastError, DateTime.UtcNow.AddMinutes(5), ct);
+        => MarkFailedAsync(id, lastError, DateTime.UtcNow, ct);
 
     public async Task MarkDeadLetteredAsync(Guid id, string lastError, CancellationToken ct)
     {

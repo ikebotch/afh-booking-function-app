@@ -58,19 +58,16 @@
 - Contact-centre copy is a Booking routing policy evaluated through Notification policy interfaces, not hardcoded template logic.
 - Hold notifications are enabled; they should be configuration-gated before production if the business has not explicitly approved them.
 - Old direct Booking email paths are still intentionally present for transition. Do not remove them until tests prove safe replacement.
-- Notification dispatch is durable and can run through SQL polling or Azure Storage Queues.
-  - Dispatch mode is controlled by `Notifications__Outbox__DispatcherMode` / `Notifications:Outbox:DispatcherMode`.
-  - Allowed values are `Sql` and `AzureQueue`; invalid values fail fast with a clear configuration error.
-  - `Sql` is the default and is recommended for sensitive-data environments that require SQL-only dispatch.
-  - `AzureQueue` is recommended where event-driven processing and Azure Queue built-in retry/poison behavior are preferred.
-  - `NotificationOutbox` remains the durable source of truth in both modes.
-  - In `Sql` mode, `NotificationOutboxService` persists `Pending` rows only; `DispatchNotificationOutboxFunction` polls due rows on `Notifications__Outbox__DispatchSchedule`.
-  - In `AzureQueue` mode, `NotificationOutboxService` publishes a slim queue message and `SendNotificationQueueTrigger` processes the outbox item.
+- The notification system uses a hybrid dispatch model.
+  - SQL stores the full notification payload, processing state, idempotency key, and audit metadata in `NotificationOutbox`.
+  - Azure Storage Queue is used only as a wake-up signal and contains only `outboxId`.
+  - Flow: Booking lifecycle event -> `NotificationOutbox` row in SQL -> Azure Queue message containing only `outboxId` -> queue trigger loads full payload from SQL -> `NotificationService` dispatches through Graph -> SQL status is updated.
+  - Azure Queue does not contain sensitive notification data.
+  - SQL remains the source of truth.
   - No Event Grid subscription is needed for Azure Queue sending; the queue trigger listens automatically.
-  - Azure Queue mode requires `NotificationQueue__QueueName` and `NotificationQueue__ConnectionString`.
-  - SQL mode does not require queue settings.
-  - SQL mode uses custom retry/dead-letter behavior in `NotificationOutbox`: `Failed` rows retry after `NextAttemptUtc`, expired `Processing` locks can be reclaimed after `LockedUntilUtc`, and rows are marked `DeadLettered` after `Notifications__Outbox__MaxAttempts`.
-  - Azure Queue mode uses Azure Queue retry/poison behavior plus guarded `NotificationOutbox` state transitions.
+  - Queue settings are required: `NotificationQueue__QueueName` and `NotificationQueue__ConnectionString`.
+  - `NotificationQueue__ConnectionString` is an Azure Storage Account connection string, not the Booking SQL connection string.
+  - Prefer Key Vault/App Settings for the storage connection string.
   - The function app identity or connection string must be allowed to create the queue if `CreateIfNotExistsAsync` remains enabled.
   - Built-in poison queue behavior exists through Azure Functions for retry-exhausted queue messages; invalid persisted payloads are marked `DeadLettered` by the trigger and should be monitored from `NotificationOutbox`.
   - If Azure enqueue succeeds but marking the outbox row `Queued` fails, the publisher throws and the row remains `Pending`; operations should repair/requeue those rows until a dedicated requeue function is added.
@@ -99,23 +96,15 @@
 - Because the Graph `ProviderMessageId` is internal rather than a Graph-generated message id, bounceback correlation remains limited until notification bounceback storage is migrated to use Graph/webhook metadata that can be matched to the internal correlation id.
 - Legacy direct Booking email paths remain during transition.
 
-## Notification Dispatcher Settings
-- Default SQL dispatcher settings:
-  - `Notifications__Outbox__DispatcherMode=Sql`
-  - `Notifications__Outbox__DispatchSchedule=0 */1 * * * *`
-  - `Notifications__Outbox__BatchSize=20`
-  - `Notifications__Outbox__MaxAttempts=5`
-  - `Notifications__Outbox__RetryDelaySeconds=300`
-  - `Notifications__Outbox__ProcessingLockSeconds=300`
-- Azure Queue dispatcher settings:
-  - `Notifications__Outbox__DispatcherMode=AzureQueue`
+## Notification Queue Settings
+- Hybrid notification dispatch requires:
   - `NotificationQueue__QueueName=notifications-send`
-  - `NotificationQueue__ConnectionString=<storage-connection-string>`
+  - `NotificationQueue__ConnectionString=<Azure Storage Account connection string>`
 
 ## SQL Migration Note
 - Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.
 - Create and apply an EF migration from the infrastructure project before deploying to shared environments.
-- Notification outbox dispatch also requires applying `src/AFH.Notification.Infrastructure/Sql/notification-outbox.sql` before enabling the SQL or Azure Queue notification dispatcher path.
+- Notification outbox dispatch also requires applying `src/AFH.Notification.Infrastructure/Sql/notification-outbox.sql` before enabling the queued notification path.
 - Treat that migration as required infra work for this backend phase.
 - Current `NotificationOutboxStore` persistence tests depend on a local SQL Server instance; add CI-backed SQL integration coverage before production cutover.
 

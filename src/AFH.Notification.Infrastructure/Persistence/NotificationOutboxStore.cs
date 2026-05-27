@@ -9,10 +9,10 @@ namespace AFH.Notification.Infrastructure.Persistence;
 
 public sealed class NotificationOutboxStore : INotificationOutboxStore
 {
-    private readonly DbContext _dbContext;
+    private readonly NotificationDbContext _dbContext;
     private readonly ILogger<NotificationOutboxStore> _logger;
 
-    public NotificationOutboxStore(DbContext dbContext, ILogger<NotificationOutboxStore> logger)
+    public NotificationOutboxStore(NotificationDbContext dbContext, ILogger<NotificationOutboxStore> logger)
     {
         _dbContext = dbContext;
         _logger = logger;
@@ -20,7 +20,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
 
     public async Task<NotificationOutboxCreateResult> CreateOrGetAsync(NotificationOutboxItem item, CancellationToken ct)
     {
-        var existing = await _dbContext.Set<NotificationOutboxModel>()
+        var existing = await _dbContext.NotificationOutbox
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.IdempotencyKey == item.IdempotencyKey, ct);
 
@@ -46,7 +46,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
             ProcessedUtc = item.ProcessedUtc
         };
 
-        _dbContext.Set<NotificationOutboxModel>().Add(model);
+        _dbContext.NotificationOutbox.Add(model);
 
         try
         {
@@ -61,7 +61,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
             // Clear change tracker so we don't hold the failed insert
             _dbContext.ChangeTracker.Clear();
 
-            var raceExisting = await _dbContext.Set<NotificationOutboxModel>()
+            var raceExisting = await _dbContext.NotificationOutbox
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.IdempotencyKey == item.IdempotencyKey, ct);
 
@@ -76,7 +76,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
 
     public async Task<NotificationOutboxItem?> GetAsync(Guid id, CancellationToken ct)
     {
-        var model = await _dbContext.Set<NotificationOutboxModel>()
+        var model = await _dbContext.NotificationOutbox
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id, ct);
 
@@ -85,7 +85,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
 
     public async Task MarkQueuedAsync(Guid id, string queueMessageId, CancellationToken ct)
     {
-        var affected = await _dbContext.Set<NotificationOutboxModel>()
+        var affected = await _dbContext.NotificationOutbox
             .Where(x => x.Id == id && x.Status == NotificationDispatchStatus.Pending.ToString())
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.Queued.ToString())
@@ -107,7 +107,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
             NotificationDispatchStatus.Failed.ToString()
         };
 
-        var affected = await _dbContext.Set<NotificationOutboxModel>()
+        var affected = await _dbContext.NotificationOutbox
             .Where(x => x.Id == id && validStatuses.Contains(x.Status))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.Processing.ToString())
@@ -120,7 +120,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
     public async Task MarkSentAsync(Guid id, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
-        var affected = await _dbContext.Set<NotificationOutboxModel>()
+        var affected = await _dbContext.NotificationOutbox
             .Where(x => x.Id == id)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.Sent.ToString())
@@ -135,7 +135,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
 
     public async Task MarkFailedAsync(Guid id, string lastError, CancellationToken ct)
     {
-        var affected = await _dbContext.Set<NotificationOutboxModel>()
+        var affected = await _dbContext.NotificationOutbox
             .Where(x => x.Id == id)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.Failed.ToString())
@@ -151,7 +151,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
     public async Task MarkDeadLetteredAsync(Guid id, string lastError, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
-        var affected = await _dbContext.Set<NotificationOutboxModel>()
+        var affected = await _dbContext.NotificationOutbox
             .Where(x => x.Id == id)
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.DeadLettered.ToString())

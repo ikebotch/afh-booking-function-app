@@ -9,14 +9,14 @@ namespace AFH.Booking.Tests;
 
 public class NotificationOutboxStoreTests : IAsyncLifetime
 {
-    private BookingDbContext _dbContext = default!;
+    private NotificationDbContext _dbContext = default!;
     private NotificationOutboxStore _sut = default!;
     private bool _dbAvailable;
-    private readonly DbContextOptions<BookingDbContext> _options;
+    private readonly DbContextOptions<NotificationDbContext> _options;
 
     public NotificationOutboxStoreTests()
     {
-        _options = new DbContextOptionsBuilder<BookingDbContext>()
+        _options = new DbContextOptionsBuilder<NotificationDbContext>()
             .UseSqlServer("Server=localhost;Database=AFH.Booking.Test;Trusted_Connection=True;TrustServerCertificate=True")
             .Options;
     }
@@ -25,12 +25,12 @@ public class NotificationOutboxStoreTests : IAsyncLifetime
     {
         try
         {
-            _dbContext = new BookingDbContext(_options);
+            _dbContext = new NotificationDbContext(_options);
             await _dbContext.Database.EnsureDeletedAsync();
             await _dbContext.Database.EnsureCreatedAsync();
 
             // Add schema manually if EnsureCreated doesn't pick up the exact schema we want
-            // but EnsureCreated should create the NotificationOutbox table via BookingDbContext
+            // but EnsureCreated should create the NotificationOutbox table via NotificationDbContext
             _dbAvailable = true;
             _sut = new NotificationOutboxStore(_dbContext, NullLogger<NotificationOutboxStore>.Instance);
         }

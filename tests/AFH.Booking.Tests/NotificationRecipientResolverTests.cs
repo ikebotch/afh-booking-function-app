@@ -13,7 +13,7 @@ public sealed class NotificationRecipientResolverTests
 
         var route = await resolver.ResolveAsync(
             CreateNotification(
-                BookingNotificationActorTypes.Client,
+                LifecycleActors.Client,
                 [
                     ClientRecipient(),
                     AdviserRecipient(),
@@ -35,7 +35,7 @@ public sealed class NotificationRecipientResolverTests
 
         var route = await resolver.ResolveAsync(
             CreateNotification(
-                BookingNotificationActorTypes.Admin,
+                "Admin",
                 [
                     ClientRecipient(),
                     AdviserRecipient(),
@@ -57,7 +57,7 @@ public sealed class NotificationRecipientResolverTests
 
         var route = await resolver.ResolveAsync(
             CreateNotification(
-                BookingNotificationActorTypes.System,
+                LifecycleActors.System,
                 [
                     new NotificationRecipient(
                         BookingNotificationRecipientTypes.Client,
@@ -87,7 +87,7 @@ public sealed class NotificationRecipientResolverTests
             [NotificationChannel.Sms, NotificationChannel.Sms, NotificationChannel.Unknown]);
 
         var route = await resolver.ResolveAsync(
-            CreateNotification(BookingNotificationActorTypes.Client, [recipient, recipient]),
+            CreateNotification(LifecycleActors.Client, [recipient, recipient]),
             CancellationToken.None);
 
         var routedRecipient = Assert.Single(route.Recipients);

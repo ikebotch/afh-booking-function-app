@@ -115,7 +115,7 @@ public sealed class CreateBookingService : ICreateBookingService
                     BookingNotificationTypes.BookingHoldCreated,
                     hold.Id,
                     new NotificationActor(
-                        BookingNotificationActorTypes.System,
+                        LifecycleActors.System,
                         "Booking",
                         null,
                         null,

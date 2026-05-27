@@ -287,7 +287,7 @@ public class ConfirmBookingServiceTests
         Assert.Equal(BookingNotificationTypes.BookingConfirmed, notificationPublisher.LastNotification!.Type);
         Assert.Equal("Booking", notificationPublisher.LastNotification.SourceSystem);
         Assert.Equal(hold.Id, notificationPublisher.LastNotification.CorrelationId);
-        Assert.Equal(BookingNotificationActorTypes.Client, notificationPublisher.LastNotification.Actor.ActorType);
+        Assert.Equal(LifecycleActors.Client, notificationPublisher.LastNotification.Actor.ActorType);
         Assert.Equal("Booking", notificationPublisher.LastNotification.Actor.SourceApplication);
         Assert.Equal("client-token-1", notificationPublisher.LastNotification.Data["viewBookingUrl"].Split("token=", StringSplitOptions.None)[1]);
         Assert.Equal("lifecycle-event-1", notificationPublisher.LastNotification.Data["eventId"]);

@@ -380,7 +380,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 new NotificationRequested(
                     BookingNotificationTypes.BookingConfirmed,
                     context.Hold.Id,
-                    new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
+                    new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
                     BuildBookingConfirmedRecipients(client),
                     BuildBookingConfirmedNotificationData(
                         context,

@@ -113,7 +113,7 @@ public sealed class LifecycleOrchestratorSequencingTests
         Assert.Equal(BookingNotificationTypes.BookingCancelled, publishedCancelNotification!.Type);
         Assert.Equal("booking-1", publishedCancelNotification.CorrelationId);
         Assert.Equal("Booking", publishedCancelNotification.Actor.SourceApplication);
-        Assert.Equal(BookingNotificationActorTypes.Client, publishedCancelNotification.Actor.ActorType);
+        Assert.Equal(LifecycleActors.Client, publishedCancelNotification.Actor.ActorType);
         Assert.Equal("evt-1", publishedCancelNotification.Data["eventId"]);
         Assert.Equal("booking-1", publishedCancelNotification.Data["bookingId"]);
     }
@@ -267,7 +267,7 @@ public sealed class LifecycleOrchestratorSequencingTests
         Assert.Equal(BookingNotificationTypes.BookingRescheduled, publishedNotification!.Type);
         Assert.Equal("booking-new", publishedNotification.CorrelationId);
         Assert.Equal("Booking", publishedNotification.Actor.SourceApplication);
-        Assert.Equal(BookingNotificationActorTypes.Client, publishedNotification.Actor.ActorType);
+        Assert.Equal(LifecycleActors.Client, publishedNotification.Actor.ActorType);
         Assert.Equal("evt-1", publishedNotification.Data["eventId"]);
         Assert.Equal("booking-old", publishedNotification.Data["previousBookingId"]);
         Assert.Equal("booking-new", publishedNotification.Data["newBookingId"]);

@@ -25,7 +25,7 @@ public sealed class NotificationServiceTests
             new NotificationRequested(
                 BookingNotificationTypes.BookingConfirmed,
                 "booking-1",
-                new NotificationActor(BookingNotificationActorTypes.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
+                new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
                 [
                     new NotificationRecipient(
                         BookingNotificationRecipientTypes.Client,
@@ -52,7 +52,7 @@ public sealed class NotificationServiceTests
         Assert.Equal("AFH Booking: Booking Confirmed", request.Subject);
         Assert.Contains("Your booking is now confirmed.", request.TextBody);
         Assert.Equal("BookingConfirmed", request.ProviderMetadata?["notificationType"]);
-        Assert.Equal(BookingNotificationActorTypes.Client, request.ProviderMetadata?["actorType"]);
+        Assert.Equal(LifecycleActors.Client, request.ProviderMetadata?["actorType"]);
         Assert.Equal("Booking", request.ProviderMetadata?["actorSourceApplication"]);
     }
 
@@ -72,7 +72,7 @@ public sealed class NotificationServiceTests
             new NotificationRequested(
                 BookingNotificationTypes.BookingRescheduled,
                 "booking-2",
-                new NotificationActor(BookingNotificationActorTypes.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
+                new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
                 [
                     new NotificationRecipient(
                         BookingNotificationRecipientTypes.Client,
@@ -116,7 +116,7 @@ public sealed class NotificationServiceTests
             new NotificationRequested(
                 BookingNotificationTypes.BookingCancelled,
                 "booking-3",
-                new NotificationActor(BookingNotificationActorTypes.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
+                new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
                 [
                     new NotificationRecipient(
                         BookingNotificationRecipientTypes.Client,
@@ -160,7 +160,7 @@ public sealed class NotificationServiceTests
             new NotificationRequested(
                 BookingNotificationTypes.BookingHoldCreated,
                 "hold-1",
-                new NotificationActor(BookingNotificationActorTypes.System, "Booking", null, null, null),
+                new NotificationActor(LifecycleActors.System, "Booking", null, null, null),
                 [
                     new NotificationRecipient(
                         BookingNotificationRecipientTypes.Client,

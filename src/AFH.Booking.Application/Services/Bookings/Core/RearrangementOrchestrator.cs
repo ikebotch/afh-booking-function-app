@@ -440,7 +440,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private static string ResolveNotificationActorType(RearrangeBookingCommand cmd)
     {
         if (string.IsNullOrWhiteSpace(cmd.RequestedBy))
-            return BookingNotificationActorTypes.System;
+            return LifecycleActors.System;
 
         return cmd.RequestedBy.Trim();
     }

@@ -389,7 +389,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
     private static string ResolveNotificationActorType(CancelBookingCommand cmd)
     {
         if (string.IsNullOrWhiteSpace(cmd.RequestedBy))
-            return BookingNotificationActorTypes.System;
+            return LifecycleActors.System;
 
         return cmd.RequestedBy.Trim();
     }

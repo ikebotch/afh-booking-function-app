@@ -119,7 +119,7 @@ public sealed class BookingNotificationTemplateTests
             new NotificationRequested(
                 BookingNotificationTypes.BookingConfirmed,
                 hold.Id,
-                new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
+                new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
                 [],
                 new Dictionary<string, string>
                 {
@@ -168,7 +168,7 @@ Manage your booking:
             new NotificationRequested(
                 BookingNotificationTypes.BookingRescheduled,
                 "booking-1",
-                new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
+                new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
                 [],
                 new Dictionary<string, string>
                 {
@@ -210,7 +210,7 @@ Manage your booking:
             new NotificationRequested(
                 BookingNotificationTypes.BookingCancelled,
                 "booking-1",
-                new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
+                new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
                 [],
                 new Dictionary<string, string>
                 {
@@ -247,7 +247,7 @@ Manage your booking:
             new NotificationRequested(
                 BookingNotificationTypes.BookingHoldCreated,
                 hold.Id,
-                new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
+                new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
                 [],
                 new Dictionary<string, string>
                 {

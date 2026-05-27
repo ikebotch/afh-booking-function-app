@@ -227,6 +227,45 @@ Manage your booking:
         Assert.Null(content.HtmlBody);
     }
 
+    [Fact]
+    public async Task RenderAsync_BookingHoldVersionedTemplate_MatchesExistingHoldTextOutput()
+    {
+        var now = new DateTime(2026, 03, 26, 10, 0, 0, DateTimeKind.Utc);
+        var transaction = CreateTransaction(now, isRemote: false);
+        var slot = CreateSlot("slot-1", transaction.Id, now.AddHours(2), now.AddHours(3));
+        var hold = BookingHold.Create(slot.Id, slot.AdviserId, TimeSpan.FromMinutes(10), now);
+        var windows = new HoldWindows(slot.StartUtc.AddMinutes(-30), slot.EndUtc.AddMinutes(15), 15, 15, true);
+        var links = CreateLinks();
+
+        var existing = HoldBookingTemplate.BuildHoldTemplate(slot, transaction, hold, windows, links);
+
+        var renderer = new NotificationTemplateRenderer();
+        var rendered = await renderer.RenderAsync(
+            NotificationRequested.BookingHoldCreated(
+                hold.Id,
+                new NotificationActor(NotificationActorType.Client, null, null, null),
+                [],
+                new Dictionary<string, string>
+                {
+                    ["transactionRef"] = transaction.TransactionRef,
+                    ["holdId"] = hold.Id,
+                    ["adviserName"] = slot.AdviserName,
+                    ["meetingType"] = transaction.MeetingType ?? "N/A",
+                    ["when"] = "2026-03-26 12:00 (Europe/London) -> 2026-03-26 13:00 (Europe/London)",
+                    ["holdExpires"] = "2026-03-26 10:10Z",
+                    ["travelLine"] = "Travel time: 15 mins before",
+                    ["companyLine"] = "Company buffer: 15 mins (pre/post meeting policy)",
+                    ["manageBookingLinks"] = BuildHoldManageLinks(links)
+                }),
+            CancellationToken.None);
+
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal(NotificationChannel.Email, content.Channel);
+        Assert.Equal(existing.Subject, content.Subject);
+        Assert.Equal(existing.TextBody, content.TextBody);
+        Assert.Null(content.HtmlBody);
+    }
+
     private static BookingSelfServiceLinks CreateLinks()
         => new(
             "https://client.example/bookings/booking-1?token=token",
@@ -240,6 +279,14 @@ Manage your booking:
 - View: {links.ViewBookingUrl}
 - Cancel: {links.CancelBookingUrl}
 - Reschedule: {links.RescheduleBookingUrl}";
+
+    private static string BuildHoldManageLinks(BookingSelfServiceLinks links)
+        =>
+$@"
+Manage your booking:
+- View booking: {links.ViewBookingUrl}
+- Cancel booking: {links.CancelBookingUrl}
+- Reschedule booking: {links.RescheduleBookingUrl}";
 
     private static BookingTransaction CreateTransaction(DateTime now, bool isRemote) =>
         BookingTransaction.Rehydrate(

@@ -1,0 +1,19 @@
+subject=AFH Booking: Hold Created
+channel=Email
+---
+Hello,
+
+We have placed a temporary hold on your requested booking while it is being confirmed.
+
+Transaction reference: {{transactionRef}}
+Hold ID: {{holdId}}
+Adviser: {{adviserName}}
+Meeting type: {{meetingType}}
+When: {{when}}
+Hold expires: {{holdExpires}}
+
+{{travelLine}}
+{{companyLine}}
+{{manageBookingLinks}}
+
+This is an automated AFH booking notification.

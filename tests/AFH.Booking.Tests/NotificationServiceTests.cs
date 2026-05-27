@@ -144,6 +144,54 @@ public sealed class NotificationServiceTests
         Assert.Equal("BookingCancelled", request.ProviderMetadata?["notificationType"]);
     }
 
+    [Fact]
+    public async Task PublishAsync_BookingHoldCreated_RendersTemplateAndSendsDeliveryRequest()
+    {
+        var audit = new StubNotificationAuditStore();
+        var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
+        var service = new NotificationService(
+            audit,
+            new NotificationRecipientResolver(),
+            new NotificationTemplateRenderer(),
+            [delivery],
+            NullLogger<NotificationService>.Instance);
+
+        await service.PublishAsync(
+            new NotificationRequested(
+                BookingNotificationTypes.BookingHoldCreated,
+                "hold-1",
+                new NotificationActor(BookingNotificationActorTypes.System, "Booking", null, null, null),
+                [
+                    new NotificationRecipient(
+                        BookingNotificationRecipientTypes.Client,
+                        "Jane Client",
+                        "jane@example.test")
+                ],
+                new Dictionary<string, string>
+                {
+                    ["transactionRef"] = "TRX-1",
+                    ["holdId"] = "hold-1",
+                    ["adviserName"] = "Alex Adviser",
+                    ["meetingType"] = "Remote meeting",
+                    ["when"] = "Thu 26 Mar 2026 09:00 (Europe/London) to Thu 26 Mar 2026 10:00 (Europe/London)",
+                    ["holdExpires"] = "Thu 26 Mar 2026 09:03 (Europe/London)",
+                    ["travelLine"] = "Travel: N/A (remote meeting)",
+                    ["companyLine"] = string.Empty,
+                    ["manageBookingLinks"] = string.Empty
+                }),
+            CancellationToken.None);
+
+        Assert.NotNull(audit.LastNotification);
+        var request = Assert.Single(delivery.Requests);
+        Assert.Equal(NotificationChannel.Email, request.Channel);
+        Assert.Equal("jane@example.test", request.Recipient.Email);
+        Assert.Equal("AFH Booking: Hold Created", request.Subject);
+        Assert.Contains("temporary hold", request.TextBody);
+        Assert.Contains("Alex Adviser", request.TextBody);
+        Assert.Contains("TRX-1", request.TextBody);
+        Assert.Equal("BookingHoldCreated", request.ProviderMetadata?["notificationType"]);
+    }
+
     private sealed class StubNotificationAuditStore : INotificationAuditStore
     {
         public NotificationRequested? LastNotification { get; private set; }

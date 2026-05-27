@@ -8,6 +8,8 @@ using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Holds;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Notification.Contract.Abstractions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
 
@@ -39,7 +41,9 @@ public class CreateBookingServiceTests
             _holdService.Object,
             _calendarService.Object,
             _uow.Object,
-            _clock.Object);
+            _clock.Object,
+            Mock.Of<INotificationPublisher>(),
+            NullLogger<CreateBookingService>.Instance);
     }
 
     private static BookingContext MakeContext(string slotId = "slot-1", string txId = "tx-1")

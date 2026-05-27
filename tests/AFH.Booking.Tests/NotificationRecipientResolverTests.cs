@@ -13,7 +13,7 @@ public sealed class NotificationRecipientResolverTests
 
         var route = await resolver.ResolveAsync(
             CreateNotification(
-                NotificationActorType.Client,
+                BookingNotificationActorTypes.Client,
                 [
                     ClientRecipient(),
                     AdviserRecipient(),
@@ -35,7 +35,7 @@ public sealed class NotificationRecipientResolverTests
 
         var route = await resolver.ResolveAsync(
             CreateNotification(
-                NotificationActorType.Admin,
+                BookingNotificationActorTypes.Admin,
                 [
                     ClientRecipient(),
                     AdviserRecipient(),
@@ -57,7 +57,7 @@ public sealed class NotificationRecipientResolverTests
 
         var route = await resolver.ResolveAsync(
             CreateNotification(
-                NotificationActorType.System,
+                BookingNotificationActorTypes.System,
                 [
                     new NotificationRecipient(
                         NotificationRecipientType.Client,
@@ -87,7 +87,7 @@ public sealed class NotificationRecipientResolverTests
             [NotificationChannel.Sms, NotificationChannel.Sms, NotificationChannel.Unknown]);
 
         var route = await resolver.ResolveAsync(
-            CreateNotification(NotificationActorType.Client, [recipient, recipient]),
+            CreateNotification(BookingNotificationActorTypes.Client, [recipient, recipient]),
             CancellationToken.None);
 
         var routedRecipient = Assert.Single(route.Recipients);
@@ -95,11 +95,11 @@ public sealed class NotificationRecipientResolverTests
     }
 
     private static NotificationRequested CreateNotification(
-        NotificationActorType actorType,
+        string actorType,
         IReadOnlyList<NotificationRecipient> recipients)
         => NotificationRequested.BookingConfirmed(
             "booking-1",
-            new NotificationActor(actorType, "actor-1", "Actor One", "actor@example.test"),
+            new NotificationActor(actorType, "Booking", "actor-1", "Actor One", "actor@example.test"),
             recipients,
             new Dictionary<string, string>
             {

@@ -371,7 +371,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             await _notificationPublisher.PublishAsync(
                 NotificationRequested.BookingConfirmed(
                     bookingId,
-                    new NotificationActor(NotificationActorType.Client, null, null, null),
+                    new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
                     Array.Empty<NotificationRecipient>(),
                     BuildBookingConfirmedNotificationData(slot, eventId, links)),
                 ct);

@@ -9,7 +9,7 @@ public sealed class NotificationRecipientResolver : INotificationRecipientResolv
 {
     public Task<NotificationRoute> ResolveAsync(NotificationRequested notification, CancellationToken ct)
     {
-        var eligibleRecipientTypes = GetEligibleRecipientTypes(notification.Actor.Type);
+        var eligibleRecipientTypes = GetEligibleRecipientTypes(notification.Actor.ActorType);
         var recipients = notification.Recipients
             .Where(recipient => recipient.Type != NotificationRecipientType.Unknown)
             .Where(recipient => eligibleRecipientTypes.Contains(recipient.Type))
@@ -22,22 +22,22 @@ public sealed class NotificationRecipientResolver : INotificationRecipientResolv
         return Task.FromResult(new NotificationRoute(recipients, copyContactCentre));
     }
 
-    private static HashSet<NotificationRecipientType> GetEligibleRecipientTypes(NotificationActorType actorType)
-        => actorType switch
+    private static HashSet<NotificationRecipientType> GetEligibleRecipientTypes(string? actorType)
+        => actorType?.Trim() switch
         {
-            NotificationActorType.Client =>
+            var value when IsActor(value, "Client") =>
             [
                 NotificationRecipientType.Client,
                 NotificationRecipientType.Adviser,
                 NotificationRecipientType.ContactCentre
             ],
-            NotificationActorType.Adviser =>
+            var value when IsActor(value, "Adviser") =>
             [
                 NotificationRecipientType.Client,
                 NotificationRecipientType.Adviser,
                 NotificationRecipientType.ContactCentre
             ],
-            NotificationActorType.Admin or NotificationActorType.System =>
+            var value when IsActor(value, "Admin") || IsActor(value, "System") =>
             [
                 NotificationRecipientType.Client,
                 NotificationRecipientType.Adviser,
@@ -99,9 +99,12 @@ public sealed class NotificationRecipientResolver : INotificationRecipientResolv
         if (!notification.SourceSystem.Equals("Booking", StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (notification.Actor.Type is NotificationActorType.Admin or NotificationActorType.System)
+        if (IsActor(notification.Actor.ActorType, "Admin") || IsActor(notification.Actor.ActorType, "System"))
             return true;
 
         return recipients.Any(recipient => recipient.Type == NotificationRecipientType.ContactCentre);
     }
+
+    private static bool IsActor(string? actual, string expected)
+        => string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
 }

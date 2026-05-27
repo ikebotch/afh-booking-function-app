@@ -11,7 +11,10 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<NotificationService>();
         services.AddScoped<INotificationService>(sp => sp.GetRequiredService<NotificationService>());
-        services.AddScoped<INotificationPublisher>(sp => sp.GetRequiredService<NotificationService>());
+        services.AddScoped<INotificationPublisher, NotificationOutboxService>();
+
+        services.AddScoped<INotificationIdempotencyKeyGenerator, NotificationIdempotencyKeyGenerator>();
+        services.AddScoped<INotificationQueuePublisher, NoOpNotificationQueuePublisher>();
         services.AddScoped<INotificationTemplateRenderer, NotificationTemplateRenderer>();
         services.AddScoped<INotificationRecipientResolver, NotificationRecipientResolver>();
 

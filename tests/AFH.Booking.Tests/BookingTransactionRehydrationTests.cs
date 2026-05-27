@@ -99,16 +99,6 @@ public sealed class BookingTransactionRehydrationTests
         audit.Setup(a => a.RecordStepAsync(It.IsAny<LifecycleAuditStepEntry>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var notifications = new Mock<INotificationService>();
-        notifications
-            .Setup(n => n.SendBookingNotificationAsync(It.IsAny<NotificationDispatchRequest>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new NotificationDispatchResponse
-            {
-                DispatchId = "d-1", BookingId = "hold-1", EventType = "Confirmed",
-                SmsRequested = false, EmailRequested = false, SmsStatus = "Skipped",
-                EmailStatus = "Skipped", ProviderMessageId = "p-1", CreatedUtc = now
-            });
-
         var notificationPublisher = new Mock<IBookingNotificationStep>();
         notificationPublisher
             .Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<NotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
@@ -131,7 +121,6 @@ public sealed class BookingTransactionRehydrationTests
             conflicts.Object,
             routeTimeGuard.Object,
             audit.Object,
-            notifications.Object,
             notificationPublisher.Object,
             holdWindowFactory.Object,
             tokenService.Object,
@@ -293,23 +282,6 @@ public sealed class BookingTransactionRehydrationTests
     {
         public Task<string> RecordEventAsync(LifecycleAuditEntry entry, CancellationToken ct) => Task.FromResult("event-1");
         public Task RecordStepAsync(LifecycleAuditStepEntry step, CancellationToken ct) => Task.CompletedTask;
-    }
-
-    private sealed class StubNotificationService : INotificationService
-    {
-        public Task<NotificationDispatchResponse> SendBookingNotificationAsync(NotificationDispatchRequest request, CancellationToken ct)
-            => Task.FromResult(new NotificationDispatchResponse
-            {
-                DispatchId = "dispatch-1",
-                BookingId = request.BookingId,
-                EventType = request.EventType,
-                SmsRequested = request.SendSms,
-                EmailRequested = request.SendEmail,
-                SmsStatus = "Skipped",
-                EmailStatus = "Skipped",
-                ProviderMessageId = "provider-1",
-                CreatedUtc = DateTime.UtcNow
-            });
     }
 
     private sealed class StubCalendarGateway : ICalendarGateway

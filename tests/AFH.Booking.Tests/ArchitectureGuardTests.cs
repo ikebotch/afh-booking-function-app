@@ -199,6 +199,21 @@ public sealed class ArchitectureGuardTests
     }
 
     [Fact]
+    public void LifecycleNotificationFlows_DoNotDependOnLegacyBookingNotificationService()
+    {
+        var application = Assembly.Load("AFH.Booking.Application");
+        var legacyNotificationService = application.GetType("AFH.Booking.Application.Abstractions.Lifecycle.INotificationService");
+        var bookingNotificationStep = application.GetType("AFH.Booking.Application.Abstractions.Lifecycle.IBookingNotificationStep");
+
+        Assert.NotNull(legacyNotificationService);
+        Assert.NotNull(bookingNotificationStep);
+
+        AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Holds.ConfirmBookingService", legacyNotificationService!, bookingNotificationStep!);
+        AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Bookings.CancellationOrchestrator", legacyNotificationService!, bookingNotificationStep!);
+        AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Bookings.RearrangementOrchestrator", legacyNotificationService!, bookingNotificationStep!);
+    }
+
+    [Fact]
     public void NotificationContract_RemainsSourceNeutral()
     {
         var contractProjectPath = GetProjectPath("AFH.Notification.Contract");
@@ -253,6 +268,26 @@ public sealed class ArchitectureGuardTests
 
         Assert.NotNull(type);
         Assert.Null(type!.GetCustomAttribute<ObsoleteAttribute>());
+    }
+
+    private static void AssertUsesNotificationStepWithoutLegacyNotificationService(
+        Assembly assembly,
+        string typeName,
+        Type legacyNotificationService,
+        Type bookingNotificationStep)
+    {
+        var type = assembly.GetType(typeName);
+        Assert.NotNull(type);
+
+        var constructorParameterTypes = type!
+            .GetConstructors()
+            .SelectMany(ctor => ctor.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+
+        Assert.Contains(bookingNotificationStep, constructorParameterTypes);
+        Assert.DoesNotContain(legacyNotificationService, constructorParameterTypes);
+        Assert.DoesNotContain(type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic), field => field.FieldType == legacyNotificationService);
     }
 
     private static void AssertDoesNotReferencePrefix(string assemblyName, string forbiddenPrefix)

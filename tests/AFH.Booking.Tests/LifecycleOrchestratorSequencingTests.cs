@@ -52,21 +52,6 @@ public sealed class LifecycleOrchestratorSequencingTests
             .Callback(() => order.Add("outlook"))
             .Returns(Task.CompletedTask);
 
-        var notifications = new Mock<INotificationService>();
-        notifications.Setup(x => x.SendBookingNotificationAsync(It.IsAny<NotificationDispatchRequest>(), It.IsAny<CancellationToken>()))
-            .Callback(() => order.Add("notifications"))
-            .ReturnsAsync(new NotificationDispatchResponse
-            {
-                DispatchId = "dispatch-1",
-                BookingId = "booking-1",
-                EventType = "BookingCancelled",
-                SmsRequested = true,
-                EmailRequested = true,
-                SmsStatus = "Sent",
-                EmailStatus = "Composed",
-                CreatedUtc = DateTime.UtcNow
-            });
-
         var downstream = new Mock<IDownstreamUpdateService>();
         downstream.Setup(x => x.PublishBookingChangeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new DownstreamUpdateResponse { UpdateId = "upd-1", BookingId = "booking-1", ChangeType = "Cancel", Status = "Pending", CreatedUtc = DateTime.UtcNow });
@@ -85,6 +70,7 @@ public sealed class LifecycleOrchestratorSequencingTests
         IReadOnlyDictionary<string, string>? publishedCancelNotificationData = null;
         notificationStepCancel.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<NotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Callback<string, string, string, IReadOnlyList<NotificationRecipient>, IReadOnlyDictionary<string, string>, CancellationToken>((eventType, correlationId, actorType, _, data, _) => {
+                order.Add("notifications");
                 publishedCancelNotificationEventType = eventType;
                 publishedCancelNotificationCorrelationId = correlationId;
                 publishedCancelNotificationActorType = actorType;
@@ -100,7 +86,6 @@ public sealed class LifecycleOrchestratorSequencingTests
             calendar.Object,
             new StubProfiles("adviser-1", "adviser.one@tenant.com"),
             new StubClock(DateTime.UtcNow),
-            notifications.Object,
             notificationStepCancel.Object,
             downstream.Object,
             audit.Object,
@@ -147,7 +132,6 @@ public sealed class LifecycleOrchestratorSequencingTests
         holds.Setup(x => x.GetAsync("booking-1", It.IsAny<CancellationToken>())).ReturnsAsync(hold);
 
         var calendar = new Mock<ICalendarGateway>();
-        var notifications = new Mock<INotificationService>();
         var downstream = new Mock<IDownstreamUpdateService>();
         var audit = new Mock<ILifecycleAuditService>();
         var uow = new Mock<IUnitOfWork>();
@@ -160,7 +144,6 @@ public sealed class LifecycleOrchestratorSequencingTests
             calendar.Object,
             new StubProfiles("adviser-1", "adviser.one@tenant.com"),
             new StubClock(DateTime.UtcNow),
-            notifications.Object,
             Mock.Of<IBookingNotificationStep>(),
             downstream.Object,
             audit.Object,
@@ -179,7 +162,6 @@ public sealed class LifecycleOrchestratorSequencingTests
         Assert.False(result.IsSuccess);
         Assert.Equal(HttpStatusCode.Conflict, result.StatusCode);
         calendar.Verify(x => x.CancelBookingEventAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
-        notifications.Verify(x => x.SendBookingNotificationAsync(It.IsAny<NotificationDispatchRequest>(), It.IsAny<CancellationToken>()), Times.Never);
         audit.Verify(x => x.RecordEventAsync(It.IsAny<LifecycleAuditEntry>(), It.IsAny<CancellationToken>()), Times.Never);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Never);
     }
@@ -221,10 +203,6 @@ public sealed class LifecycleOrchestratorSequencingTests
             .Callback(() => order.Add("cancel"))
             .ReturnsAsync(Result<CancelBookingResponse>.Ok(new CancelBookingResponse { BookingId = "booking-old", CancelledUtc = DateTime.UtcNow, Status = "Cancelled" }));
 
-        var notifications = new Mock<INotificationService>();
-        notifications.Setup(x => x.SendBookingNotificationAsync(It.IsAny<NotificationDispatchRequest>(), It.IsAny<CancellationToken>()))
-            .Callback(() => order.Add("notifications"))
-            .ReturnsAsync(new NotificationDispatchResponse { DispatchId = "dispatch-1", BookingId = "booking-new", EventType = "BookingRearranged", SmsRequested = true, EmailRequested = true, SmsStatus = "Sent", EmailStatus = "Composed", CreatedUtc = DateTime.UtcNow });
         var notificationStep = new Mock<IBookingNotificationStep>();
         string? publishedNotificationEventType = null;
         string? publishedNotificationCorrelationId = null;
@@ -232,6 +210,7 @@ public sealed class LifecycleOrchestratorSequencingTests
         IReadOnlyDictionary<string, string>? publishedNotificationData = null;
         notificationStep.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<NotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
             .Callback<string, string, string, IReadOnlyList<NotificationRecipient>, IReadOnlyDictionary<string, string>, CancellationToken>((eventType, correlationId, actorType, _, data, _) => {
+                order.Add("notifications");
                 publishedNotificationEventType = eventType;
                 publishedNotificationCorrelationId = correlationId;
                 publishedNotificationActorType = actorType;
@@ -260,7 +239,6 @@ public sealed class LifecycleOrchestratorSequencingTests
             create.Object,
             confirm.Object,
             cancel.Object,
-            notifications.Object,
             notificationStep.Object,
             downstream.Object,
             audit.Object,
@@ -321,7 +299,6 @@ public sealed class LifecycleOrchestratorSequencingTests
                 Errors.ExactRouteTimeUnavailable));
 
         var cancel = new Mock<ICancellationOrchestrator>();
-        var notifications = new Mock<INotificationService>();
         var downstream = new Mock<IDownstreamUpdateService>();
         var audit = new Mock<ILifecycleAuditService>();
         var uow = new Mock<IUnitOfWork>();
@@ -333,7 +310,6 @@ public sealed class LifecycleOrchestratorSequencingTests
             create.Object,
             confirm.Object,
             cancel.Object,
-            notifications.Object,
             Mock.Of<IBookingNotificationStep>(),
             downstream.Object,
             audit.Object,
@@ -357,7 +333,6 @@ public sealed class LifecycleOrchestratorSequencingTests
             It.IsAny<CancellationToken>()), Times.Once);
         cancel.Verify(x => x.CancelAsync(It.IsAny<CancelBookingCommand>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         audit.Verify(x => x.RecordEventAsync(It.IsAny<LifecycleAuditEntry>(), It.IsAny<CancellationToken>()), Times.Never);
-        notifications.Verify(x => x.SendBookingNotificationAsync(It.IsAny<NotificationDispatchRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -383,7 +358,6 @@ public sealed class LifecycleOrchestratorSequencingTests
         var create = new Mock<ICreateBookingService>();
         var confirm = new Mock<IConfirmBookingService>();
         var cancel = new Mock<ICancellationOrchestrator>();
-        var notifications = new Mock<INotificationService>();
         var downstream = new Mock<IDownstreamUpdateService>();
         var audit = new Mock<ILifecycleAuditService>();
         var uow = new Mock<IUnitOfWork>();
@@ -395,7 +369,6 @@ public sealed class LifecycleOrchestratorSequencingTests
             create.Object,
             confirm.Object,
             cancel.Object,
-            notifications.Object,
             Mock.Of<IBookingNotificationStep>(),
             downstream.Object,
             audit.Object,

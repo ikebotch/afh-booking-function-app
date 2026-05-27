@@ -19,7 +19,6 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private readonly ICreateBookingService _create;
     private readonly IConfirmBookingService _confirm;
     private readonly ICancellationOrchestrator _cancel;
-    private readonly INotificationService _notifications;
     private readonly IBookingNotificationStep _notificationStep;
     private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
@@ -34,7 +33,6 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         ICreateBookingService create,
         IConfirmBookingService confirm,
         ICancellationOrchestrator cancel,
-        INotificationService notifications,
         IBookingNotificationStep notificationStep,
         IDownstreamUpdateService downstreamUpdates,
         ILifecycleAuditService audit,
@@ -48,7 +46,6 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         _create = create;
         _confirm = confirm;
         _cancel = cancel;
-        _notifications = notifications;
         _notificationStep = notificationStep;
         _clients = clients;
         _downstreamUpdates = downstreamUpdates;
@@ -243,17 +240,6 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
 
         try
         {
-            await _notifications.SendBookingNotificationAsync(
-                new NotificationDispatchRequest(
-                    newBookingId,
-                    LifecycleEventTypes.Rearranged,
-                    AppendReason(notificationSummary, cmd),
-                    true,
-                    true,
-                    eventId,
-                    cmd.CorrelationId),
-                ct);
-
             var client = _clients is null
                 ? null
                 : await _clients.GetAsync(existingBooking.Transaction.TransactionRef, ct);

@@ -31,7 +31,6 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     private readonly IBookingConflictService _conflicts;
     private readonly ISelectedSlotRouteTimeGuard _routeTimeGuard;
     private readonly ILifecycleAuditService _audit;
-    private readonly INotificationService _notifications;
     private readonly IBookingNotificationStep _notificationStep;
     private readonly IHoldWindowFactory _holdWindowFactory;
     private readonly IBookingTokenService _tokenService;
@@ -50,7 +49,6 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         IBookingConflictService conflicts,
         ISelectedSlotRouteTimeGuard routeTimeGuard,
         ILifecycleAuditService audit,
-        INotificationService notifications,
         IBookingNotificationStep notificationStep,
         IHoldWindowFactory holdWindowFactory,
         IBookingTokenService tokenService,
@@ -68,7 +66,6 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         _conflicts = conflicts;
         _routeTimeGuard = routeTimeGuard;
         _audit = audit;
-        _notifications = notifications;
         _notificationStep = notificationStep;
         _holdWindowFactory = holdWindowFactory;
         _tokenService = tokenService;
@@ -360,18 +357,6 @@ public sealed class ConfirmBookingService : IConfirmBookingService
 
         try
         {
-            await _notifications.SendBookingNotificationAsync(
-                new NotificationDispatchRequest(
-                    context.Hold.Id,
-                    LifecycleEventTypes.Booked,
-                    BuildBookingConfirmationMessage(context.Slot),
-                    true,
-                    true,
-                    eventId,
-                    null,
-                    links),
-                ct);
-
             var client = _clients is null
                 ? null
                 : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
@@ -460,12 +445,6 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             transactionRef = tx.TransactionRef,
             transactionStatus = tx.Status.ToString()
         };
-    }
-
-    private static string BuildBookingConfirmationMessage(BookingSlot slot)
-    {
-        return
-            $"Your meeting with {slot.AdviserName} on {slot.StartUtc:yyyy-MM-dd HH:mm} has been booked.";
     }
 
     private static IReadOnlyList<NotificationRecipient> BuildBookingConfirmedRecipients(

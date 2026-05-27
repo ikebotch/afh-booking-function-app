@@ -21,7 +21,6 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
     private readonly ICalendarGateway _calendar;
     private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IClock _clock;
-    private readonly INotificationService _notifications;
     private readonly IBookingNotificationStep _notificationStep;
     private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
@@ -36,7 +35,6 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         ICalendarGateway calendar,
         IAdviserProfileProjectionRepository profiles,
         IClock clock,
-        INotificationService notifications,
         IBookingNotificationStep notificationStep,
         IDownstreamUpdateService downstreamUpdates,
         ILifecycleAuditService audit,
@@ -50,7 +48,6 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         _calendar = calendar;
         _profiles = profiles;
         _clock = clock;
-        _notifications = notifications;
         _notificationStep = notificationStep;
         _clients = clients;
         _downstreamUpdates = downstreamUpdates;
@@ -260,23 +257,6 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         {
             try
             {
-                var notificationMessage = BuildCancellationNotification(context.Slot, cmd);
-                var dispatch = await _notifications.SendBookingNotificationAsync(
-                    new NotificationDispatchRequest(
-                        context.Hold.Id,
-                        LifecycleEventTypes.Cancelled,
-                        notificationMessage,
-                        true,
-                        true,
-                        eventId,
-                        cmd.CorrelationId),
-                    ct);
-
-                notificationStepStatus = dispatch.SmsStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase) ||
-                    dispatch.EmailStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase)
-                    ? LifecycleStepStatuses.Failed
-                    : LifecycleStepStatuses.Succeeded;
-
                 var client = _clients is null
                     ? null
                     : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
@@ -289,7 +269,9 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
                     BuildBookingCancelledNotificationData(cmd, context, eventId),
                     ct);
 
-                notificationStepStatus = result.Status == LifecycleStepStatuses.Failed ? LifecycleStepStatuses.Failed : notificationStepStatus;
+                notificationStepStatus = result.Status;
+                notificationStepError = result.ErrorCode;
+                notificationStepDetails = result.ErrorDetails;
             }
             catch (Exception ex)
             {

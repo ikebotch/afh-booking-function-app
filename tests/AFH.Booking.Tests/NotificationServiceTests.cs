@@ -22,12 +22,13 @@ public sealed class NotificationServiceTests
             NullLogger<NotificationService>.Instance);
 
         await service.PublishAsync(
-            NotificationRequested.BookingConfirmed(
+            new NotificationRequested(
+                BookingNotificationTypes.BookingConfirmed,
                 "booking-1",
                 new NotificationActor(BookingNotificationActorTypes.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
                 [
                     new NotificationRecipient(
-                        NotificationRecipientType.Client,
+                        BookingNotificationRecipientTypes.Client,
                         "Jane Client",
                         "jane@example.test")
                 ],

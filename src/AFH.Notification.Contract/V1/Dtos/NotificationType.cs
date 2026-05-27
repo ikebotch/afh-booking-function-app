@@ -1,10 +1,9 @@
 namespace AFH.Notification.Contract.V1.Dtos;
 
-public enum NotificationType
+public sealed record NotificationType(
+    string SourceApplication,
+    string Name)
 {
-    Unknown = 0,
-    BookingConfirmed = 1,
-    BookingRescheduled = 2,
-    BookingCancelled = 3,
-    BookingHoldCreated = 4
+    public override string ToString()
+        => $"{SourceApplication}:{Name}";
 }

@@ -28,12 +28,12 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
     }
 
     private static string GetTemplateName(NotificationType notificationType)
-        => notificationType switch
+        => (notificationType.SourceApplication, notificationType.Name) switch
         {
-            NotificationType.BookingConfirmed => "Booking.booking-confirmed.v1.txt",
-            NotificationType.BookingRescheduled => "Booking.booking-rescheduled.v1.txt",
-            NotificationType.BookingCancelled => "Booking.booking-cancelled.v1.txt",
-            NotificationType.BookingHoldCreated => "Booking.booking-hold.v1.txt",
+            ("Booking", "BookingConfirmed") => "Booking.booking-confirmed.v1.txt",
+            ("Booking", "BookingRescheduled") => "Booking.booking-rescheduled.v1.txt",
+            ("Booking", "BookingCancelled") => "Booking.booking-cancelled.v1.txt",
+            ("Booking", "BookingHoldCreated") => "Booking.booking-hold.v1.txt",
             _ => throw new NotSupportedException($"Notification template '{notificationType}' is not supported yet.")
         };
 

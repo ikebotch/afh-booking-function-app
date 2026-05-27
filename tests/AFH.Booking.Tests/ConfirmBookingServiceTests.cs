@@ -284,7 +284,7 @@ public class ConfirmBookingServiceTests
         Assert.Equal("https://client.example/bookings/hold-test/cancel?token=client-token-1", notifications.LastRequest?.SelfServiceLinks?.CancelBookingUrl);
         Assert.Equal("https://client.example/bookings/hold-test/reschedule?token=client-token-1", notifications.LastRequest?.SelfServiceLinks?.RescheduleBookingUrl);
         Assert.NotNull(notificationPublisher.LastNotification);
-        Assert.Equal(NotificationType.BookingConfirmed, notificationPublisher.LastNotification!.Type);
+        Assert.Equal(BookingNotificationTypes.BookingConfirmed, notificationPublisher.LastNotification!.Type);
         Assert.Equal("Booking", notificationPublisher.LastNotification.SourceSystem);
         Assert.Equal(hold.Id, notificationPublisher.LastNotification.CorrelationId);
         Assert.Equal(BookingNotificationActorTypes.Client, notificationPublisher.LastNotification.Actor.ActorType);
@@ -293,7 +293,7 @@ public class ConfirmBookingServiceTests
         Assert.Equal("lifecycle-event-1", notificationPublisher.LastNotification.Data["eventId"]);
         Assert.Equal(slot.Id, notificationPublisher.LastNotification.Data["slotId"]);
         var recipient = Assert.Single(notificationPublisher.LastNotification.Recipients);
-        Assert.Equal(NotificationRecipientType.Client, recipient.Type);
+        Assert.Equal(BookingNotificationRecipientTypes.Client, recipient.RecipientType);
         Assert.Equal("jane.client@example.test", recipient.Email);
         Assert.Equal("+447700900123", recipient.MobileNumber);
         Assert.Equal(BookingTransactionStatus.Completed, tx.Status);

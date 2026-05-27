@@ -11,8 +11,8 @@ public sealed class NotificationRecipientResolver : INotificationRecipientResolv
     {
         var eligibleRecipientTypes = GetEligibleRecipientTypes(notification.Actor.ActorType);
         var recipients = notification.Recipients
-            .Where(recipient => recipient.Type != NotificationRecipientType.Unknown)
-            .Where(recipient => eligibleRecipientTypes.Contains(recipient.Type))
+            .Where(recipient => !string.IsNullOrWhiteSpace(recipient.RecipientType))
+            .Where(recipient => eligibleRecipientTypes.Contains(recipient.RecipientType.Trim()))
             .Select(NormaliseChannels)
             .Where(HasAnyDeliveryTarget)
             .DistinctBy(GetRecipientKey)
@@ -22,34 +22,34 @@ public sealed class NotificationRecipientResolver : INotificationRecipientResolv
         return Task.FromResult(new NotificationRoute(recipients, copyContactCentre));
     }
 
-    private static HashSet<NotificationRecipientType> GetEligibleRecipientTypes(string? actorType)
+    private static HashSet<string> GetEligibleRecipientTypes(string? actorType)
         => actorType?.Trim() switch
         {
             var value when IsActor(value, "Client") =>
             [
-                NotificationRecipientType.Client,
-                NotificationRecipientType.Adviser,
-                NotificationRecipientType.ContactCentre
+                "Client",
+                "Adviser",
+                "ContactCentre"
             ],
             var value when IsActor(value, "Adviser") =>
             [
-                NotificationRecipientType.Client,
-                NotificationRecipientType.Adviser,
-                NotificationRecipientType.ContactCentre
+                "Client",
+                "Adviser",
+                "ContactCentre"
             ],
             var value when IsActor(value, "Admin") || IsActor(value, "System") =>
             [
-                NotificationRecipientType.Client,
-                NotificationRecipientType.Adviser,
-                NotificationRecipientType.ContactCentre,
-                NotificationRecipientType.Internal
+                "Client",
+                "Adviser",
+                "ContactCentre",
+                "Internal"
             ],
             _ =>
             [
-                NotificationRecipientType.Client,
-                NotificationRecipientType.Adviser,
-                NotificationRecipientType.ContactCentre,
-                NotificationRecipientType.Internal
+                "Client",
+                "Adviser",
+                "ContactCentre",
+                "Internal"
             ]
         };
 
@@ -87,7 +87,7 @@ public sealed class NotificationRecipientResolver : INotificationRecipientResolv
     private static string GetRecipientKey(NotificationRecipient recipient)
         => string.Join(
             "|",
-            recipient.Type,
+            recipient.RecipientType.Trim(),
             recipient.Email?.Trim().ToUpperInvariant(),
             recipient.MobileNumber?.Trim(),
             recipient.PushTarget?.Trim());
@@ -102,9 +102,12 @@ public sealed class NotificationRecipientResolver : INotificationRecipientResolv
         if (IsActor(notification.Actor.ActorType, "Admin") || IsActor(notification.Actor.ActorType, "System"))
             return true;
 
-        return recipients.Any(recipient => recipient.Type == NotificationRecipientType.ContactCentre);
+        return recipients.Any(recipient => IsRecipientType(recipient, "ContactCentre"));
     }
 
     private static bool IsActor(string? actual, string expected)
         => string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsRecipientType(NotificationRecipient recipient, string expected)
+        => string.Equals(recipient.RecipientType, expected, StringComparison.OrdinalIgnoreCase);
 }

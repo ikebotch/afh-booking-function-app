@@ -377,7 +377,8 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
 
             await _notificationPublisher.PublishAsync(
-                NotificationRequested.BookingConfirmed(
+                new NotificationRequested(
+                    BookingNotificationTypes.BookingConfirmed,
                     context.Hold.Id,
                     new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
                     BuildBookingConfirmedRecipients(client),
@@ -477,7 +478,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         return
         [
             new NotificationRecipient(
-                NotificationRecipientType.Client,
+                BookingNotificationRecipientTypes.Client,
                 displayName,
                 client.Email,
                 client.Phone)

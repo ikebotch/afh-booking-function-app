@@ -23,8 +23,8 @@ public sealed class NotificationRecipientResolverTests
             CancellationToken.None);
 
         Assert.Equal(
-            [NotificationRecipientType.Client, NotificationRecipientType.Adviser, NotificationRecipientType.ContactCentre],
-            route.Recipients.Select(x => x.Type).ToArray());
+            [BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.ContactCentre],
+            route.Recipients.Select(x => x.RecipientType).ToArray());
         Assert.True(route.CopyContactCentre);
     }
 
@@ -45,8 +45,8 @@ public sealed class NotificationRecipientResolverTests
             CancellationToken.None);
 
         Assert.Equal(
-            [NotificationRecipientType.Client, NotificationRecipientType.Adviser, NotificationRecipientType.ContactCentre, NotificationRecipientType.Internal],
-            route.Recipients.Select(x => x.Type).ToArray());
+            [BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.ContactCentre, BookingNotificationRecipientTypes.Internal],
+            route.Recipients.Select(x => x.RecipientType).ToArray());
         Assert.True(route.CopyContactCentre);
     }
 
@@ -60,7 +60,7 @@ public sealed class NotificationRecipientResolverTests
                 BookingNotificationActorTypes.System,
                 [
                     new NotificationRecipient(
-                        NotificationRecipientType.Client,
+                        BookingNotificationRecipientTypes.Client,
                         "Jane Client",
                         "jane@example.test",
                         "+447700900123",
@@ -79,7 +79,7 @@ public sealed class NotificationRecipientResolverTests
     {
         var resolver = new NotificationRecipientResolver();
         var recipient = new NotificationRecipient(
-            NotificationRecipientType.Client,
+            BookingNotificationRecipientTypes.Client,
             "Jane Client",
             "jane@example.test",
             "+447700900123",
@@ -97,7 +97,8 @@ public sealed class NotificationRecipientResolverTests
     private static NotificationRequested CreateNotification(
         string actorType,
         IReadOnlyList<NotificationRecipient> recipients)
-        => NotificationRequested.BookingConfirmed(
+        => new NotificationRequested(
+            BookingNotificationTypes.BookingConfirmed,
             "booking-1",
             new NotificationActor(actorType, "Booking", "actor-1", "Actor One", "actor@example.test"),
             recipients,
@@ -108,25 +109,25 @@ public sealed class NotificationRecipientResolverTests
 
     private static NotificationRecipient ClientRecipient()
         => new(
-            NotificationRecipientType.Client,
+            BookingNotificationRecipientTypes.Client,
             "Jane Client",
             "jane@example.test");
 
     private static NotificationRecipient AdviserRecipient()
         => new(
-            NotificationRecipientType.Adviser,
+            BookingNotificationRecipientTypes.Adviser,
             "Alex Adviser",
             "alex@example.test");
 
     private static NotificationRecipient ContactCentreRecipient()
         => new(
-            NotificationRecipientType.ContactCentre,
+            BookingNotificationRecipientTypes.ContactCentre,
             "Contact Centre",
             "contact-centre@example.test");
 
     private static NotificationRecipient InternalRecipient()
         => new(
-            NotificationRecipientType.Internal,
+            BookingNotificationRecipientTypes.Internal,
             "Internal Ops",
             "ops@example.test");
 }

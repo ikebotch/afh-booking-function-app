@@ -62,7 +62,7 @@ public sealed class NotificationService : INotificationService, INotificationPub
                     new Dictionary<string, string>
                     {
                         ["sourceSystem"] = notification.SourceSystem,
-                        ["notificationType"] = notification.Type.ToString(),
+                        ["notificationType"] = notification.Type.Name,
                         ["actorType"] = notification.Actor.ActorType,
                         ["actorSourceApplication"] = notification.Actor.SourceApplication
                     });

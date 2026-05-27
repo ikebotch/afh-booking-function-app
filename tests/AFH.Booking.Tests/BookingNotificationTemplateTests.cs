@@ -116,7 +116,8 @@ public sealed class BookingNotificationTemplateTests
 
         var renderer = new NotificationTemplateRenderer();
         var rendered = await renderer.RenderAsync(
-            NotificationRequested.BookingConfirmed(
+            new NotificationRequested(
+                BookingNotificationTypes.BookingConfirmed,
                 hold.Id,
                 new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
                 [],
@@ -164,7 +165,8 @@ Manage your booking:
 
         var renderer = new NotificationTemplateRenderer();
         var rendered = await renderer.RenderAsync(
-            NotificationRequested.BookingRescheduled(
+            new NotificationRequested(
+                BookingNotificationTypes.BookingRescheduled,
                 "booking-1",
                 new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
                 [],
@@ -205,7 +207,8 @@ Manage your booking:
 
         var renderer = new NotificationTemplateRenderer();
         var rendered = await renderer.RenderAsync(
-            NotificationRequested.BookingCancelled(
+            new NotificationRequested(
+                BookingNotificationTypes.BookingCancelled,
                 "booking-1",
                 new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
                 [],
@@ -241,7 +244,8 @@ Manage your booking:
 
         var renderer = new NotificationTemplateRenderer();
         var rendered = await renderer.RenderAsync(
-            NotificationRequested.BookingHoldCreated(
+            new NotificationRequested(
+                BookingNotificationTypes.BookingHoldCreated,
                 hold.Id,
                 new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
                 [],

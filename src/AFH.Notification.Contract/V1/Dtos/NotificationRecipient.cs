@@ -1,7 +1,7 @@
 namespace AFH.Notification.Contract.V1.Dtos;
 
 public sealed record NotificationRecipient(
-    NotificationRecipientType Type,
+    string RecipientType,
     string? DisplayName,
     string? Email,
     string? MobileNumber = null,

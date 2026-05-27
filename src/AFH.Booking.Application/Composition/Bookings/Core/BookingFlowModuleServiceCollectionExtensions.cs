@@ -3,6 +3,7 @@ using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Location;
+using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Abstractions.Availability;
 using AFH.Booking.Application.Approvals;
 using AFH.Booking.Application.Availability;
@@ -12,6 +13,7 @@ using AFH.Booking.Application.Holds;
 using AFH.Booking.Application.Lifecycle;
 using AFH.Booking.Application.Services.Bookings.Core;
 using AFH.Booking.Application.Services.Lifecycle;
+using AFH.Booking.Application.Services.Notifications;
 
 namespace AFH.Booking.Application.Composition;
 
@@ -34,6 +36,7 @@ internal static class BookingFlowModuleServiceCollectionExtensions
         services.AddScoped<IAvailabilityRulesService, AvailabilityRulesService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
         services.AddScoped<IBookingNotificationStep, BookingNotificationStep>();
+        services.AddScoped<IManualBookingNotificationService, ManualBookingNotificationService>();
 
         return services;
     }

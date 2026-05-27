@@ -92,6 +92,18 @@ public sealed class ArchitectureGuardTests
     }
 
     [Fact]
+    public void SendNotificationEndpoint_RemainsInternalOnly()
+    {
+        var endpointPoliciesType = Assembly.Load("AFH.Booking.Function").GetType("AFH.Booking.Function.Security.EndpointAccessPolicies");
+        var getPolicy = endpointPoliciesType?.GetMethod("GetPolicy", BindingFlags.Public | BindingFlags.Static);
+
+        Assert.NotNull(getPolicy);
+
+        var policy = getPolicy!.Invoke(null, ["Bookings_SendNotification"]);
+        Assert.Equal("InternalOnly", policy?.ToString());
+    }
+
+    [Fact]
     public void Program_RemainsAThinBootstrapShell()
     {
         var programText = File.ReadAllText(GetProgramPath("AFH.Booking.Function"));
@@ -211,6 +223,29 @@ public sealed class ArchitectureGuardTests
         AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Holds.ConfirmBookingService", legacyNotificationService!, bookingNotificationStep!);
         AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Bookings.CancellationOrchestrator", legacyNotificationService!, bookingNotificationStep!);
         AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Bookings.RearrangementOrchestrator", legacyNotificationService!, bookingNotificationStep!);
+    }
+
+    [Fact]
+    public void ManualSendEndpoint_DoesNotDependOnLegacyClientNotificationService()
+    {
+        var functionAssembly = Assembly.Load("AFH.Booking.Function");
+        var application = Assembly.Load("AFH.Booking.Application");
+        var functionType = functionAssembly.GetType("AFH.Booking.Function.Functions.V1.Bookings.SendBookingNotificationFunction");
+        var legacyClientNotificationService = application.GetType("AFH.Booking.Application.Abstractions.Clients.IClientNotificationService");
+        var manualNotificationService = application.GetType("AFH.Booking.Application.Abstractions.Notifications.IManualBookingNotificationService");
+
+        Assert.NotNull(functionType);
+        Assert.NotNull(legacyClientNotificationService);
+        Assert.NotNull(manualNotificationService);
+
+        var constructorParameterTypes = functionType!
+            .GetConstructors()
+            .SelectMany(ctor => ctor.GetParameters())
+            .Select(parameter => parameter.ParameterType)
+            .ToArray();
+
+        Assert.Contains(manualNotificationService, constructorParameterTypes);
+        Assert.DoesNotContain(legacyClientNotificationService, constructorParameterTypes);
     }
 
     [Fact]

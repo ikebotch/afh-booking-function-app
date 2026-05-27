@@ -1,4 +1,4 @@
-using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -9,9 +9,9 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Notifications")]
 public sealed class SendBookingNotificationFunction
 {
-    private readonly IClientNotificationService _notifications;
+    private readonly IManualBookingNotificationService _notifications;
 
-    public SendBookingNotificationFunction(IClientNotificationService notifications)
+    public SendBookingNotificationFunction(IManualBookingNotificationService notifications)
     {
         _notifications = notifications;
     }
@@ -27,16 +27,25 @@ public sealed class SendBookingNotificationFunction
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "bookingId is required.", ct, "Validation");
 
         var body = await req.ReadJsonAsync<BookingNotificationRequest>(ct);
-        var eventType = string.IsNullOrWhiteSpace(body?.EventType) ? "BookingChanged" : body!.EventType.Trim();
+        var eventType = string.IsNullOrWhiteSpace(body?.EventType) ? string.Empty : body!.EventType.Trim();
 
-        var response = await _notifications.SendBookingNotificationAsync(
+        var response = await _notifications.SendAsync(
             bookingId: bookingId.Trim(),
             eventType: eventType,
-            message: body?.MessageOverride,
+            messageOverride: body?.MessageOverride,
             sendSms: body?.SendSms ?? true,
             sendEmail: body?.SendEmail ?? true,
+            correlationId: GetCorrelationId(req),
             ct: ct);
 
-        return await req.OkJsonAsync(response.ToContract(), ct);
+        if (!response.IsSuccess || response.Value is null)
+            return await req.ProblemAsync(response.StatusCode, response.ErrorMessage ?? "Request failed.", ct, response.ErrorCode);
+
+        return await req.OkJsonAsync(response.Value.ToContract(), ct);
     }
+
+    private static string? GetCorrelationId(HttpRequestData req)
+        => req.Headers.TryGetValues("x-correlation-id", out var values)
+            ? values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim()
+            : null;
 }

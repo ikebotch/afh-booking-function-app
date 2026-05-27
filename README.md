@@ -54,6 +54,7 @@
 - Client email composition keeps HTML and plain text separate for the email sender contract.
 - Calendar appointment bodies use only `CalendarDescription`, which is plain text and safe for calendar/invite rendering.
 - Do not reuse raw HTML email markup inside calendar descriptions or appointment bodies.
+- TODO: Confirm whether the business term for booking movement should be `Rearranged` or `Rescheduled`; do not change wording until confirmed, and if it changes later update both live notification wording and template parity expectations together.
 
 ## SQL Migration Note
 - Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.

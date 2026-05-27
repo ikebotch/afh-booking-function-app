@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationService>(sp => sp.GetRequiredService<NotificationService>());
         services.AddScoped<INotificationPublisher>(sp => sp.GetRequiredService<NotificationService>());
         services.AddScoped<INotificationTemplateRenderer, NotificationTemplateRenderer>();
+        services.AddScoped<INotificationRecipientResolver, NotificationRecipientResolver>();
 
         return services;
     }

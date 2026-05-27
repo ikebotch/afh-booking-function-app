@@ -1,0 +1,22 @@
+using AFH.Notification.Application.Abstractions;
+using AFH.Notification.Infrastructure.Options;
+using AFH.Notification.Infrastructure.Persistence;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace AFH.Notification.Infrastructure.Composition;
+
+public static class ServiceCollectionExtensions
+{
+    public static IServiceCollection AddNotificationInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.Configure<NotificationOptions>(configuration.GetSection(NotificationOptions.SectionName));
+        services.Configure<EmailDeliveryOptions>(configuration.GetSection(EmailDeliveryOptions.SectionName));
+
+        services.AddScoped<INotificationAuditStore, NotificationAuditStore>();
+
+        return services;
+    }
+}

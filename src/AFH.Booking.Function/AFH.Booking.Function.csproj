@@ -37,6 +37,9 @@
 		<ProjectReference Include="..\AFH.Booking.Application\AFH.Booking.Application.csproj" />
 		<ProjectReference Include="..\AFH.Booking.Contract\AFH.Booking.Contract.csproj" />
 		<ProjectReference Include="..\AFH.Booking.Infrastructure\AFH.Booking.Infrastructure.csproj" />
+		<ProjectReference Include="..\AFH.Notification.Application\AFH.Notification.Application.csproj" />
+		<ProjectReference Include="..\AFH.Notification.Contract\AFH.Notification.Contract.csproj" />
+		<ProjectReference Include="..\AFH.Notification.Infrastructure\AFH.Notification.Infrastructure.csproj" />
 	</ItemGroup>
 
 

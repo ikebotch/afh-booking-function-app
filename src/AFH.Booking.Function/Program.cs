@@ -4,6 +4,8 @@ using AFH.Booking.Function.Middleware;
 using AFH.Booking.Infrastructure.Composition;
 using AFH.Common.Errors.Abstractions;
 using AFH.Common.Errors.AzureFunctions.DependencyInjection;
+using AFH.Notification.Application.Composition;
+using AFH.Notification.Infrastructure.Composition;
 using Azure.Core.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,6 +31,8 @@ var host = new HostBuilder()
 
         services.AddBookingApplication();
         services.AddBookingInfrastructure(ctx.Configuration);
+        services.AddNotificationApplication();
+        services.AddNotificationInfrastructure(ctx.Configuration);
         services.AddHttpClient();
 
         AddValidatedSecurityOptions(services, ctx.Configuration);

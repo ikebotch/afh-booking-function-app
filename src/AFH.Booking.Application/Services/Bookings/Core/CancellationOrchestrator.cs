@@ -1,9 +1,13 @@
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Notification.Contract.Abstractions;
+using AFH.Notification.Contract.V1.Dtos;
+using AFH.Notification.Contract.V1.Requests;
 using System.Text.Json;
 
 namespace AFH.Booking.Application.Bookings;
@@ -18,6 +22,8 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
     private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IClock _clock;
     private readonly INotificationService _notifications;
+    private readonly INotificationPublisher _notificationPublisher;
+    private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
     private readonly ILifecycleAuditService _audit;
     private readonly ILogger<CancellationOrchestrator> _logger;
@@ -31,9 +37,11 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         IAdviserProfileProjectionRepository profiles,
         IClock clock,
         INotificationService notifications,
+        INotificationPublisher notificationPublisher,
         IDownstreamUpdateService downstreamUpdates,
         ILifecycleAuditService audit,
-        ILogger<CancellationOrchestrator> logger)
+        ILogger<CancellationOrchestrator> logger,
+        IClientDirectory? clients = null)
     {
         _holds = holds;
         _slots = slots;
@@ -43,6 +51,8 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         _profiles = profiles;
         _clock = clock;
         _notifications = notifications;
+        _notificationPublisher = notificationPublisher;
+        _clients = clients;
         _downstreamUpdates = downstreamUpdates;
         _audit = audit;
         _logger = logger;
@@ -266,6 +276,24 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
                     dispatch.EmailStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase)
                     ? LifecycleStepStatuses.Failed
                     : LifecycleStepStatuses.Succeeded;
+
+                var client = _clients is null
+                    ? null
+                    : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
+
+                await _notificationPublisher.PublishAsync(
+                    new NotificationRequested(
+                        BookingNotificationTypes.BookingCancelled,
+                        context.Hold.Id,
+                        new NotificationActor(
+                            ResolveNotificationActorType(cmd),
+                            "Booking",
+                            cmd.ActorId,
+                            cmd.RequestedBy,
+                            null),
+                        BuildBookingCancelledRecipients(client),
+                        BuildBookingCancelledNotificationData(cmd, context, eventId)),
+                    ct);
             }
             catch (Exception ex)
             {
@@ -356,6 +384,75 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             : $" Reason: {cmd.ReasonCode}{(string.IsNullOrWhiteSpace(cmd.ReasonDetail) ? string.Empty : $" - {cmd.ReasonDetail!.Trim()}")}.";
 
         return $"Your meeting with {slot.AdviserName} on {slot.StartUtc:yyyy-MM-dd HH:mm} has been cancelled.{reason}";
+    }
+
+    private static string ResolveNotificationActorType(CancelBookingCommand cmd)
+    {
+        if (string.IsNullOrWhiteSpace(cmd.RequestedBy))
+            return BookingNotificationActorTypes.System;
+
+        return cmd.RequestedBy.Trim();
+    }
+
+    private static IReadOnlyList<NotificationRecipient> BuildBookingCancelledRecipients(
+        Domain.Client.ClientDirectoryItem? client)
+    {
+        if (client is null)
+            return Array.Empty<NotificationRecipient>();
+
+        var displayName = $"{client.FirstName} {client.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(displayName))
+            displayName = null;
+
+        return
+        [
+            new NotificationRecipient(
+                BookingNotificationRecipientTypes.Client,
+                displayName,
+                client.Email,
+                client.Phone)
+        ];
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildBookingCancelledNotificationData(
+        CancelBookingCommand cmd,
+        CancellationContext context,
+        string eventId)
+    {
+        var notificationMessage = BuildCancellationNotification(context.Slot, cmd);
+        var template = BookingNotificationEmailTemplate.Build(
+            eventType: "Cancelled",
+            clientDisplayName: null,
+            adviserName: context.Slot.AdviserName,
+            startUtc: context.Slot.StartUtc,
+            endUtc: context.Slot.EndUtc,
+            timezoneId: context.Transaction.Timezone,
+            isRemote: context.Transaction.IsRemote,
+            customMessage: notificationMessage);
+        var lines = template.TextBody.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var dataByPrefix = lines
+            .Select(line => line.Split(": ", 2, StringSplitOptions.None))
+            .Where(parts => parts.Length == 2)
+            .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.OrdinalIgnoreCase);
+
+        return new Dictionary<string, string>
+        {
+            ["eventId"] = eventId,
+            ["bookingId"] = context.Hold.Id,
+            ["slotId"] = context.Slot.Id,
+            ["adviserId"] = context.Slot.AdviserId,
+            ["adviserName"] = context.Slot.AdviserName,
+            ["startUtc"] = context.Slot.StartUtc.ToString("O"),
+            ["endUtc"] = context.Slot.EndUtc.ToString("O"),
+            ["transactionRef"] = context.Transaction.TransactionRef,
+            ["greetingName"] = "there",
+            ["whenLine"] = dataByPrefix.GetValueOrDefault("When", string.Empty),
+            ["locationLine"] = dataByPrefix.GetValueOrDefault("Meeting type", string.Empty),
+            ["note"] = notificationMessage,
+            ["manageBookingLinks"] = string.Empty,
+            ["reasonCode"] = cmd.ReasonCode ?? string.Empty,
+            ["reasonDetail"] = cmd.ReasonDetail ?? cmd.Reason ?? string.Empty
+        };
     }
 
     private static Result<T> FailLike<T>(Result failure)

@@ -77,6 +77,12 @@ public sealed class LifecycleOrchestratorSequencingTests
         audit.Setup(x => x.RecordStepAsync(It.IsAny<LifecycleAuditStepEntry>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
+        var notificationPublisherCancel = new Mock<INotificationPublisher>();
+        NotificationRequested? publishedCancelNotification = null;
+        notificationPublisherCancel.Setup(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationRequested, CancellationToken>((notification, _) => publishedCancelNotification = notification)
+            .Returns(Task.CompletedTask);
+
         var orchestrator = new CancellationOrchestrator(
             holds.Object,
             slots.Object,
@@ -86,6 +92,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             new StubProfiles("adviser-1", "adviser.one@tenant.com"),
             new StubClock(DateTime.UtcNow),
             notifications.Object,
+            notificationPublisherCancel.Object,
             downstream.Object,
             audit.Object,
             Mock.Of<ILogger<CancellationOrchestrator>>());
@@ -102,6 +109,13 @@ public sealed class LifecycleOrchestratorSequencingTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(new[] { "outlook", "sql", "notifications" }, order);
+        Assert.NotNull(publishedCancelNotification);
+        Assert.Equal(BookingNotificationTypes.BookingCancelled, publishedCancelNotification!.Type);
+        Assert.Equal("booking-1", publishedCancelNotification.CorrelationId);
+        Assert.Equal("Booking", publishedCancelNotification.Actor.SourceApplication);
+        Assert.Equal(BookingNotificationActorTypes.Client, publishedCancelNotification.Actor.ActorType);
+        Assert.Equal("evt-1", publishedCancelNotification.Data["eventId"]);
+        Assert.Equal("booking-1", publishedCancelNotification.Data["bookingId"]);
     }
 
     [Fact]
@@ -139,6 +153,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             new StubProfiles("adviser-1", "adviser.one@tenant.com"),
             new StubClock(DateTime.UtcNow),
             notifications.Object,
+            Mock.Of<INotificationPublisher>(),
             downstream.Object,
             audit.Object,
             Mock.Of<ILogger<CancellationOrchestrator>>());

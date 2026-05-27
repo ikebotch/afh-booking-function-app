@@ -81,7 +81,7 @@
 - `Notifications:Email:ProviderName=Composed` keeps the non-production composed behavior and returns `NonProductionComposed`.
 - Production deployment requires Key Vault/App Settings for Graph credentials and mailbox permissions for SendMail.
 - Contact-centre copies require `Notifications:Email:ContactCentreEmailAddress`.
-- Bounceback auditing currently persists `EmailBounceEvents` and correlates with the legacy `NotificationDispatches` model. Bounceback correlation for queued Graph delivery is not unified yet.
+- Bounceback auditing persists `EmailBounceEvents` and correlates with the unified `NotificationDispatches` delivery-attempt audit table. `NotificationOutbox` remains job-level; `NotificationDispatches` remains recipient/channel/provider attempt-level.
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
 
 ## Notification Configuration Split
@@ -116,7 +116,7 @@
 - The Graph app registration or managed identity must have permission to send as/from `Notifications:Email:Graph:SenderMailbox`; deployment requires admin consent and the appropriate Microsoft Graph SendMail permissions/mailbox access.
 - Templates remain `.txt` only for now, so Graph sends plain text bodies. HTML/multipart delivery is intentionally out of scope.
 - Microsoft Graph `sendMail` returns `202 Accepted` without a provider message id. The service stores an internal provider correlation id as `ProviderMessageId` for tracing successful sends.
-- Because the Graph `ProviderMessageId` is internal rather than a Graph-generated message id, bounceback correlation remains limited until notification bounceback storage is migrated to use Graph/webhook metadata that can be matched to the internal correlation id.
+- Because the Graph `ProviderMessageId` is internal rather than a Graph-generated message id, queued Graph dispatch rows are ready for bounceback correlation by stored provider correlation id, but production provider metadata should be verified end-to-end before relying on Graph bouncebacks operationally.
 - Legacy direct Booking email paths remain during transition.
 
 ## Notification Queue Settings
@@ -125,9 +125,8 @@
   - `Notifications__Queue__ConnectionString=<Azure Storage Account connection string>`
 
 ## Notification Transition Follow-Ups
-- Persist queued Graph delivery audit records into `NotificationDispatches` or a unified dispatch model.
-- Migrate bounceback correlation to the queued delivery audit model.
-- Move the manual `Bookings_SendNotification` endpoint to the new outbox path or retire it.
+- Verify Graph/provider bounceback metadata against queued delivery audit in production-like integration testing.
+- Decide whether the manual `Bookings_SendNotification` endpoint should remain internal/admin-only or be retired after cutover.
 - Retire `ClientNotificationService` only after production cutover proves the queued path.
 - Decide retention and schema cleanup for `NotificationDispatches` after migration and data-retention review.
 

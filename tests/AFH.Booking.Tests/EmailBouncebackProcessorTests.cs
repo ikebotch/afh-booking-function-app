@@ -43,4 +43,27 @@ public class EmailBouncebackProcessorTests
             It.Is<NotificationBounceback>(b => b.ProviderMessageId == "msg-123" && b.Status == "Bounced"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task ProcessWebhookPayloadAsync_WhenStoreFails_LogsAndAcceptsWebhook()
+    {
+        var payload = @"[{
+            ""id"": ""2"",
+            ""eventType"": ""Microsoft.Communication.EmailDeliveryReportReceived"",
+            ""eventTime"": ""2026-05-27T10:00:00Z"",
+            ""data"": {
+                ""messageId"": ""msg-123"",
+                ""status"": ""Bounced""
+            }
+        }]";
+
+        _storeMock
+            .Setup(s => s.RecordBouncebackAsync(It.IsAny<NotificationBounceback>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("database unavailable"));
+
+        var result = await _sut.ProcessWebhookPayloadAsync(payload, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.ProcessedCount);
+    }
 }

@@ -49,7 +49,13 @@ public sealed class EmailBouncebackStore : INotificationBouncebackStore
             updateCmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
             updateCmd.Parameters.AddWithValue("@messageId", bounceback.ProviderMessageId);
 
-            await updateCmd.ExecuteNonQueryAsync(ct);
+            var updatedRows = await updateCmd.ExecuteNonQueryAsync(ct);
+            if (updatedRows == 0)
+            {
+                _logger.LogWarning(
+                    "Bounceback ProviderMessageId={ProviderMessageId} did not match a NotificationDispatches row; recording EmailBounceEvents only.",
+                    bounceback.ProviderMessageId);
+            }
 
             await using var insertCmd = connection.CreateCommand();
             insertCmd.Transaction = transaction;

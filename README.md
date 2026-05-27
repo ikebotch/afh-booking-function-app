@@ -65,8 +65,8 @@
   - Azure Queue does not contain sensitive notification data.
   - SQL remains the source of truth.
   - No Event Grid subscription is needed for Azure Queue sending; the queue trigger listens automatically.
-  - Queue settings are required: `NotificationQueue__QueueName` and `NotificationQueue__ConnectionString`.
-  - `NotificationQueue__ConnectionString` is an Azure Storage Account connection string, not the Booking SQL connection string.
+  - Queue settings are required: `Notifications__Queue__QueueName` and `Notifications__Queue__ConnectionString`.
+  - `Notifications__Queue__ConnectionString` is an Azure Storage Account connection string, not the Booking SQL connection string.
   - Prefer Key Vault/App Settings for the storage connection string.
   - The function app identity or connection string must be allowed to create the queue if `CreateIfNotExistsAsync` remains enabled.
   - Built-in poison queue behavior exists through Azure Functions for retry-exhausted queue messages; invalid persisted payloads are marked `DeadLettered` by the trigger and should be monitored from `NotificationOutbox`.
@@ -98,8 +98,8 @@
 
 ## Notification Queue Settings
 - Hybrid notification dispatch requires:
-  - `NotificationQueue__QueueName=notifications-send`
-  - `NotificationQueue__ConnectionString=<Azure Storage Account connection string>`
+  - `Notifications__Queue__QueueName=notifications-send`
+  - `Notifications__Queue__ConnectionString=<Azure Storage Account connection string>`
 
 ## SQL Migration Note
 - Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.

@@ -1,5 +1,6 @@
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Function.Configuration;
+using AFH.Notification.Infrastructure.Queue;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
@@ -63,6 +64,26 @@ public sealed class ConfigurationValidationTests
             .Invoke(null, [configuration]) as string;
 
         Assert.Equal("Server=typed;", connectionString);
+    }
+
+    [Fact]
+    public void NotificationQueueOptions_BindFromNotificationsQueueSection()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Notifications:Queue:QueueName"] = "notifications-send",
+                ["Notifications:Queue:ConnectionString"] = "UseDevelopmentStorage=true"
+            })
+            .Build();
+
+        var options = configuration
+            .GetSection(NotificationQueueOptions.SectionName)
+            .Get<NotificationQueueOptions>();
+
+        Assert.NotNull(options);
+        Assert.Equal("notifications-send", options.QueueName);
+        Assert.Equal("UseDevelopmentStorage=true", options.ConnectionString);
     }
 
     private sealed class FakeHostEnvironment(string environmentName) : IHostEnvironment

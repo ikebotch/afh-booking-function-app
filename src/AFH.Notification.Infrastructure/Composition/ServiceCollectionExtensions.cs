@@ -87,7 +87,6 @@ public static class ServiceCollectionExtensions
 
     private static void BindNotificationQueueOptions(IConfiguration configuration, NotificationQueueOptions options)
     {
-        configuration.GetSection(NotificationQueueOptions.LegacySectionName).Bind(options);
         configuration.GetSection(NotificationQueueOptions.SectionName).Bind(options);
     }
 }

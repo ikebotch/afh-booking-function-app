@@ -22,7 +22,7 @@ public class SendNotificationQueueTrigger
 
     [Function(nameof(SendNotificationQueueTrigger))]
     public async Task RunAsync(
-        [QueueTrigger("%NotificationQueue:QueueName%", Connection = "NotificationQueue:ConnectionString")] string queueMessageJson,
+        [QueueTrigger("%Notifications:Queue:QueueName%", Connection = "Notifications:Queue:ConnectionString")] string queueMessageJson,
         FunctionContext context)
     {
         var cancellationToken = context.CancellationToken;

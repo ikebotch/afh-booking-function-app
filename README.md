@@ -58,6 +58,10 @@
 - Contact-centre copy is a routing policy evaluated by the Notification service, not hardcoded template logic.
 - Hold notifications are enabled; they should be configuration-gated before production if the business has not explicitly approved them.
 - Old direct Booking email paths are still intentionally present for transition. Do not remove them until tests prove safe replacement.
+- Notification dispatch is now durable and queue-backed via Azure Storage Queues.
+  - No Event Grid subscription is needed for sending; the queue trigger listens automatically.
+  - Requires `NotificationQueueQueueName` and `NotificationQueueConnectionString` app settings.
+  - Built-in poison queue behavior exists through Azure Functions.
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
 
 ## SQL Migration Note

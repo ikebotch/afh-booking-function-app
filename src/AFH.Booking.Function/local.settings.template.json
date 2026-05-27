@@ -66,6 +66,8 @@
     "Notifications:EmailEnabled": "true",
     "Notifications:EmailProviderName": "Composed",
     "Notifications:ClientPortalBaseUrl": "https://booking.example",
+    "NotificationQueueQueueName": "notifications-send",
+    "NotificationQueueConnectionString": "UseDevelopmentStorage=true",
     "ApprovalRouting:TargetType": "Role",
     "ApprovalRouting:TargetValue": "booking-approvers",
     "ApprovalRouting:DisplayName": "Booking Approvers",

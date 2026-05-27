@@ -4,7 +4,6 @@ using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Calendar;
 using AFH.Booking.Application.Abstractions.Governance;
 using AFH.Booking.Application.Abstractions.Clients;
-using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Abstractions.Meetings;
 using AFH.Booking.Application.Abstractions.Persistence;
@@ -184,26 +183,9 @@ public static class ServiceCollectionExtensions
             http.Timeout = TimeSpan.FromSeconds(30);
         });
         services.AddHostedService<AdviserProjectionSyncWorker>();
-        services.AddScoped<IEmailNotificationSender, ComposedEmailNotificationSender>();
-        services.AddScoped<IClientNotificationService, ClientNotificationService>();
-        services.AddScoped<IOperationalNotificationService, OperationalNotificationService>();
-        services.AddScoped<INotificationService>(sp => (INotificationService)sp.GetRequiredService<IClientNotificationService>());
         services.AddScoped<IDuplicateClientService, DuplicateClientService>();
         services.AddScoped<IDownstreamUpdateService, DownstreamUpdateService>();
         services.AddScoped<IDownstreamUpdateReconciliationService, DownstreamUpdateService>();
-
-        services.AddHttpClient("sms-provider", (sp, http) =>
-        {
-            var options = sp.GetRequiredService<IOptions<NotificationsOptions>>().Value;
-            if (!string.IsNullOrWhiteSpace(options.SmsBaseUrl))
-                http.BaseAddress = new Uri(options.SmsBaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
-
-            if (!string.IsNullOrWhiteSpace(options.SmsApiKey))
-                http.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", options.SmsApiKey);
-
-            http.Timeout = TimeSpan.FromSeconds(20);
-        });
 
         services.AddHttpClient<IAdminCoverageService, AdminCoverageService>((sp, http) =>
         {

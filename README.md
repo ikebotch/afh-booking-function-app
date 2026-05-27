@@ -61,9 +61,9 @@
 - New hybrid queued path:
   - `BookingNotificationStep` -> `NotificationOutbox` -> Azure Queue message containing only `outboxId` -> `SendNotificationQueueTrigger` -> `NotificationService` -> `GraphEmailDeliveryGateway` -> `NotificationOutbox` status update.
   - `NotificationOutbox` is the new hybrid queued dispatcher and its schema is deployed through EF migrations for `NotificationDbContext`.
-- Legacy direct Booking path:
-  - `ClientNotificationService` / Booking `INotificationService` -> `IEmailNotificationSender` -> `NotificationDispatches`.
-  - `NotificationDispatches` remains active for legacy direct notification audit and bounceback correlation. Do not drop it yet.
+- Retained compatibility path:
+  - `ApprovalNotificationService`, queued delivery audit, and bouncebacks continue to use `NotificationDispatches`.
+  - `NotificationDispatches` remains active for delivery audit and bounceback correlation. Do not drop it yet.
 - The new path uses a hybrid dispatch model.
   - SQL stores the full notification payload, processing state, idempotency key, and audit metadata in `NotificationOutbox`.
   - Azure Storage Queue is used only as a wake-up signal and contains only `outboxId`.
@@ -85,12 +85,7 @@
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
 
 ## Notification Configuration Split
-- Legacy Booking notification options are flat keys under `Notifications`:
-  - `Notifications:EmailEnabled`
-  - `Notifications:SmsEnabled`
-  - `Notifications:SmsBaseUrl`
-  - `Notifications:SmsApiKey`
-  - `Notifications:SmsSenderId`
+- Legacy Booking self-service link options are flat keys under `Notifications`:
   - `Notifications:ClientPortalBaseUrl`
 - New Notification infrastructure options are nested:
   - `Notifications:Queue:QueueName`
@@ -99,7 +94,7 @@
   - `Notifications:Email:ProviderName`
   - `Notifications:Email:ContactCentreEmailAddress`
   - `Notifications:Email:Graph:*`
-- Keep both sets configured until the legacy Booking notification path is migrated or retired.
+- Keep `Notifications:ClientPortalBaseUrl` configured until Booking self-service link generation moves to a dedicated options section.
 
 ## Microsoft Graph Email Delivery
 - Configure queued notification email delivery with:
@@ -117,7 +112,7 @@
 - Templates remain `.txt` only for now, so Graph sends plain text bodies. HTML/multipart delivery is intentionally out of scope.
 - Microsoft Graph `sendMail` returns `202 Accepted` without a provider message id. The service stores an internal provider correlation id as `ProviderMessageId` for tracing successful sends.
 - Because the Graph `ProviderMessageId` is internal rather than a Graph-generated message id, queued Graph dispatch rows are ready for bounceback correlation by stored provider correlation id, but production provider metadata should be verified end-to-end before relying on Graph bouncebacks operationally.
-- Legacy direct Booking email paths remain during transition.
+- Legacy direct Booking email sending has been removed from active runtime paths; approval/audit/bounceback compatibility remains through `NotificationDispatches`.
 
 ## Notification Queue Settings
 - Hybrid notification dispatch requires:
@@ -127,7 +122,7 @@
 ## Notification Transition Follow-Ups
 - Verify Graph/provider bounceback metadata against queued delivery audit in production-like integration testing.
 - Decide whether the manual `Bookings_SendNotification` endpoint should remain internal/admin-only or be retired after cutover.
-- Retire `ClientNotificationService` only after production cutover proves the queued path.
+- Monitor the removed direct sender replacement in production cutover and keep rollback guidance in release notes.
 - Decide retention and schema cleanup for `NotificationDispatches` after migration and data-retention review.
 
 ## SQL Migration Note

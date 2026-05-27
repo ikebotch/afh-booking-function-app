@@ -191,8 +191,22 @@ public sealed class ArchitectureGuardTests
 
         AssertLegacyTypeIsPresentAndNotObsolete(bookingInfrastructure, "AFH.Booking.Infrastructure.Persistence.Models.NotificationDispatchModel");
         AssertLegacyTypeIsPresentAndNotObsolete(bookingInfrastructure, "AFH.Booking.Infrastructure.Persistence.Repositories.NotificationDispatchRepository");
-        AssertLegacyTypeIsPresentAndNotObsolete(bookingInfrastructure, "AFH.Booking.Infrastructure.Clients.ClientNotificationService");
         AssertLegacyTypeIsPresentAndNotObsolete(bookingApplication, "AFH.Booking.Application.Abstractions.Persistence.INotificationDispatchRepository");
+    }
+
+    [Fact]
+    public void RemovedLegacyDirectNotificationSender_RemainsRemoved()
+    {
+        var bookingInfrastructure = Assembly.Load("AFH.Booking.Infrastructure");
+        var bookingApplication = Assembly.Load("AFH.Booking.Application");
+
+        Assert.Null(bookingInfrastructure.GetType("AFH.Booking.Infrastructure.Clients.ClientNotificationService"));
+        Assert.Null(bookingInfrastructure.GetType("AFH.Booking.Infrastructure.Clients.ComposedEmailNotificationSender"));
+        Assert.Null(bookingInfrastructure.GetType("AFH.Booking.Infrastructure.Clients.OperationalNotificationService"));
+        Assert.Null(bookingApplication.GetType("AFH.Booking.Application.Abstractions.Clients.IClientNotificationService"));
+        Assert.Null(bookingApplication.GetType("AFH.Booking.Application.Abstractions.Clients.IEmailNotificationSender"));
+        Assert.Null(bookingApplication.GetType("AFH.Booking.Application.Abstractions.Governance.IOperationalNotificationService"));
+        Assert.Null(bookingApplication.GetType("AFH.Booking.Application.Abstractions.Lifecycle.INotificationService"));
     }
 
     [Fact]
@@ -214,15 +228,14 @@ public sealed class ArchitectureGuardTests
     public void LifecycleNotificationFlows_DoNotDependOnLegacyBookingNotificationService()
     {
         var application = Assembly.Load("AFH.Booking.Application");
-        var legacyNotificationService = application.GetType("AFH.Booking.Application.Abstractions.Lifecycle.INotificationService");
         var bookingNotificationStep = application.GetType("AFH.Booking.Application.Abstractions.Lifecycle.IBookingNotificationStep");
 
-        Assert.NotNull(legacyNotificationService);
+        Assert.Null(application.GetType("AFH.Booking.Application.Abstractions.Lifecycle.INotificationService"));
         Assert.NotNull(bookingNotificationStep);
 
-        AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Holds.ConfirmBookingService", legacyNotificationService!, bookingNotificationStep!);
-        AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Bookings.CancellationOrchestrator", legacyNotificationService!, bookingNotificationStep!);
-        AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Bookings.RearrangementOrchestrator", legacyNotificationService!, bookingNotificationStep!);
+        AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Holds.ConfirmBookingService", bookingNotificationStep!);
+        AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Bookings.CancellationOrchestrator", bookingNotificationStep!);
+        AssertUsesNotificationStepWithoutLegacyNotificationService(application, "AFH.Booking.Application.Bookings.RearrangementOrchestrator", bookingNotificationStep!);
     }
 
     [Fact]
@@ -231,11 +244,10 @@ public sealed class ArchitectureGuardTests
         var functionAssembly = Assembly.Load("AFH.Booking.Function");
         var application = Assembly.Load("AFH.Booking.Application");
         var functionType = functionAssembly.GetType("AFH.Booking.Function.Functions.V1.Bookings.SendBookingNotificationFunction");
-        var legacyClientNotificationService = application.GetType("AFH.Booking.Application.Abstractions.Clients.IClientNotificationService");
         var manualNotificationService = application.GetType("AFH.Booking.Application.Abstractions.Notifications.IManualBookingNotificationService");
 
         Assert.NotNull(functionType);
-        Assert.NotNull(legacyClientNotificationService);
+        Assert.Null(application.GetType("AFH.Booking.Application.Abstractions.Clients.IClientNotificationService"));
         Assert.NotNull(manualNotificationService);
 
         var constructorParameterTypes = functionType!
@@ -245,7 +257,7 @@ public sealed class ArchitectureGuardTests
             .ToArray();
 
         Assert.Contains(manualNotificationService, constructorParameterTypes);
-        Assert.DoesNotContain(legacyClientNotificationService, constructorParameterTypes);
+        Assert.DoesNotContain(constructorParameterTypes, type => type.FullName == "AFH.Booking.Application.Abstractions.Clients.IClientNotificationService");
     }
 
     [Fact]
@@ -308,7 +320,6 @@ public sealed class ArchitectureGuardTests
     private static void AssertUsesNotificationStepWithoutLegacyNotificationService(
         Assembly assembly,
         string typeName,
-        Type legacyNotificationService,
         Type bookingNotificationStep)
     {
         var type = assembly.GetType(typeName);
@@ -321,8 +332,8 @@ public sealed class ArchitectureGuardTests
             .ToArray();
 
         Assert.Contains(bookingNotificationStep, constructorParameterTypes);
-        Assert.DoesNotContain(legacyNotificationService, constructorParameterTypes);
-        Assert.DoesNotContain(type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic), field => field.FieldType == legacyNotificationService);
+        Assert.DoesNotContain(constructorParameterTypes, parameterType => parameterType.FullName == "AFH.Booking.Application.Abstractions.Lifecycle.INotificationService");
+        Assert.DoesNotContain(type.GetFields(BindingFlags.Instance | BindingFlags.NonPublic), field => field.FieldType.FullName == "AFH.Booking.Application.Abstractions.Lifecycle.INotificationService");
     }
 
     private static void AssertDoesNotReferencePrefix(string assemblyName, string forbiddenPrefix)

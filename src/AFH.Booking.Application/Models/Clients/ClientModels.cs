@@ -52,13 +52,3 @@ public sealed class AdviserProjectionSyncResult
     public DateTime SyncedAtUtc { get; init; }
     public string Source { get; init; } = string.Empty;
 }
-
-public sealed record EmailNotificationMessage(
-    string RecipientEmail,
-    string Subject,
-    string HtmlBody,
-    string TextBody);
-
-public sealed record EmailNotificationSendResult(
-    string Status,
-    string? ProviderMessageId = null);

@@ -59,9 +59,16 @@ public sealed class NotificationService : INotificationService, INotificationPub
             if (route.CopyContactCentre)
             {
                 var ccTarget = _contactCentreResolver.GetContactCentreEmailAddress();
-                if (content.Channel == NotificationChannel.Email && !string.IsNullOrWhiteSpace(ccTarget))
+                if (content.Channel == NotificationChannel.Email)
                 {
-                    activeRecipients.Add(new NotificationRecipient("ContactCentre", "Contact Centre", ccTarget, null, null, [content.Channel]));
+                    if (string.IsNullOrWhiteSpace(ccTarget))
+                    {
+                        _logger.LogWarning("Contact centre copy skipped: ContactCentreEmailAddress is missing or blank.");
+                    }
+                    else if (!activeRecipients.Any(r => string.Equals(r.Email, ccTarget, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        activeRecipients.Add(new NotificationRecipient("ContactCentre", "Contact Centre", ccTarget, null, null, [content.Channel]));
+                    }
                 }
             }
 

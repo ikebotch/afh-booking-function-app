@@ -49,12 +49,16 @@
 - `dotnet test AFH.BookingService.sln`
 - `tests/AFH.Booking.Tests` now covers the current lifecycle sequencing and governance paths in the active repo state.
 
-## Notification Templates
-- Booking notification templates now produce four explicit content parts: `Subject`, `HtmlBody`, `TextBody`, and `CalendarDescription`.
-- Client email composition keeps HTML and plain text separate for the email sender contract.
-- Calendar appointment bodies use only `CalendarDescription`, which is plain text and safe for calendar/invite rendering.
-- Do not reuse raw HTML email markup inside calendar descriptions or appointment bodies.
-- TODO: Confirm whether the business term for booking movement should be `Rearranged` or `Rescheduled`; do not change wording until confirmed, and if it changes later update both live notification wording and template parity expectations together.
+## Notification Architecture
+- Applications publish notification intent. Booking lifecycle owns when notification intent is created.
+- Notification bounded context owns execution (templates, channels, routing).
+- Email is the first channel supported; SMS and Push are future channels.
+- Templates are currently `.txt` only; no HTML/multipart yet.
+- Bouncebacks are provider feedback handled explicitly by Notification Infrastructure.
+- Contact-centre copy is a routing policy evaluated by the Notification service, not hardcoded template logic.
+- Hold notifications are enabled; they should be configuration-gated before production if the business has not explicitly approved them.
+- Old direct Booking email paths are still intentionally present for transition. Do not remove them until tests prove safe replacement.
+- **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
 
 ## SQL Migration Note
 - Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.

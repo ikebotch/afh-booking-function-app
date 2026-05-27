@@ -1,0 +1,7 @@
+commit 27b0c32f9f2ca63ab42ac31dfca7dc6aba2ca2fb
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 16:55:41 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 16:55:41 2026 +0100
+
+    feat(notification): send booking reschedule through notification boundary #5359 #sprint7

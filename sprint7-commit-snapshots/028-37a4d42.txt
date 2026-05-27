@@ -1,0 +1,7 @@
+commit 37a4d42ec9c02f5ad847346f54be364fb91a05f2
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 18:30:20 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 18:30:20 2026 +0100
+
+    fix(notification): align queue configuration settings #sprint7

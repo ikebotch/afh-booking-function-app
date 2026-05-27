@@ -1,0 +1,7 @@
+commit 2a368370eb21af420cba6e8c0d8715965e70634c
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 16:27:41 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 16:27:41 2026 +0100
+
+    feat(notification): add versioned booking cancelled template #5356 #sprint7

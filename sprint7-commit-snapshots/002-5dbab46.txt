@@ -1,0 +1,7 @@
+commit 5dbab46eb671f9d620b7a7e1e224e43c4086ae97
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 16:15:11 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 16:15:11 2026 +0100
+
+    feat(notification): publish booking confirmed intent #5358 #sprint7

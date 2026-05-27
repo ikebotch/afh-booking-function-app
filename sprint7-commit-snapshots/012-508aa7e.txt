@@ -1,0 +1,7 @@
+commit 508aa7e45f445dbf1b4122249fd48bbaa78965f7
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 17:03:34 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 17:03:34 2026 +0100
+
+    feat(notification): send booking cancellation through notification boundary #5360 #sprint7

@@ -1,0 +1,7 @@
+commit 6249913290943276d053e1ef8ad862c7cd7c513f
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 16:11:19 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 16:11:19 2026 +0100
+
+    chore(notification): add notification bounded context scaffolding #sprint7

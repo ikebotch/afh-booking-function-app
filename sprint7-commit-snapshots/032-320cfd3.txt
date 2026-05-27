@@ -1,0 +1,7 @@
+commit 320cfd3f856ad1c8ec9e7896f17179fa7aae8ad4
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 20:36:00 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 20:36:00 2026 +0100
+
+    docs(notification): document notification dispatcher modes #sprint7

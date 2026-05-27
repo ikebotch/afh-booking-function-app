@@ -1,0 +1,7 @@
+commit 0a3b2c6f210ec3e907dec8d24daa9f102e2d0d63
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 20:35:54 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 20:35:54 2026 +0100
+
+    feat(notification): support configurable outbox dispatcher modes #sprint7

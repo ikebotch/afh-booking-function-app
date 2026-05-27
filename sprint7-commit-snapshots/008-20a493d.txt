@@ -1,0 +1,7 @@
+commit 20a493d2ccc92fadaa4c02b0dc17ee84580c04d8
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 16:36:02 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 16:36:02 2026 +0100
+
+    refactor(notification): make actor envelope source-aware #5357 #sprint7

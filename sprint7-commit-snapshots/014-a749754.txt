@@ -1,0 +1,7 @@
+commit a749754e2a2a945f424d14f0b84a11f27d1635c3
+Author:     ikebotch <ikebotch@gmail.com>
+AuthorDate: Wed May 27 17:18:26 2026 +0100
+Commit:     ikebotch <ikebotch@gmail.com>
+CommitDate: Wed May 27 17:18:26 2026 +0100
+
+    refactor(notification): use LifecycleActors instead of duplicate BookingNotificationActorTypes

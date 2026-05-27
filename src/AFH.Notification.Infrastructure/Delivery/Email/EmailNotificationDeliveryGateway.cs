@@ -26,10 +26,10 @@ public sealed class EmailNotificationDeliveryGateway : INotificationDeliveryGate
     public Task<NotificationDeliveryResult> SendAsync(NotificationDeliveryRequest request, CancellationToken ct)
     {
         if (!_options.Enabled)
-            return Task.FromResult(new NotificationDeliveryResult("ConfiguredOff", null));
+            return Task.FromResult(new NotificationDeliveryResult("ConfiguredOff", null, "Composed"));
 
         if (string.IsNullOrWhiteSpace(request.Recipient.Email))
-            return Task.FromResult(new NotificationDeliveryResult("Skipped", null));
+            return Task.FromResult(new NotificationDeliveryResult("Skipped", null, "Composed"));
 
         if (!string.IsNullOrWhiteSpace(_options.ProviderName) &&
             !string.Equals(_options.ProviderName, "Composed", StringComparison.OrdinalIgnoreCase))
@@ -47,6 +47,6 @@ public sealed class EmailNotificationDeliveryGateway : INotificationDeliveryGate
             request.Subject,
             request.TextBody.Length);
 
-        return Task.FromResult(new NotificationDeliveryResult("NonProductionComposed", providerMessageId));
+        return Task.FromResult(new NotificationDeliveryResult("NonProductionComposed", providerMessageId, "Composed"));
     }
 }

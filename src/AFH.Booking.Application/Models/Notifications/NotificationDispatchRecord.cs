@@ -19,4 +19,10 @@ public sealed record NotificationDispatchRecord(
     string? LifecycleEventId,
     string? CorrelationId,
     DateTime CreatedUtc,
-    DateTime UpdatedUtc);
+    DateTime UpdatedUtc,
+    Guid? NotificationOutboxId = null,
+    string? SourceApplication = null,
+    string? NotificationType = null,
+    string? Channel = null,
+    string? ProviderName = null,
+    string? TemplateName = null);

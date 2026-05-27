@@ -26,11 +26,17 @@ public sealed class NotificationDispatchModelConfiguration : IEntityTypeConfigur
         b.Property(x => x.RecipientEmail).HasMaxLength(256);
         b.Property(x => x.ProviderMessageId).HasMaxLength(128);
         b.Property(x => x.MessageBody).HasMaxLength(4000);
+        b.Property(x => x.SourceApplication).HasMaxLength(100);
+        b.Property(x => x.NotificationType).HasMaxLength(150);
+        b.Property(x => x.Channel).HasMaxLength(50);
+        b.Property(x => x.ProviderName).HasMaxLength(100);
+        b.Property(x => x.TemplateName).HasMaxLength(200);
 
         b.HasIndex(x => x.BookingId);
         b.HasIndex(x => x.TransactionId);
         b.HasIndex(x => x.LifecycleEventId);
         b.HasIndex(x => x.CreatedUtc);
         b.HasIndex(x => x.ProviderMessageId);
+        b.HasIndex(x => x.NotificationOutboxId);
     }
 }

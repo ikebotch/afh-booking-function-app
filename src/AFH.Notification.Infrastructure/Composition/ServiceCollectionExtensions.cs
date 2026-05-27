@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
         AddQueuePublisher(services, configuration);
 
         services.AddScoped<INotificationAuditStore, NotificationAuditStore>();
+        services.AddScoped<INotificationDeliveryAuditStore, NotificationDeliveryAuditStore>();
         AddEmailDeliveryGateway(services, configuration);
         services.AddScoped<IContactCentreRoutingResolver, ContactCentreRoutingResolver>();
 

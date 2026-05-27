@@ -14,9 +14,11 @@ public sealed class NotificationServiceTests
     public async Task PublishAsync_BookingConfirmed_RendersTemplateAndSendsDeliveryRequest()
     {
         var audit = new StubNotificationAuditStore();
+        var deliveryAudit = new StubNotificationDeliveryAuditStore();
         var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
         var service = new NotificationService(
             audit,
+            deliveryAudit,
             CreateRecipientResolver(),
             CreateTemplateRenderer(),
             new StubContactCentreRoutingResolver(),
@@ -56,15 +58,24 @@ public sealed class NotificationServiceTests
         Assert.Equal("BookingConfirmed", request.ProviderMetadata?["notificationType"]);
         Assert.Equal(LifecycleActors.Client, request.ProviderMetadata?["actorType"]);
         Assert.Equal("Booking", request.ProviderMetadata?["actorSourceApplication"]);
+        var dispatch = Assert.Single(deliveryAudit.Records);
+        Assert.Equal("booking-1", dispatch.BookingId);
+        Assert.Equal("BookingConfirmed", dispatch.NotificationType);
+        Assert.Equal("Email", dispatch.Channel);
+        Assert.Equal("Composed", dispatch.ProviderName);
+        Assert.Equal("provider-1", dispatch.ProviderMessageId);
+        Assert.Null(dispatch.FailureDetails);
     }
 
     [Fact]
     public async Task PublishAsync_BookingRescheduled_RendersTemplateAndSendsDeliveryRequest()
     {
         var audit = new StubNotificationAuditStore();
+        var deliveryAudit = new StubNotificationDeliveryAuditStore();
         var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
         var service = new NotificationService(
             audit,
+            deliveryAudit,
             CreateRecipientResolver(),
             CreateTemplateRenderer(),
             new StubContactCentreRoutingResolver(),
@@ -107,9 +118,11 @@ public sealed class NotificationServiceTests
     public async Task PublishAsync_BookingCancelled_RendersTemplateAndSendsDeliveryRequest()
     {
         var audit = new StubNotificationAuditStore();
+        var deliveryAudit = new StubNotificationDeliveryAuditStore();
         var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
         var service = new NotificationService(
             audit,
+            deliveryAudit,
             CreateRecipientResolver(),
             CreateTemplateRenderer(),
             new StubContactCentreRoutingResolver(),
@@ -152,9 +165,11 @@ public sealed class NotificationServiceTests
     public async Task PublishAsync_BookingHoldCreated_RendersTemplateAndSendsDeliveryRequest()
     {
         var audit = new StubNotificationAuditStore();
+        var deliveryAudit = new StubNotificationDeliveryAuditStore();
         var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
         var service = new NotificationService(
             audit,
+            deliveryAudit,
             CreateRecipientResolver(),
             CreateTemplateRenderer(),
             new StubContactCentreRoutingResolver(),
@@ -199,6 +214,52 @@ public sealed class NotificationServiceTests
         Assert.Contains("Alex Adviser", request.TextBody);
         Assert.Contains("TRX-1", request.TextBody);
         Assert.Equal("BookingHoldCreated", request.ProviderMetadata?["notificationType"]);
+        Assert.Equal(2, deliveryAudit.Records.Count);
+        Assert.Contains(deliveryAudit.Records, record => record.RecipientEmail == "jane@example.test");
+        Assert.Contains(deliveryAudit.Records, record => record.RecipientEmail == "contact@centre.test");
+    }
+
+    [Fact]
+    public async Task PublishAsync_FailedDeliveryRecordsFailedAuditAndRethrows()
+    {
+        var audit = new StubNotificationAuditStore();
+        var deliveryAudit = new StubNotificationDeliveryAuditStore();
+        var delivery = new GraphFailingNotificationDeliveryGateway(NotificationChannel.Email);
+        var service = new NotificationService(
+            audit,
+            deliveryAudit,
+            CreateRecipientResolver(),
+            CreateTemplateRenderer(),
+            new StubContactCentreRoutingResolver(null),
+            [delivery],
+            NullLogger<NotificationService>.Instance);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.PublishAsync(
+            new NotificationRequested(
+                BookingNotificationTypes.BookingConfirmed,
+                "booking-1",
+                new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
+                [new NotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "jane@example.test")],
+                new Dictionary<string, string>
+                {
+                    ["transactionRef"] = "TRX-1",
+                    ["bookingId"] = "booking-1",
+                    ["adviserName"] = "Alex Adviser",
+                    ["meetingType"] = "Review",
+                    ["when"] = "2026-03-26 12:00 (Europe/London) -> 2026-03-26 13:00 (Europe/London)",
+                    ["whereLine"] = "Join link: https://meeting.example/join",
+                    ["travelLine"] = "Travel: N/A (remote meeting)",
+                    ["manageBookingLinks"] = string.Empty
+                }),
+            Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            CancellationToken.None));
+
+        var dispatch = Assert.Single(deliveryAudit.Records);
+        Assert.Equal(Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"), dispatch.NotificationOutboxId);
+        Assert.Equal("Failed", dispatch.Status);
+        Assert.Equal("Graph", dispatch.ProviderName);
+        Assert.Contains("Graph failed", dispatch.FailureDetails);
+        Assert.DoesNotContain("Your booking is now confirmed", dispatch.FailureDetails);
     }
 
     private sealed class StubNotificationAuditStore : INotificationAuditStore
@@ -208,6 +269,17 @@ public sealed class NotificationServiceTests
         public Task RecordRequestedAsync(NotificationRequested notification, CancellationToken ct)
         {
             LastNotification = notification;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubNotificationDeliveryAuditStore : INotificationDeliveryAuditStore
+    {
+        public List<NotificationDeliveryAuditRecord> Records { get; } = [];
+
+        public Task RecordAttemptAsync(NotificationDeliveryAuditRecord record, CancellationToken ct)
+        {
+            Records.Add(record);
             return Task.CompletedTask;
         }
     }
@@ -222,13 +294,22 @@ public sealed class NotificationServiceTests
         public Task<NotificationDeliveryResult> SendAsync(NotificationDeliveryRequest request, CancellationToken ct)
         {
             Requests.Add(request);
-            return Task.FromResult(new NotificationDeliveryResult("Composed", "provider-1"));
+            return Task.FromResult(new NotificationDeliveryResult("Composed", "provider-1", "Composed"));
         }
     }
 
-    private sealed class StubContactCentreRoutingResolver : IContactCentreRoutingResolver
+    private sealed class GraphFailingNotificationDeliveryGateway(NotificationChannel channel) : INotificationDeliveryGateway
     {
-        public string? GetContactCentreEmailAddress() => "contact@centre.test";
+        public bool CanSend(NotificationChannel candidate)
+            => candidate == channel;
+
+        public Task<NotificationDeliveryResult> SendAsync(NotificationDeliveryRequest request, CancellationToken ct)
+            => throw new InvalidOperationException("Graph failed.");
+    }
+
+    private sealed class StubContactCentreRoutingResolver(string? email = "contact@centre.test") : IContactCentreRoutingResolver
+    {
+        public string? GetContactCentreEmailAddress() => email;
     }
 
     private static NotificationRecipientResolver CreateRecipientResolver()

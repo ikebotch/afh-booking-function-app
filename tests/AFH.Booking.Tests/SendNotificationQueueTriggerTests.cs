@@ -39,7 +39,7 @@ public class SendNotificationQueueTriggerTests
 
         await sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object);
 
-        _notificationServiceMock.Verify(x => x.PublishAsync(It.Is<NotificationRequested>(r => r.CorrelationId == "corr"), It.IsAny<CancellationToken>()), Times.Once);
+        _notificationServiceMock.Verify(x => x.PublishAsync(It.Is<NotificationRequested>(r => r.CorrelationId == "corr"), outboxId, It.IsAny<CancellationToken>()), Times.Once);
         _outboxStoreMock.Verify(x => x.MarkSentAsync(outboxId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -63,7 +63,7 @@ public class SendNotificationQueueTriggerTests
         await sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object);
 
         _outboxStoreMock.Verify(x => x.TryMarkProcessingAsync(It.IsAny<Guid>(), It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()), Times.Never);
-        _notificationServiceMock.Verify(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notificationServiceMock.Verify(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -80,7 +80,7 @@ public class SendNotificationQueueTriggerTests
 
         await sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object);
 
-        _notificationServiceMock.Verify(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notificationServiceMock.Verify(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class SendNotificationQueueTriggerTests
         await sut.RunAsync(JsonSerializer.Serialize(new NotificationQueueMessage { OutboxId = outboxId }, SerializerOptions), _functionContextMock.Object);
 
         _outboxStoreMock.Verify(x => x.MarkDeadLetteredAsync(outboxId, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        _notificationServiceMock.Verify(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()), Times.Never);
+        _notificationServiceMock.Verify(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class SendNotificationQueueTriggerTests
             .ReturnsAsync(outboxItem);
         _outboxStoreMock.Setup(x => x.TryMarkProcessingAsync(outboxId, It.IsAny<DateTime>(), It.IsAny<TimeSpan>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(outboxItem);
-        _notificationServiceMock.Setup(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()))
+        _notificationServiceMock.Setup(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<Guid?>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Dispatcher failure"));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>

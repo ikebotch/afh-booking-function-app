@@ -34,7 +34,7 @@ public sealed class GraphEmailDeliveryGateway : INotificationDeliveryGateway
     public async Task<NotificationDeliveryResult> SendAsync(NotificationDeliveryRequest request, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(request.Recipient.Email))
-            return new NotificationDeliveryResult("Skipped", null);
+            return new NotificationDeliveryResult("Skipped", null, "Graph");
 
         var providerCorrelationId = $"graph-sendmail-{Guid.NewGuid():N}";
 
@@ -51,7 +51,7 @@ public sealed class GraphEmailDeliveryGateway : INotificationDeliveryGateway
 
         // Microsoft Graph sendMail returns 202 Accepted with no provider message id in the response.
         // Store an internal correlation id so dispatch/audit records can still be traced.
-        return new NotificationDeliveryResult("GraphAccepted", providerCorrelationId);
+        return new NotificationDeliveryResult("GraphAccepted", providerCorrelationId, "Graph");
     }
 }
 

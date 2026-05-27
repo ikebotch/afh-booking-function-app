@@ -10,6 +10,7 @@ namespace AFH.Notification.Application.Services;
 public sealed class NotificationService : INotificationService, INotificationPublisher
 {
     private readonly INotificationAuditStore _auditStore;
+    private readonly INotificationDeliveryAuditStore _deliveryAuditStore;
     private readonly INotificationRecipientResolver _recipientResolver;
     private readonly INotificationTemplateRenderer _templateRenderer;
     private readonly IContactCentreRoutingResolver _contactCentreResolver;
@@ -18,6 +19,7 @@ public sealed class NotificationService : INotificationService, INotificationPub
 
     public NotificationService(
         INotificationAuditStore auditStore,
+        INotificationDeliveryAuditStore deliveryAuditStore,
         INotificationRecipientResolver recipientResolver,
         INotificationTemplateRenderer templateRenderer,
         IContactCentreRoutingResolver contactCentreResolver,
@@ -25,6 +27,7 @@ public sealed class NotificationService : INotificationService, INotificationPub
         ILogger<NotificationService> logger)
     {
         _auditStore = auditStore;
+        _deliveryAuditStore = deliveryAuditStore;
         _recipientResolver = recipientResolver;
         _templateRenderer = templateRenderer;
         _contactCentreResolver = contactCentreResolver;
@@ -32,7 +35,10 @@ public sealed class NotificationService : INotificationService, INotificationPub
         _logger = logger;
     }
 
-    public async Task PublishAsync(NotificationRequested notification, CancellationToken ct)
+    public Task PublishAsync(NotificationRequested notification, CancellationToken ct)
+        => PublishAsync(notification, notificationOutboxId: null, ct);
+
+    public async Task PublishAsync(NotificationRequested notification, Guid? notificationOutboxId, CancellationToken ct)
     {
         var route = await _recipientResolver.ResolveAsync(notification, ct);
         var rendered = await _templateRenderer.RenderAsync(notification, ct);
@@ -90,7 +96,41 @@ public sealed class NotificationService : INotificationService, INotificationPub
                     });
 
                 foreach (var gateway in gateways)
-                    await gateway.SendAsync(request, ct);
+                {
+                    var now = DateTime.UtcNow;
+                    try
+                    {
+                        var result = await gateway.SendAsync(request, ct);
+                        await _deliveryAuditStore.RecordAttemptAsync(
+                            BuildAuditRecord(
+                                notification,
+                                notificationOutboxId,
+                                content.Channel,
+                                recipient,
+                                result.ProviderName ?? ResolveProviderName(gateway),
+                                result.Status,
+                                result.ProviderMessageId,
+                                null,
+                                now),
+                            ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        await _deliveryAuditStore.RecordAttemptAsync(
+                            BuildAuditRecord(
+                                notification,
+                                notificationOutboxId,
+                                content.Channel,
+                                recipient,
+                                ResolveProviderName(gateway),
+                                "Failed",
+                                null,
+                                ex.Message,
+                                now),
+                            ct);
+                        throw;
+                    }
+                }
             }
         }
 
@@ -100,5 +140,55 @@ public sealed class NotificationService : INotificationService, INotificationPub
             notification.CorrelationId,
             route.Recipients.Count,
             route.CopyContactCentre);
+    }
+
+    private static NotificationDeliveryAuditRecord BuildAuditRecord(
+        NotificationRequested notification,
+        Guid? notificationOutboxId,
+        NotificationChannel channel,
+        NotificationRecipient recipient,
+        string providerName,
+        string status,
+        string? providerMessageId,
+        string? failureDetails,
+        DateTime now)
+    {
+        var data = notification.Data;
+        data.TryGetValue("bookingId", out var bookingId);
+        data.TryGetValue("holdId", out var holdId);
+        data.TryGetValue("transactionId", out var transactionId);
+        data.TryGetValue("transactionRef", out var transactionRef);
+
+        return new NotificationDeliveryAuditRecord(
+            Guid.NewGuid().ToString("N"),
+            notificationOutboxId,
+            notification.SourceSystem,
+            notification.Type.Name,
+            string.IsNullOrWhiteSpace(bookingId) ? holdId : bookingId,
+            transactionId,
+            transactionRef,
+            channel.ToString(),
+            recipient.Email,
+            recipient.MobileNumber,
+            providerName,
+            status,
+            providerMessageId,
+            failureDetails,
+            notification.CorrelationId,
+            $"{notification.SourceSystem}.{notification.Type.Name}",
+            now,
+            DateTime.UtcNow);
+    }
+
+    private static string ResolveProviderName(INotificationDeliveryGateway gateway)
+    {
+        var typeName = gateway.GetType().Name;
+        if (typeName.Contains("Graph", StringComparison.OrdinalIgnoreCase))
+            return "Graph";
+        if (typeName.Contains("Composed", StringComparison.OrdinalIgnoreCase))
+            return "Composed";
+        if (typeName.Contains("Email", StringComparison.OrdinalIgnoreCase))
+            return "Email";
+        return typeName;
     }
 }

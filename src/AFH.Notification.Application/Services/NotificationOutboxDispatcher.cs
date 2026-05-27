@@ -73,7 +73,7 @@ public sealed class NotificationOutboxDispatcher
 
         try
         {
-            await _notificationService.PublishAsync(notificationRequested, ct);
+            await _notificationService.PublishAsync(notificationRequested, outboxItem.Id, ct);
             await _outboxStore.MarkSentAsync(outboxItem.Id, ct);
 
             _logger.LogInformation("Successfully dispatched notification outbox item. OutboxId={OutboxId}", outboxItem.Id);

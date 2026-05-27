@@ -16,9 +16,13 @@ public sealed class BookingDbContextFactory : IDesignTimeDbContextFactory<Bookin
             basePath,
             Path.Combine("AFH.Booking.Function", "local.settings.json"));
 
-        var config = new ConfigurationBuilder()
-            .SetBasePath(basePath)
-            .AddJsonFile(functionsLocalSettings, optional: true) // absolute path if found
+        var configBuilder = new ConfigurationBuilder()
+            .SetBasePath(basePath);
+
+        if (!string.IsNullOrWhiteSpace(functionsLocalSettings))
+            configBuilder.AddJsonFile(functionsLocalSettings, optional: true);
+
+        var config = configBuilder
             .AddEnvironmentVariables()
             .Build();
 
@@ -26,6 +30,9 @@ public sealed class BookingDbContextFactory : IDesignTimeDbContextFactory<Bookin
         var connectionString = ServiceCollectionExtensions.ResolveBookingDbConnectionString(config)
             ?? config["ConnectionStrings:BookingDb"]
             ?? config["BookingDb:ConnectionString"];
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+            connectionString = "Server=(localdb)\\mssqllocaldb;Database=AFHBookingDesignTime;Trusted_Connection=True;TrustServerCertificate=True";
 
         if (string.IsNullOrWhiteSpace(connectionString))
         {

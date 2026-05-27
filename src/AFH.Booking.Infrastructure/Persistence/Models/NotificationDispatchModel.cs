@@ -19,6 +19,12 @@ public sealed class NotificationDispatchModel
     public string? RecipientEmail { get; set; }
     public string? ProviderMessageId { get; set; }
     public string? MessageBody { get; set; }
+    public Guid? NotificationOutboxId { get; set; }
+    public string? SourceApplication { get; set; }
+    public string? NotificationType { get; set; }
+    public string? Channel { get; set; }
+    public string? ProviderName { get; set; }
+    public string? TemplateName { get; set; }
     public DateTime CreatedUtc { get; set; }
     public DateTime? UpdatedUtc { get; set; }
 }

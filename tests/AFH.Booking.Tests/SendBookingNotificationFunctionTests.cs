@@ -12,7 +12,7 @@ public sealed class SendBookingNotificationFunctionTests
     [Fact]
     public async Task Run_UsesManualOutboxNotificationService()
     {
-        var service = new StubManualBookingNotificationService();
+        var service = new StubBookingNotificationRequestService();
         var sut = new SendBookingNotificationFunction(service);
         var request = CreateJsonRequest("""{"eventType":"Booked","sendSms":false,"sendEmail":true}""");
         request.Headers.Add("x-correlation-id", "corr-1");
@@ -30,7 +30,7 @@ public sealed class SendBookingNotificationFunctionTests
     [Fact]
     public async Task Run_ReturnsBadRequestForServiceValidationFailure()
     {
-        var service = new StubManualBookingNotificationService
+        var service = new StubBookingNotificationRequestService
         {
             Result = Result<NotificationDispatchResponse>.Fail(HttpStatusCode.BadRequest, "Unsupported EventType.", Errors.Validation)
         };
@@ -52,7 +52,7 @@ public sealed class SendBookingNotificationFunctionTests
         return request;
     }
 
-    private sealed class StubManualBookingNotificationService : IManualBookingNotificationService
+    private sealed class StubBookingNotificationRequestService : IBookingNotificationRequestService
     {
         public string? LastBookingId { get; private set; }
         public string? LastEventType { get; private set; }

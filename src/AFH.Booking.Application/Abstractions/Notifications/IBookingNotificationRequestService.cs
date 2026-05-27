@@ -2,7 +2,7 @@ using AFH.Booking.Application.Models.Notifications;
 
 namespace AFH.Booking.Application.Abstractions.Notifications;
 
-public interface IManualBookingNotificationService
+public interface IBookingNotificationRequestService
 {
     Task<Result<NotificationDispatchResponse>> SendAsync(
         string bookingId,

@@ -36,7 +36,7 @@ internal static class BookingFlowModuleServiceCollectionExtensions
         services.AddScoped<IAvailabilityRulesService, AvailabilityRulesService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
         services.AddScoped<IBookingNotificationStep, BookingNotificationStep>();
-        services.AddScoped<IManualBookingNotificationService, ManualBookingNotificationService>();
+        services.AddScoped<IBookingNotificationRequestService, BookingNotificationRequestService>();
 
         return services;
     }

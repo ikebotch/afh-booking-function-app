@@ -244,7 +244,7 @@ public sealed class ArchitectureGuardTests
         var functionAssembly = Assembly.Load("AFH.Booking.Function");
         var application = Assembly.Load("AFH.Booking.Application");
         var functionType = functionAssembly.GetType("AFH.Booking.Function.Functions.V1.Bookings.SendBookingNotificationFunction");
-        var manualNotificationService = application.GetType("AFH.Booking.Application.Abstractions.Notifications.IManualBookingNotificationService");
+        var manualNotificationService = application.GetType("AFH.Booking.Application.Abstractions.Notifications.IBookingNotificationRequestService");
 
         Assert.NotNull(functionType);
         Assert.Null(application.GetType("AFH.Booking.Application.Abstractions.Clients.IClientNotificationService"));

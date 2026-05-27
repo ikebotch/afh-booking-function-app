@@ -7,7 +7,7 @@ using AFH.Notification.Contract.V1.Requests;
 
 namespace AFH.Booking.Application.Services.Notifications;
 
-public sealed class ManualBookingNotificationService : IManualBookingNotificationService
+public sealed class BookingNotificationRequestService : IBookingNotificationRequestService
 {
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
@@ -15,7 +15,7 @@ public sealed class ManualBookingNotificationService : IManualBookingNotificatio
     private readonly IClientDirectory _clients;
     private readonly INotificationPublisher _publisher;
 
-    public ManualBookingNotificationService(
+    public BookingNotificationRequestService(
         IBookingHoldRepository holds,
         IBookingSlotRepository slots,
         IBookingTransactionRepository transactions,

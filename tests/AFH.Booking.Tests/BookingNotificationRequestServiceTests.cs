@@ -11,7 +11,7 @@ using System.Net;
 
 namespace AFH.Booking.Tests;
 
-public sealed class ManualBookingNotificationServiceTests
+public sealed class BookingNotificationRequestServiceTests
 {
     [Theory]
     [InlineData("Booked", "BookingConfirmed")]
@@ -99,7 +99,7 @@ public sealed class ManualBookingNotificationServiceTests
         Assert.Null(publisher.LastNotification);
     }
 
-    private static IManualBookingNotificationService CreateSut(CapturingNotificationPublisher publisher)
+    private static IBookingNotificationRequestService CreateSut(CapturingNotificationPublisher publisher)
     {
         var now = DateTime.UtcNow;
         var hold = BookingHold.Rehydrate(
@@ -165,7 +165,7 @@ public sealed class ManualBookingNotificationServiceTests
                 Phone = "+447700900123"
             });
 
-        return new ManualBookingNotificationService(holds.Object, slots.Object, transactions.Object, clients.Object, publisher);
+        return new BookingNotificationRequestService(holds.Object, slots.Object, transactions.Object, clients.Object, publisher);
     }
 
     private sealed class CapturingNotificationPublisher : INotificationPublisher

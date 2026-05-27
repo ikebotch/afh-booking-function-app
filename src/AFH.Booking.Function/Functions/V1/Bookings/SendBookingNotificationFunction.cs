@@ -9,9 +9,9 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 [BookingOpenApiTag("Notifications")]
 public sealed class SendBookingNotificationFunction
 {
-    private readonly IManualBookingNotificationService _notifications;
+    private readonly IBookingNotificationRequestService _notifications;
 
-    public SendBookingNotificationFunction(IManualBookingNotificationService notifications)
+    public SendBookingNotificationFunction(IBookingNotificationRequestService notifications)
     {
         _notifications = notifications;
     }

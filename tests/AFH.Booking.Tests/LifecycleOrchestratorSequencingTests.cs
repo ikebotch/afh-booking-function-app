@@ -5,6 +5,8 @@ using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Notification.Contract.Abstractions;
+using AFH.Notification.Contract.V1.Requests;
 using Moq;
 using System.Net;
 
@@ -200,6 +202,11 @@ public sealed class LifecycleOrchestratorSequencingTests
         notifications.Setup(x => x.SendBookingNotificationAsync(It.IsAny<NotificationDispatchRequest>(), It.IsAny<CancellationToken>()))
             .Callback(() => order.Add("notifications"))
             .ReturnsAsync(new NotificationDispatchResponse { DispatchId = "dispatch-1", BookingId = "booking-new", EventType = "BookingRearranged", SmsRequested = true, EmailRequested = true, SmsStatus = "Sent", EmailStatus = "Composed", CreatedUtc = DateTime.UtcNow });
+        var notificationPublisher = new Mock<INotificationPublisher>();
+        NotificationRequested? publishedNotification = null;
+        notificationPublisher.Setup(x => x.PublishAsync(It.IsAny<NotificationRequested>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationRequested, CancellationToken>((notification, _) => publishedNotification = notification)
+            .Returns(Task.CompletedTask);
 
         var downstream = new Mock<IDownstreamUpdateService>();
         downstream.Setup(x => x.PublishBookingChangeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -223,6 +230,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             confirm.Object,
             cancel.Object,
             notifications.Object,
+            notificationPublisher.Object,
             downstream.Object,
             audit.Object,
             uow.Object,
@@ -240,6 +248,14 @@ public sealed class LifecycleOrchestratorSequencingTests
 
         Assert.True(result.IsSuccess);
         Assert.Equal(new[] { "create", "confirm", "cancel", "sql", "notifications" }, order);
+        Assert.NotNull(publishedNotification);
+        Assert.Equal(BookingNotificationTypes.BookingRescheduled, publishedNotification!.Type);
+        Assert.Equal("booking-new", publishedNotification.CorrelationId);
+        Assert.Equal("Booking", publishedNotification.Actor.SourceApplication);
+        Assert.Equal(BookingNotificationActorTypes.Client, publishedNotification.Actor.ActorType);
+        Assert.Equal("evt-1", publishedNotification.Data["eventId"]);
+        Assert.Equal("booking-old", publishedNotification.Data["previousBookingId"]);
+        Assert.Equal("booking-new", publishedNotification.Data["newBookingId"]);
     }
 
     [Fact]
@@ -288,6 +304,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             confirm.Object,
             cancel.Object,
             notifications.Object,
+            Mock.Of<INotificationPublisher>(),
             downstream.Object,
             audit.Object,
             uow.Object,
@@ -349,6 +366,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             confirm.Object,
             cancel.Object,
             notifications.Object,
+            Mock.Of<INotificationPublisher>(),
             downstream.Object,
             audit.Object,
             uow.Object,

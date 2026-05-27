@@ -56,6 +56,50 @@ public sealed class NotificationServiceTests
         Assert.Equal("Booking", request.ProviderMetadata?["actorSourceApplication"]);
     }
 
+    [Fact]
+    public async Task PublishAsync_BookingRescheduled_RendersTemplateAndSendsDeliveryRequest()
+    {
+        var audit = new StubNotificationAuditStore();
+        var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
+        var service = new NotificationService(
+            audit,
+            new NotificationRecipientResolver(),
+            new NotificationTemplateRenderer(),
+            [delivery],
+            NullLogger<NotificationService>.Instance);
+
+        await service.PublishAsync(
+            new NotificationRequested(
+                BookingNotificationTypes.BookingRescheduled,
+                "booking-2",
+                new NotificationActor(BookingNotificationActorTypes.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
+                [
+                    new NotificationRecipient(
+                        BookingNotificationRecipientTypes.Client,
+                        "Jane Client",
+                        "jane@example.test")
+                ],
+                new Dictionary<string, string>
+                {
+                    ["greetingName"] = "there",
+                    ["whenLine"] = "Thu 26 Mar 2026 09:00 (Europe/London) to Thu 26 Mar 2026 10:00 (Europe/London)",
+                    ["adviserName"] = "Alex Adviser",
+                    ["locationLine"] = "Remote meeting",
+                    ["note"] = "Your meeting time has changed.",
+                    ["manageBookingLinks"] = string.Empty
+                }),
+            CancellationToken.None);
+
+        Assert.NotNull(audit.LastNotification);
+        var request = Assert.Single(delivery.Requests);
+        Assert.Equal(NotificationChannel.Email, request.Channel);
+        Assert.Equal("jane@example.test", request.Recipient.Email);
+        Assert.Equal("AFH Booking: Appointment Rescheduled", request.Subject);
+        Assert.Contains("Appointment Rescheduled", request.TextBody);
+        Assert.Contains("Your meeting time has changed.", request.TextBody);
+        Assert.Equal("BookingRescheduled", request.ProviderMetadata?["notificationType"]);
+    }
+
     private sealed class StubNotificationAuditStore : INotificationAuditStore
     {
         public NotificationRequested? LastNotification { get; private set; }

@@ -1,8 +1,12 @@
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Notification.Contract.Abstractions;
+using AFH.Notification.Contract.V1.Dtos;
+using AFH.Notification.Contract.V1.Requests;
 using System.Text.Json;
 
 namespace AFH.Booking.Application.Bookings;
@@ -16,6 +20,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private readonly IConfirmBookingService _confirm;
     private readonly ICancellationOrchestrator _cancel;
     private readonly INotificationService _notifications;
+    private readonly INotificationPublisher _notificationPublisher;
+    private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
     private readonly ILifecycleAuditService _audit;
     private readonly IUnitOfWork _uow;
@@ -29,10 +35,12 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         IConfirmBookingService confirm,
         ICancellationOrchestrator cancel,
         INotificationService notifications,
+        INotificationPublisher notificationPublisher,
         IDownstreamUpdateService downstreamUpdates,
         ILifecycleAuditService audit,
         IUnitOfWork uow,
-        IClock clock)
+        IClock clock,
+        IClientDirectory? clients = null)
     {
         _holds = holds;
         _slots = slots;
@@ -41,6 +49,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         _confirm = confirm;
         _cancel = cancel;
         _notifications = notifications;
+        _notificationPublisher = notificationPublisher;
+        _clients = clients;
         _downstreamUpdates = downstreamUpdates;
         _audit = audit;
         _uow = uow;
@@ -76,6 +86,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         var notificationSummary = BuildNotificationSummary(existingBooking.Slot, newBooking.Slot);
         await RecordRearrangedNotificationStepAsync(
             cmd,
+            existingBooking,
+            newBooking,
             newBooking.Hold.Id,
             eventId,
             notificationSummary,
@@ -217,6 +229,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
 
     private async Task RecordRearrangedNotificationStepAsync(
         RearrangeBookingCommand cmd,
+        ExistingBookingContext existingBooking,
+        ConfirmedBookingContext newBooking,
         string newBookingId,
         string eventId,
         string notificationSummary,
@@ -239,6 +253,19 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
                     eventId,
                     cmd.CorrelationId),
                 ct);
+
+            var client = _clients is null
+                ? null
+                : await _clients.GetAsync(existingBooking.Transaction.TransactionRef, ct);
+
+            await _notificationPublisher.PublishAsync(
+                new NotificationRequested(
+                    BookingNotificationTypes.BookingRescheduled,
+                    newBookingId,
+                    new NotificationActor(ResolveNotificationActorType(cmd), "Booking", cmd.ActorId, cmd.RequestedBy, null),
+                    BuildBookingRescheduledRecipients(client),
+                    BuildBookingRescheduledNotificationData(cmd, existingBooking, newBooking, eventId, notificationSummary)),
+                ct);
         }
         catch (Exception ex)
         {
@@ -257,6 +284,67 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             notificationErrorCode,
             notificationErrorDetails,
             cmd.CorrelationId), ct);
+    }
+
+    private static IReadOnlyList<NotificationRecipient> BuildBookingRescheduledRecipients(
+        Domain.Client.ClientDirectoryItem? client)
+    {
+        if (client is null)
+            return Array.Empty<NotificationRecipient>();
+
+        var displayName = $"{client.FirstName} {client.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(displayName))
+            displayName = null;
+
+        return
+        [
+            new NotificationRecipient(
+                BookingNotificationRecipientTypes.Client,
+                displayName,
+                client.Email,
+                client.Phone)
+        ];
+    }
+
+    private static IReadOnlyDictionary<string, string> BuildBookingRescheduledNotificationData(
+        RearrangeBookingCommand cmd,
+        ExistingBookingContext existingBooking,
+        ConfirmedBookingContext newBooking,
+        string eventId,
+        string notificationSummary)
+    {
+        var note = AppendReason(notificationSummary, cmd);
+        var template = BookingNotificationEmailTemplate.Build(
+            eventType: "Rescheduled",
+            clientDisplayName: null,
+            adviserName: newBooking.Slot.AdviserName,
+            startUtc: newBooking.Slot.StartUtc,
+            endUtc: newBooking.Slot.EndUtc,
+            timezoneId: existingBooking.Transaction.Timezone,
+            isRemote: existingBooking.Transaction.IsRemote,
+            customMessage: note);
+        var lines = template.TextBody.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var dataByPrefix = lines
+            .Select(line => line.Split(": ", 2, StringSplitOptions.None))
+            .Where(parts => parts.Length == 2)
+            .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.OrdinalIgnoreCase);
+
+        return new Dictionary<string, string>
+        {
+            ["eventId"] = eventId,
+            ["previousBookingId"] = existingBooking.Hold.Id,
+            ["newBookingId"] = newBooking.Hold.Id,
+            ["previousSlotId"] = existingBooking.Slot.Id,
+            ["newSlotId"] = newBooking.Slot.Id,
+            ["adviserName"] = newBooking.Slot.AdviserName,
+            ["startUtc"] = newBooking.Slot.StartUtc.ToString("O"),
+            ["endUtc"] = newBooking.Slot.EndUtc.ToString("O"),
+            ["greetingName"] = "there",
+            ["whenLine"] = dataByPrefix.GetValueOrDefault("When", string.Empty),
+            ["locationLine"] = dataByPrefix.GetValueOrDefault("Meeting type", string.Empty),
+            ["note"] = note,
+            ["manageBookingLinks"] = string.Empty
+        };
     }
 
     private async Task PublishRearrangementUpdateAsync(
@@ -347,6 +435,14 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
 
         var detail = string.IsNullOrWhiteSpace(cmd.ReasonDetail) ? string.Empty : $" - {cmd.ReasonDetail.Trim()}";
         return $"{summary} Reason: {cmd.ReasonCode}{detail}.";
+    }
+
+    private static string ResolveNotificationActorType(RearrangeBookingCommand cmd)
+    {
+        if (string.IsNullOrWhiteSpace(cmd.RequestedBy))
+            return BookingNotificationActorTypes.System;
+
+        return cmd.RequestedBy.Trim();
     }
 
     private static Result<T> FailLike<T>(Result failure)

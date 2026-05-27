@@ -31,15 +31,22 @@ public sealed class EmailNotificationDeliveryGateway : INotificationDeliveryGate
         if (string.IsNullOrWhiteSpace(request.Recipient.Email))
             return Task.FromResult(new NotificationDeliveryResult("Skipped", null));
 
+        if (!string.IsNullOrWhiteSpace(_options.ProviderName) &&
+            !string.Equals(_options.ProviderName, "Composed", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Email provider '{_options.ProviderName}' is configured, but queued notification email delivery has no production provider adapter wired.");
+        }
+
         var providerMessageId = Guid.NewGuid().ToString("N")[..20];
 
-        _logger.LogInformation(
-            "Composed notification email for {Recipient}. CorrelationId={CorrelationId} Subject={Subject} TextLength={TextLength}",
+        _logger.LogWarning(
+            "Queued notification email gateway is composed-only and does not send production email. Recipient={Recipient} CorrelationId={CorrelationId} Subject={Subject} TextLength={TextLength}",
             request.Recipient.Email,
             request.CorrelationId,
             request.Subject,
             request.TextBody.Length);
 
-        return Task.FromResult(new NotificationDeliveryResult("Composed", providerMessageId));
+        return Task.FromResult(new NotificationDeliveryResult("NonProductionComposed", providerMessageId));
     }
 }

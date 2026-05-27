@@ -2,6 +2,7 @@ using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Calendar;
+using AFH.Notification.Application.Policies.Booking;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
@@ -114,7 +115,7 @@ public sealed class BookingNotificationTemplateTests
             location: null,
             selfServiceLinks: links);
 
-        var renderer = new NotificationTemplateRenderer();
+        var renderer = CreateRenderer();
         var rendered = await renderer.RenderAsync(
             new NotificationRequested(
                 BookingNotificationTypes.BookingConfirmed,
@@ -163,7 +164,7 @@ Manage your booking:
             cancelUrl: links.CancelBookingUrl,
             rescheduleUrl: links.RescheduleBookingUrl);
 
-        var renderer = new NotificationTemplateRenderer();
+        var renderer = CreateRenderer();
         var rendered = await renderer.RenderAsync(
             new NotificationRequested(
                 BookingNotificationTypes.BookingRescheduled,
@@ -205,7 +206,7 @@ Manage your booking:
             cancelUrl: links.CancelBookingUrl,
             rescheduleUrl: links.RescheduleBookingUrl);
 
-        var renderer = new NotificationTemplateRenderer();
+        var renderer = CreateRenderer();
         var rendered = await renderer.RenderAsync(
             new NotificationRequested(
                 BookingNotificationTypes.BookingCancelled,
@@ -242,7 +243,7 @@ Manage your booking:
 
         var existing = HoldBookingTemplate.BuildHoldTemplate(slot, transaction, hold, windows, links);
 
-        var renderer = new NotificationTemplateRenderer();
+        var renderer = CreateRenderer();
         var rendered = await renderer.RenderAsync(
             new NotificationRequested(
                 BookingNotificationTypes.BookingHoldCreated,
@@ -291,6 +292,9 @@ Manage your booking:
 - View booking: {links.ViewBookingUrl}
 - Cancel booking: {links.CancelBookingUrl}
 - Reschedule booking: {links.RescheduleBookingUrl}";
+
+    private static NotificationTemplateRenderer CreateRenderer()
+        => new([new BookingNotificationTemplatePolicy()]);
 
     private static BookingTransaction CreateTransaction(DateTime now, bool isRemote) =>
         BookingTransaction.Rehydrate(

@@ -1,3 +1,4 @@
+using AFH.Notification.Application.Policies.Booking;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
@@ -9,7 +10,7 @@ public sealed class NotificationRecipientResolverTests
     [Fact]
     public async Task ResolveAsync_ClientAction_RoutesClientAdviserAndContactCentreRecipients()
     {
-        var resolver = new NotificationRecipientResolver();
+        var resolver = CreateResolver();
 
         var route = await resolver.ResolveAsync(
             CreateNotification(
@@ -31,7 +32,7 @@ public sealed class NotificationRecipientResolverTests
     [Fact]
     public async Task ResolveAsync_AdminAction_AllowsInternalRecipientsAndMarksContactCentreCopy()
     {
-        var resolver = new NotificationRecipientResolver();
+        var resolver = CreateResolver();
 
         var route = await resolver.ResolveAsync(
             CreateNotification(
@@ -53,7 +54,7 @@ public sealed class NotificationRecipientResolverTests
     [Fact]
     public async Task ResolveAsync_InfersEmailSmsAndPushChannelsWithoutMakingNotificationEmailOnly()
     {
-        var resolver = new NotificationRecipientResolver();
+        var resolver = CreateResolver();
 
         var route = await resolver.ResolveAsync(
             CreateNotification(
@@ -77,7 +78,7 @@ public sealed class NotificationRecipientResolverTests
     [Fact]
     public async Task ResolveAsync_PreservesExplicitChannelsAndDeduplicatesRecipients()
     {
-        var resolver = new NotificationRecipientResolver();
+        var resolver = CreateResolver();
         var recipient = new NotificationRecipient(
             BookingNotificationRecipientTypes.Client,
             "Jane Client",
@@ -106,6 +107,9 @@ public sealed class NotificationRecipientResolverTests
             {
                 ["eventId"] = "event-1"
             });
+
+    private static NotificationRecipientResolver CreateResolver()
+        => new([new BookingNotificationRoutingPolicy()]);
 
     private static NotificationRecipient ClientRecipient()
         => new(

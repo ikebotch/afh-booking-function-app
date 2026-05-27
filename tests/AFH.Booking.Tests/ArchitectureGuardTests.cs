@@ -104,6 +104,36 @@ public sealed class ArchitectureGuardTests
         Assert.DoesNotContain("BuildServiceProvider(", programText);
     }
 
+    [Fact]
+    public void NotificationApplication_GenericServices_DoNotHardcodeBookingPolicies()
+    {
+        var projectPath = GetProjectPath("AFH.Notification.Application");
+        var genericServiceFiles = new[]
+        {
+            Path.Combine(projectPath, "Services", "NotificationIdempotencyKeyGenerator.cs"),
+            Path.Combine(projectPath, "Services", "NotificationRecipientResolver.cs"),
+            Path.Combine(projectPath, "Services", "NotificationTemplateRenderer.cs")
+        };
+
+        var forbiddenTerms = new[]
+        {
+            "BookingId",
+            "HoldId",
+            "TransactionId",
+            "BookingConfirmed",
+            "BookingRescheduled",
+            "BookingCancelled",
+            "BookingHoldCreated"
+        };
+
+        foreach (var file in genericServiceFiles)
+        {
+            var text = File.ReadAllText(file);
+            foreach (var term in forbiddenTerms)
+                Assert.DoesNotContain(term, text, StringComparison.Ordinal);
+        }
+    }
+
     private static string[] GetHttpFunctionNames(Assembly functionAssembly) =>
         functionAssembly.GetTypes()
             .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static))
@@ -133,13 +163,18 @@ public sealed class ArchitectureGuardTests
 
     private static string GetProgramPath(string functionProjectName)
     {
+        return Path.Combine(GetProjectPath(functionProjectName), "Program.cs");
+    }
+
+    private static string GetProjectPath(string projectName)
+    {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
         {
-            var candidate = Path.Combine(directory.FullName, "src", functionProjectName, "Program.cs");
-            if (File.Exists(candidate))
+            var candidate = Path.Combine(directory.FullName, "src", projectName);
+            if (Directory.Exists(candidate))
                 return candidate;
         }
 
-        throw new DirectoryNotFoundException($"Could not locate Program.cs for {functionProjectName}.");
+        throw new DirectoryNotFoundException($"Could not locate project directory for {projectName}.");
     }
 }

@@ -55,19 +55,48 @@
 - Email is the first channel supported; SMS and Push are future channels.
 - Templates are currently `.txt` only; no HTML/multipart yet.
 - Bouncebacks are provider feedback handled explicitly by Notification Infrastructure.
-- Contact-centre copy is a routing policy evaluated by the Notification service, not hardcoded template logic.
+- Contact-centre copy is a Booking routing policy evaluated through Notification policy interfaces, not hardcoded template logic.
 - Hold notifications are enabled; they should be configuration-gated before production if the business has not explicitly approved them.
 - Old direct Booking email paths are still intentionally present for transition. Do not remove them until tests prove safe replacement.
 - Notification dispatch is now durable and queue-backed via Azure Storage Queues.
   - No Event Grid subscription is needed for sending; the queue trigger listens automatically.
-  - Requires `NotificationQueue__QueueName` and `NotificationQueue__ConnectionString` app settings.
-  - Built-in poison queue behavior exists through Azure Functions.
+  - Requires `Notifications:Queue:QueueName` and `Notifications:Queue:ConnectionString` locally, or `Notifications__Queue__QueueName` and `Notifications__Queue__ConnectionString` in Azure app settings.
+  - The function app identity or connection string must be allowed to create the queue if `CreateIfNotExistsAsync` remains enabled.
+  - Built-in poison queue behavior exists through Azure Functions for retry-exhausted queue messages; invalid persisted payloads are marked `DeadLettered` by the trigger and should be monitored from `NotificationOutbox`.
+  - If Azure enqueue succeeds but marking the outbox row `Queued` fails, the publisher throws and the row remains `Pending`; operations should repair/requeue those rows until a dedicated requeue function is added.
+- Queued email delivery is currently composed-only. `Notifications:Email:ProviderName=Composed` returns `NonProductionComposed` and logs a warning; any named production provider fails fast until a real adapter is wired.
+- Queued notification email delivery is architecture-ready but not production email cutover-ready. It is not production-ready until the Microsoft Graph email adapter is wired.
+- Contact-centre copies require `Notifications:Email:ContactCentreEmailAddress`.
+- Bounceback auditing currently persists `EmailBounceEvents` and correlates with the legacy `NotificationDispatches` model. Treat old dispatch correlation and new `NotificationOutbox` dispatch as parallel models until bounceback storage is migrated.
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
+
+## Notification Follow-Up: Microsoft Graph Email
+- Wire queued notification email delivery to Microsoft Graph before production cutover.
+- Add Notification-owned Graph email options:
+  - `Notifications:Email:ProviderName=Graph`
+  - `Notifications:Email:Graph:UseManagedIdentity`
+  - `Notifications:Email:Graph:TenantId`
+  - `Notifications:Email:Graph:ClientId`
+  - `Notifications:Email:Graph:ClientSecret`
+  - `Notifications:Email:Graph:SenderMailbox`
+- Add `src/AFH.Notification.Infrastructure/Delivery/Email/Graph/GraphEmailDeliveryGateway.cs`.
+- Add `src/AFH.Notification.Infrastructure/Delivery/Email/Graph/GraphEmailOptions.cs`.
+- Prefer Managed Identity when `UseManagedIdentity=true`.
+- Use Key Vault/App Settings for secrets.
+- Do not commit secrets to source-controlled config.
+- Do not reuse Calendar/SharePoint Graph options unless a shared options contract is explicitly approved.
+- If `ProviderName=Graph`, actually send via Microsoft Graph.
+- If Graph configuration is missing, fail fast with a clear configuration error.
+- If `ProviderName=Composed`, retain current non-production composed behavior.
+- Add tests for missing Graph configuration, composed mode, Graph mode selection, and Graph send failure handling.
+- Legacy direct Booking email paths remain during transition.
 
 ## SQL Migration Note
 - Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.
 - Create and apply an EF migration from the infrastructure project before deploying to shared environments.
+- Notification outbox dispatch also requires applying `src/AFH.Notification.Infrastructure/Sql/notification-outbox.sql` before enabling the queue-backed notification path.
 - Treat that migration as required infra work for this backend phase.
+- Current `NotificationOutboxStore` persistence tests depend on a local SQL Server instance; add CI-backed SQL integration coverage before production cutover.
 
 ## Reconciliation And Smoke Tests
 - Manual downstream/XPlan reconciliation is available via `POST /api/v1/admin/downstream-updates/reconcile`.

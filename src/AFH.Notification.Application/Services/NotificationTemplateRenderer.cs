@@ -9,6 +9,13 @@ namespace AFH.Notification.Application.Services;
 
 public sealed partial class NotificationTemplateRenderer : INotificationTemplateRenderer
 {
+    private readonly IReadOnlyList<INotificationTemplatePolicy> _policies;
+
+    public NotificationTemplateRenderer(IEnumerable<INotificationTemplatePolicy> policies)
+    {
+        _policies = policies.ToArray();
+    }
+
     public async Task<NotificationTemplateRenderResult> RenderAsync(
         NotificationRequested notification,
         CancellationToken ct)
@@ -27,15 +34,9 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
         ]);
     }
 
-    private static string GetTemplateName(NotificationType notificationType)
-        => (notificationType.SourceApplication, notificationType.Name) switch
-        {
-            ("Booking", "BookingConfirmed") => "Booking.booking-confirmed.v1.txt",
-            ("Booking", "BookingRescheduled") => "Booking.booking-rescheduled.v1.txt",
-            ("Booking", "BookingCancelled") => "Booking.booking-cancelled.v1.txt",
-            ("Booking", "BookingHoldCreated") => "Booking.booking-hold.v1.txt",
-            _ => throw new NotSupportedException($"Notification template '{notificationType}' is not supported yet.")
-        };
+    private string GetTemplateName(NotificationType notificationType)
+        => _policies.FirstOrDefault(policy => policy.CanHandle(notificationType))?.GetTemplateName(notificationType)
+           ?? throw new NotSupportedException($"Notification template '{notificationType}' is not supported yet.");
 
     private static async Task<string> LoadTemplateAsync(string templateName, CancellationToken ct)
     {

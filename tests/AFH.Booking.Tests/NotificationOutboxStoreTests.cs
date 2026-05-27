@@ -137,6 +137,7 @@ public class NotificationOutboxStoreTests : IAsyncLifetime
         if (SkipIfNoDb()) return;
         var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
         await _sut.CreateOrGetAsync(item, CancellationToken.None);
+        await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
 
         await _sut.MarkSentAsync(item.Id, CancellationToken.None);
 
@@ -152,6 +153,7 @@ public class NotificationOutboxStoreTests : IAsyncLifetime
         if (SkipIfNoDb()) return;
         var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
         await _sut.CreateOrGetAsync(item, CancellationToken.None);
+        await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
 
         await _sut.MarkFailedAsync(item.Id, "error-details", CancellationToken.None);
 
@@ -167,6 +169,7 @@ public class NotificationOutboxStoreTests : IAsyncLifetime
         if (SkipIfNoDb()) return;
         var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
         await _sut.CreateOrGetAsync(item, CancellationToken.None);
+        await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
 
         await _sut.MarkDeadLetteredAsync(item.Id, "dead-error", CancellationToken.None);
 
@@ -175,5 +178,104 @@ public class NotificationOutboxStoreTests : IAsyncLifetime
         Assert.Equal(NotificationDispatchStatus.DeadLettered, loaded.Status);
         Assert.Equal("dead-error", loaded.LastError);
         Assert.NotNull(loaded.ProcessedUtc);
+    }
+
+    [Fact]
+    public async Task Sent_CannotBeMarkedFailedOrProcessing()
+    {
+        if (SkipIfNoDb()) return;
+        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        await _sut.CreateOrGetAsync(item, CancellationToken.None);
+        await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
+        await _sut.MarkSentAsync(item.Id, CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.MarkFailedAsync(item.Id, "stale failure", CancellationToken.None));
+        var claimed = await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
+
+        Assert.False(claimed);
+        var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
+        Assert.NotNull(loaded);
+        Assert.Equal(NotificationDispatchStatus.Sent, loaded.Status);
+    }
+
+    [Fact]
+    public async Task DeadLettered_CannotBeMarkedSentOrProcessing()
+    {
+        if (SkipIfNoDb()) return;
+        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        await _sut.CreateOrGetAsync(item, CancellationToken.None);
+        await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
+        await _sut.MarkDeadLetteredAsync(item.Id, "dead-error", CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.MarkSentAsync(item.Id, CancellationToken.None));
+        var claimed = await _sut.TryMarkProcessingAsync(item.Id, CancellationToken.None);
+
+        Assert.False(claimed);
+        var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
+        Assert.NotNull(loaded);
+        Assert.Equal(NotificationDispatchStatus.DeadLettered, loaded.Status);
+    }
+
+    [Fact]
+    public async Task MarkSentAsync_RequiresProcessing()
+    {
+        if (SkipIfNoDb()) return;
+        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        await _sut.CreateOrGetAsync(item, CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.MarkSentAsync(item.Id, CancellationToken.None));
+
+        var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
+        Assert.NotNull(loaded);
+        Assert.Equal(NotificationDispatchStatus.Pending, loaded.Status);
+    }
+
+    [Fact]
+    public async Task MarkFailedAsync_RequiresProcessing()
+    {
+        if (SkipIfNoDb()) return;
+        var item = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        await _sut.CreateOrGetAsync(item, CancellationToken.None);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _sut.MarkFailedAsync(item.Id, "error", CancellationToken.None));
+
+        var loaded = await _sut.GetAsync(item.Id, CancellationToken.None);
+        Assert.NotNull(loaded);
+        Assert.Equal(NotificationDispatchStatus.Pending, loaded.Status);
+    }
+
+    [Fact]
+    public async Task TryMarkProcessingAsync_AllowsPendingQueuedAndFailedOnly()
+    {
+        if (SkipIfNoDb()) return;
+        var pending = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        var queued = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        var failed = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        var processing = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        var sent = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+        var deadLettered = new NotificationOutboxItem(Guid.NewGuid(), "A", "T", Guid.NewGuid().ToString(), "{}", NotificationDispatchStatus.Pending, null, 0, null, DateTime.UtcNow, DateTime.UtcNow, null);
+
+        await _sut.CreateOrGetAsync(pending, CancellationToken.None);
+        await _sut.CreateOrGetAsync(queued, CancellationToken.None);
+        await _sut.CreateOrGetAsync(failed, CancellationToken.None);
+        await _sut.CreateOrGetAsync(processing, CancellationToken.None);
+        await _sut.CreateOrGetAsync(sent, CancellationToken.None);
+        await _sut.CreateOrGetAsync(deadLettered, CancellationToken.None);
+
+        await _sut.MarkQueuedAsync(queued.Id, "queue-id", CancellationToken.None);
+        await _sut.TryMarkProcessingAsync(failed.Id, CancellationToken.None);
+        await _sut.MarkFailedAsync(failed.Id, "error", CancellationToken.None);
+        await _sut.TryMarkProcessingAsync(processing.Id, CancellationToken.None);
+        await _sut.TryMarkProcessingAsync(sent.Id, CancellationToken.None);
+        await _sut.MarkSentAsync(sent.Id, CancellationToken.None);
+        await _sut.TryMarkProcessingAsync(deadLettered.Id, CancellationToken.None);
+        await _sut.MarkDeadLetteredAsync(deadLettered.Id, "dead", CancellationToken.None);
+
+        Assert.True(await _sut.TryMarkProcessingAsync(pending.Id, CancellationToken.None));
+        Assert.True(await _sut.TryMarkProcessingAsync(queued.Id, CancellationToken.None));
+        Assert.True(await _sut.TryMarkProcessingAsync(failed.Id, CancellationToken.None));
+        Assert.False(await _sut.TryMarkProcessingAsync(processing.Id, CancellationToken.None));
+        Assert.False(await _sut.TryMarkProcessingAsync(sent.Id, CancellationToken.None));
+        Assert.False(await _sut.TryMarkProcessingAsync(deadLettered.Id, CancellationToken.None));
     }
 }

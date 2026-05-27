@@ -4,6 +4,7 @@ using AFH.Notification.Application.Models;
 using AFH.Notification.Contract.Abstractions;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
+using Microsoft.Extensions.Logging;
 
 namespace AFH.Notification.Application.Services;
 
@@ -14,19 +15,22 @@ public sealed class NotificationOutboxService : INotificationPublisher
     private readonly INotificationIdempotencyKeyGenerator _keyGenerator;
     private readonly INotificationRecipientResolver _recipientResolver;
     private readonly IContactCentreRoutingResolver _contactCentreResolver;
+    private readonly ILogger<NotificationOutboxService> _logger;
 
     public NotificationOutboxService(
         INotificationOutboxStore outboxStore,
         INotificationQueuePublisher queuePublisher,
         INotificationIdempotencyKeyGenerator keyGenerator,
         INotificationRecipientResolver recipientResolver,
-        IContactCentreRoutingResolver contactCentreResolver)
+        IContactCentreRoutingResolver contactCentreResolver,
+        ILogger<NotificationOutboxService> logger)
     {
         _outboxStore = outboxStore;
         _queuePublisher = queuePublisher;
         _keyGenerator = keyGenerator;
         _recipientResolver = recipientResolver;
         _contactCentreResolver = contactCentreResolver;
+        _logger = logger;
     }
 
     public async Task PublishAsync(NotificationRequested notification, CancellationToken ct)
@@ -77,10 +81,21 @@ public sealed class NotificationOutboxService : INotificationPublisher
                         NotificationType = result.Item.NotificationType
                     };
 
-                    await _queuePublisher.PublishAsync(queueMessage, ct);
+                    var publishResult = await _queuePublisher.PublishAsync(queueMessage, ct);
 
-                    // The queue message ID might be returned from a robust queue publisher, but since we don't have it on the model yet, we pass a dummy or empty.
-                    await _outboxStore.MarkQueuedAsync(result.Item.Id, "queued", ct);
+                    try
+                    {
+                        await _outboxStore.MarkQueuedAsync(result.Item.Id, publishResult.QueueMessageId, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Notification queue publish succeeded but marking outbox item {OutboxId} as queued failed. QueueMessageId: {QueueMessageId}",
+                            result.Item.Id,
+                            publishResult.QueueMessageId);
+                        throw;
+                    }
                 }
             }
         }

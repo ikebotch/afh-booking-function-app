@@ -24,11 +24,12 @@ public sealed class AzureStorageNotificationQueuePublisher : INotificationQueueP
         });
     }
 
-    public async Task PublishAsync(NotificationQueueMessage message, CancellationToken ct)
+    public async Task<NotificationQueuePublishResult> PublishAsync(NotificationQueueMessage message, CancellationToken ct)
     {
         await _queueClient.CreateIfNotExistsAsync(cancellationToken: ct);
 
         var payload = JsonSerializer.Serialize(message);
-        await _queueClient.SendMessageAsync(payload, cancellationToken: ct);
+        var response = await _queueClient.SendMessageAsync(payload, cancellationToken: ct);
+        return new NotificationQueuePublishResult(response.Value.MessageId);
     }
 }

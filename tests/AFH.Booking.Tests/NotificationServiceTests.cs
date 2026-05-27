@@ -1,5 +1,6 @@
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
+using AFH.Notification.Application.Policies.Booking;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
@@ -16,8 +17,8 @@ public sealed class NotificationServiceTests
         var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
         var service = new NotificationService(
             audit,
-            new NotificationRecipientResolver(),
-            new NotificationTemplateRenderer(),
+            CreateRecipientResolver(),
+            CreateTemplateRenderer(),
             new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
@@ -64,8 +65,8 @@ public sealed class NotificationServiceTests
         var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
         var service = new NotificationService(
             audit,
-            new NotificationRecipientResolver(),
-            new NotificationTemplateRenderer(),
+            CreateRecipientResolver(),
+            CreateTemplateRenderer(),
             new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
@@ -109,8 +110,8 @@ public sealed class NotificationServiceTests
         var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
         var service = new NotificationService(
             audit,
-            new NotificationRecipientResolver(),
-            new NotificationTemplateRenderer(),
+            CreateRecipientResolver(),
+            CreateTemplateRenderer(),
             new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
@@ -154,8 +155,8 @@ public sealed class NotificationServiceTests
         var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
         var service = new NotificationService(
             audit,
-            new NotificationRecipientResolver(),
-            new NotificationTemplateRenderer(),
+            CreateRecipientResolver(),
+            CreateTemplateRenderer(),
             new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
@@ -229,4 +230,10 @@ public sealed class NotificationServiceTests
     {
         public string? GetContactCentreEmailAddress() => "contact@centre.test";
     }
+
+    private static NotificationRecipientResolver CreateRecipientResolver()
+        => new([new BookingNotificationRoutingPolicy()]);
+
+    private static NotificationTemplateRenderer CreateTemplateRenderer()
+        => new([new BookingNotificationTemplatePolicy()]);
 }

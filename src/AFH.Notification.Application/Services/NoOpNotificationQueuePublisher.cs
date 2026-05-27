@@ -13,9 +13,9 @@ public sealed class NoOpNotificationQueuePublisher : INotificationQueuePublisher
         _logger = logger;
     }
 
-    public Task PublishAsync(NotificationQueueMessage message, CancellationToken ct)
+    public Task<NotificationQueuePublishResult> PublishAsync(NotificationQueueMessage message, CancellationToken ct)
     {
         _logger.LogInformation("NoOp queue publisher invoked for Outbox ID {OutboxId}", message.NotificationOutboxId);
-        return Task.CompletedTask;
+        return Task.FromResult(new NotificationQueuePublishResult($"noop-{message.NotificationOutboxId:N}"));
     }
 }

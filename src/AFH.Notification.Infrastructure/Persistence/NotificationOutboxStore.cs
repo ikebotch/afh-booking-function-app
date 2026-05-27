@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
 using AFH.Notification.Infrastructure.Persistence.Models;
@@ -90,6 +89,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.Queued.ToString())
                 .SetProperty(x => x.QueueMessageId, queueMessageId)
+                .SetProperty(x => x.LastError, (string?)null)
                 .SetProperty(x => x.UpdatedUtc, DateTime.UtcNow), ct);
 
         if (affected == 0)
@@ -112,6 +112,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.Processing.ToString())
                 .SetProperty(x => x.AttemptCount, x => x.AttemptCount + 1)
+                .SetProperty(x => x.ProcessedUtc, (DateTime?)null)
                 .SetProperty(x => x.UpdatedUtc, DateTime.UtcNow), ct);
 
         return affected > 0;
@@ -121,22 +122,23 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
     {
         var now = DateTime.UtcNow;
         var affected = await _dbContext.NotificationOutbox
-            .Where(x => x.Id == id)
+            .Where(x => x.Id == id && x.Status == NotificationDispatchStatus.Processing.ToString())
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.Sent.ToString())
+                .SetProperty(x => x.LastError, (string?)null)
                 .SetProperty(x => x.ProcessedUtc, now)
                 .SetProperty(x => x.UpdatedUtc, now), ct);
 
         if (affected == 0)
         {
-            throw new InvalidOperationException($"Notification outbox item '{id}' was not found.");
+            throw new InvalidOperationException($"Notification outbox item '{id}' was not found or is not in Processing status.");
         }
     }
 
     public async Task MarkFailedAsync(Guid id, string lastError, CancellationToken ct)
     {
         var affected = await _dbContext.NotificationOutbox
-            .Where(x => x.Id == id)
+            .Where(x => x.Id == id && x.Status == NotificationDispatchStatus.Processing.ToString())
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.Failed.ToString())
                 .SetProperty(x => x.LastError, lastError)
@@ -144,15 +146,21 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
 
         if (affected == 0)
         {
-            throw new InvalidOperationException($"Notification outbox item '{id}' was not found.");
+            throw new InvalidOperationException($"Notification outbox item '{id}' was not found or is not in Processing status.");
         }
     }
 
     public async Task MarkDeadLetteredAsync(Guid id, string lastError, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
+        var validStatuses = new[]
+        {
+            NotificationDispatchStatus.Processing.ToString(),
+            NotificationDispatchStatus.Failed.ToString()
+        };
+
         var affected = await _dbContext.NotificationOutbox
-            .Where(x => x.Id == id)
+            .Where(x => x.Id == id && validStatuses.Contains(x.Status))
             .ExecuteUpdateAsync(s => s
                 .SetProperty(x => x.Status, NotificationDispatchStatus.DeadLettered.ToString())
                 .SetProperty(x => x.LastError, lastError)
@@ -161,7 +169,7 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
 
         if (affected == 0)
         {
-            throw new InvalidOperationException($"Notification outbox item '{id}' was not found.");
+            throw new InvalidOperationException($"Notification outbox item '{id}' was not found or is not in Processing/Failed status.");
         }
     }
 

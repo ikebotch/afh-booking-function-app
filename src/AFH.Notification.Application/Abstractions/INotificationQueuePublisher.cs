@@ -4,5 +4,5 @@ namespace AFH.Notification.Application.Abstractions;
 
 public interface INotificationQueuePublisher
 {
-    Task PublishAsync(NotificationQueueMessage message, CancellationToken ct);
+    Task<NotificationQueuePublishResult> PublishAsync(NotificationQueueMessage message, CancellationToken ct);
 }

@@ -8,6 +8,13 @@ namespace AFH.Notification.Application.Services;
 
 public sealed class NotificationIdempotencyKeyGenerator : INotificationIdempotencyKeyGenerator
 {
+    private readonly IReadOnlyList<INotificationIdempotencyPolicy> _policies;
+
+    public NotificationIdempotencyKeyGenerator(IEnumerable<INotificationIdempotencyPolicy> policies)
+    {
+        _policies = policies.ToArray();
+    }
+
     public string GenerateKey(NotificationRequested request, NotificationChannel channel, NotificationRecipient recipient)
     {
         var primaryId = GetPrimaryId(request).Trim().ToLowerInvariant();
@@ -41,17 +48,7 @@ public sealed class NotificationIdempotencyKeyGenerator : INotificationIdempoten
         return $"{sourceSystem}:{typeName}:{hashString}";
     }
 
-    private static string GetPrimaryId(NotificationRequested request)
-    {
-        if (request.Data.TryGetValue("BookingId", out var bookingId) && !string.IsNullOrWhiteSpace(bookingId))
-            return bookingId;
-            
-        if (request.Data.TryGetValue("HoldId", out var holdId) && !string.IsNullOrWhiteSpace(holdId))
-            return holdId;
-            
-        if (request.Data.TryGetValue("TransactionId", out var txId) && !string.IsNullOrWhiteSpace(txId))
-            return txId;
-
-        return request.CorrelationId;
-    }
+    private string GetPrimaryId(NotificationRequested request)
+        => _policies.FirstOrDefault(policy => policy.CanHandle(request))?.GetPrimaryId(request)
+           ?? request.CorrelationId;
 }

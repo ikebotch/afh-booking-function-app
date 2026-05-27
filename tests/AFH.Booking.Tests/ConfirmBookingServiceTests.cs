@@ -253,6 +253,7 @@ public class ConfirmBookingServiceTests
         var audit = new StubLifecycleAuditService();
         var notifications = new StubNotificationService();
         var notificationPublisher = new StubNotificationPublisher();
+        var clients = new StubClientDirectory();
         var sut = new ConfirmBookingService(
             new StubHoldRepository(hold),
             new StubSlotRepository(slot),
@@ -265,7 +266,7 @@ public class ConfirmBookingServiceTests
             new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
             new StubRouteTimeGuard(),
             audit,
-            notifications, notificationPublisher, new StubHoldWindowFactory(), new StubBookingTokenService("client-token-1"), TestNotificationOptions());
+            notifications, notificationPublisher, new StubHoldWindowFactory(), new StubBookingTokenService("client-token-1"), TestNotificationOptions(), clients);
 
         var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
 
@@ -291,6 +292,10 @@ public class ConfirmBookingServiceTests
         Assert.Equal("client-token-1", notificationPublisher.LastNotification.Data["viewBookingUrl"].Split("token=", StringSplitOptions.None)[1]);
         Assert.Equal("lifecycle-event-1", notificationPublisher.LastNotification.Data["eventId"]);
         Assert.Equal(slot.Id, notificationPublisher.LastNotification.Data["slotId"]);
+        var recipient = Assert.Single(notificationPublisher.LastNotification.Recipients);
+        Assert.Equal(NotificationRecipientType.Client, recipient.Type);
+        Assert.Equal("jane.client@example.test", recipient.Email);
+        Assert.Equal("+447700900123", recipient.MobileNumber);
         Assert.Equal(BookingTransactionStatus.Completed, tx.Status);
     }
 
@@ -840,6 +845,18 @@ public class ConfirmBookingServiceTests
     {
         public Task<Result<string>> GenerateClientAccessTokenAsync(string bookingId, CancellationToken ct)
             => Task.FromResult(Result<string>.Ok(token));
+    }
+
+    private sealed class StubClientDirectory : AFH.Booking.Application.Abstractions.Clients.IClientDirectory
+    {
+        public Task<AFH.Booking.Domain.Client.ClientDirectoryItem?> GetAsync(string transactionIdOrClientId, CancellationToken ct)
+            => Task.FromResult<AFH.Booking.Domain.Client.ClientDirectoryItem?>(new AFH.Booking.Domain.Client.ClientDirectoryItem
+            {
+                FirstName = "Jane",
+                LastName = "Client",
+                Email = "jane.client@example.test",
+                Phone = "+447700900123"
+            });
     }
 
     private sealed class StubOperationalIssueRepository : IOperationalIssueRepository

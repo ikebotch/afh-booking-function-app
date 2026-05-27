@@ -1,4 +1,5 @@
 using AFH.Notification.Application.Abstractions;
+using AFH.Notification.Infrastructure.Delivery.Email;
 using AFH.Notification.Infrastructure.Options;
 using AFH.Notification.Infrastructure.Persistence;
 using Microsoft.Extensions.Configuration;
@@ -18,6 +19,7 @@ public static class ServiceCollectionExtensions
         services.Configure<PushDeliveryOptions>(configuration.GetSection(PushDeliveryOptions.SectionName));
 
         services.AddScoped<INotificationAuditStore, NotificationAuditStore>();
+        services.AddScoped<INotificationDeliveryGateway, EmailNotificationDeliveryGateway>();
 
         return services;
     }

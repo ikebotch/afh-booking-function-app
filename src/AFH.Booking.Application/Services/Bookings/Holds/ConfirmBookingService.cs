@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Governance;
+using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Abstractions.Meetings;
@@ -35,6 +36,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     private readonly IHoldWindowFactory _holdWindowFactory;
     private readonly IBookingTokenService _tokenService;
     private readonly NotificationsOptions _notificationOptions;
+    private readonly IClientDirectory? _clients;
 
     public ConfirmBookingService(
         IBookingHoldRepository holds,
@@ -52,7 +54,8 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         INotificationPublisher notificationPublisher,
         IHoldWindowFactory holdWindowFactory,
         IBookingTokenService tokenService,
-        IOptions<NotificationsOptions> notificationOptions)
+        IOptions<NotificationsOptions> notificationOptions,
+        IClientDirectory? clients = null)
     {
         _holds = holds;
         _slots = slots;
@@ -70,6 +73,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         _holdWindowFactory = holdWindowFactory;
         _tokenService = tokenService;
         _notificationOptions = notificationOptions.Value;
+        _clients = clients;
     }
 
     public async Task<Result<ConfirmBookingResponse>> HandleAsync(
@@ -102,7 +106,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         var eventId = await RecordBookedLifecycleAsync(cmd, context, before, utcNow, ct);
         await _uow.SaveChangesAsync(ct);
 
-        await SendBookedNotificationAsync(context.Hold.Id, context.Slot, eventId, selfServiceLinks, ct);
+        await SendBookedNotificationAsync(context, eventId, joinUrl, selfServiceLinks, ct);
         await _uow.SaveChangesAsync(ct);
 
         return OkResponse(context.Hold, context.Transaction, joinUrl);
@@ -343,9 +347,9 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     }
 
     private async Task SendBookedNotificationAsync(
-        string bookingId,
-        BookingSlot slot,
+        ConfirmationContext context,
         string eventId,
+        string? joinUrl,
         BookingSelfServiceLinks? links,
         CancellationToken ct)
     {
@@ -358,9 +362,9 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         {
             await _notifications.SendBookingNotificationAsync(
                 new NotificationDispatchRequest(
-                    bookingId,
+                    context.Hold.Id,
                     LifecycleEventTypes.Booked,
-                    BuildBookingConfirmationMessage(slot),
+                    BuildBookingConfirmationMessage(context.Slot),
                     true,
                     true,
                     eventId,
@@ -368,12 +372,21 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                     links),
                 ct);
 
+            var client = _clients is null
+                ? null
+                : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
+
             await _notificationPublisher.PublishAsync(
                 NotificationRequested.BookingConfirmed(
-                    bookingId,
+                    context.Hold.Id,
                     new NotificationActor(BookingNotificationActorTypes.Client, "Booking", null, null, null),
-                    Array.Empty<NotificationRecipient>(),
-                    BuildBookingConfirmedNotificationData(slot, eventId, links)),
+                    BuildBookingConfirmedRecipients(client),
+                    BuildBookingConfirmedNotificationData(
+                        context,
+                        _holdWindowFactory.Create(context.Slot, context.Transaction),
+                        eventId,
+                        joinUrl,
+                        links)),
                 ct);
         }
         catch (Exception ex)
@@ -451,19 +464,67 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             $"Your meeting with {slot.AdviserName} on {slot.StartUtc:yyyy-MM-dd HH:mm} has been booked.";
     }
 
+    private static IReadOnlyList<NotificationRecipient> BuildBookingConfirmedRecipients(
+        Domain.Client.ClientDirectoryItem? client)
+    {
+        if (client is null)
+            return Array.Empty<NotificationRecipient>();
+
+        var displayName = $"{client.FirstName} {client.LastName}".Trim();
+        if (string.IsNullOrWhiteSpace(displayName))
+            displayName = null;
+
+        return
+        [
+            new NotificationRecipient(
+                NotificationRecipientType.Client,
+                displayName,
+                client.Email,
+                client.Phone)
+        ];
+    }
+
     private static IReadOnlyDictionary<string, string> BuildBookingConfirmedNotificationData(
-        BookingSlot slot,
+        ConfirmationContext context,
+        HoldWindows windows,
         string eventId,
+        string? joinUrl,
         BookingSelfServiceLinks? links)
     {
+        var text = ConfirmedBookingTemplate.BuildConfirmedTemplate(
+            context.Slot,
+            context.Transaction,
+            context.Hold,
+            windows,
+            joinUrl,
+            location: null,
+            links);
+        var lines = text.TextBody.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n');
+        var dataByPrefix = lines
+            .Select(line => line.Split(": ", 2, StringSplitOptions.None))
+            .Where(parts => parts.Length == 2)
+            .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.OrdinalIgnoreCase);
+
         var data = new Dictionary<string, string>
         {
             ["eventId"] = eventId,
-            ["slotId"] = slot.Id,
-            ["adviserId"] = slot.AdviserId,
-            ["adviserName"] = slot.AdviserName,
-            ["startUtc"] = slot.StartUtc.ToString("O"),
-            ["endUtc"] = slot.EndUtc.ToString("O")
+            ["slotId"] = context.Slot.Id,
+            ["adviserId"] = context.Slot.AdviserId,
+            ["adviserName"] = context.Slot.AdviserName,
+            ["startUtc"] = context.Slot.StartUtc.ToString("O"),
+            ["endUtc"] = context.Slot.EndUtc.ToString("O"),
+            ["transactionRef"] = context.Transaction.TransactionRef,
+            ["bookingId"] = context.Hold.Id,
+            ["meetingType"] = dataByPrefix.GetValueOrDefault("Meeting type", "N/A"),
+            ["when"] = dataByPrefix.GetValueOrDefault("When", string.Empty),
+            ["whereLine"] = lines.FirstOrDefault(line =>
+                line.StartsWith("Join link:", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("Location:", StringComparison.OrdinalIgnoreCase)) ?? string.Empty,
+            ["travelLine"] = lines.FirstOrDefault(line =>
+                line.StartsWith("Travel:", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("Travel time:", StringComparison.OrdinalIgnoreCase) ||
+                line.StartsWith("Travel buffer:", StringComparison.OrdinalIgnoreCase)) ?? string.Empty,
+            ["manageBookingLinks"] = BuildConfirmedManageLinks(links)
         };
 
         if (links is not null)
@@ -474,6 +535,19 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         }
 
         return data;
+    }
+
+    private static string BuildConfirmedManageLinks(BookingSelfServiceLinks? links)
+    {
+        if (links is null)
+            return string.Empty;
+
+        return
+$@"
+Manage your booking:
+- View booking: {links.ViewBookingUrl}
+- Cancel booking: {links.CancelBookingUrl}
+- Reschedule booking: {links.RescheduleBookingUrl}";
     }
 
     private static Result<T> FailLike<T>(Result failure)

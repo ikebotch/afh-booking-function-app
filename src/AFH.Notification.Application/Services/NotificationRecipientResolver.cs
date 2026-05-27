@@ -18,7 +18,7 @@ public sealed class NotificationRecipientResolver : INotificationRecipientResolv
             .DistinctBy(GetRecipientKey)
             .ToArray();
 
-        var copyContactCentre = ShouldCopyContactCentre(notification, recipients);
+        var copyContactCentre = ShouldCopyContactCentre(notification, notification.Recipients);
         return Task.FromResult(new NotificationRoute(recipients, copyContactCentre));
     }
 

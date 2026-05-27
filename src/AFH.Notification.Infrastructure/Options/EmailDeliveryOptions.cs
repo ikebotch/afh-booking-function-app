@@ -6,4 +6,5 @@ public sealed class EmailDeliveryOptions
 
     public bool Enabled { get; set; } = true;
     public string? ProviderName { get; set; }
+    public string? ContactCentreEmailAddress { get; set; }
 }

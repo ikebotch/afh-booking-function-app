@@ -1,6 +1,7 @@
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
 using AFH.Notification.Contract.Abstractions;
+using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Extensions.Logging;
 
@@ -11,6 +12,7 @@ public sealed class NotificationService : INotificationService, INotificationPub
     private readonly INotificationAuditStore _auditStore;
     private readonly INotificationRecipientResolver _recipientResolver;
     private readonly INotificationTemplateRenderer _templateRenderer;
+    private readonly IContactCentreRoutingResolver _contactCentreResolver;
     private readonly IReadOnlyList<INotificationDeliveryGateway> _deliveryGateways;
     private readonly ILogger<NotificationService> _logger;
 
@@ -18,12 +20,14 @@ public sealed class NotificationService : INotificationService, INotificationPub
         INotificationAuditStore auditStore,
         INotificationRecipientResolver recipientResolver,
         INotificationTemplateRenderer templateRenderer,
+        IContactCentreRoutingResolver contactCentreResolver,
         IEnumerable<INotificationDeliveryGateway> deliveryGateways,
         ILogger<NotificationService> logger)
     {
         _auditStore = auditStore;
         _recipientResolver = recipientResolver;
         _templateRenderer = templateRenderer;
+        _contactCentreResolver = contactCentreResolver;
         _deliveryGateways = deliveryGateways.ToArray();
         _logger = logger;
     }
@@ -50,7 +54,18 @@ public sealed class NotificationService : INotificationService, INotificationPub
                 continue;
             }
 
-            foreach (var recipient in route.Recipients.Where(x => x.PreferredChannels?.Contains(content.Channel) == true))
+            var activeRecipients = route.Recipients.Where(x => x.PreferredChannels?.Contains(content.Channel) == true).ToList();
+            
+            if (route.CopyContactCentre)
+            {
+                var ccTarget = _contactCentreResolver.GetContactCentreEmailAddress();
+                if (content.Channel == NotificationChannel.Email && !string.IsNullOrWhiteSpace(ccTarget))
+                {
+                    activeRecipients.Add(new NotificationRecipient("ContactCentre", "Contact Centre", ccTarget, null, null, [content.Channel]));
+                }
+            }
+
+            foreach (var recipient in activeRecipients)
             {
                 var request = new NotificationDeliveryRequest(
                     notification.CorrelationId,

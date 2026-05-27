@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<INotificationAuditStore, NotificationAuditStore>();
         services.AddScoped<INotificationDeliveryGateway, EmailNotificationDeliveryGateway>();
+        services.AddScoped<IContactCentreRoutingResolver, ContactCentreRoutingResolver>();
 
         services.AddSingleton<EmailBouncebackParser>();
         services.AddScoped<INotificationBouncebackStore, EmailBouncebackStore>();

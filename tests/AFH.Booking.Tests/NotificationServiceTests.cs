@@ -18,6 +18,7 @@ public sealed class NotificationServiceTests
             audit,
             new NotificationRecipientResolver(),
             new NotificationTemplateRenderer(),
+            new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
 
@@ -65,6 +66,7 @@ public sealed class NotificationServiceTests
             audit,
             new NotificationRecipientResolver(),
             new NotificationTemplateRenderer(),
+            new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
 
@@ -109,6 +111,7 @@ public sealed class NotificationServiceTests
             audit,
             new NotificationRecipientResolver(),
             new NotificationTemplateRenderer(),
+            new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
 
@@ -153,6 +156,7 @@ public sealed class NotificationServiceTests
             audit,
             new NotificationRecipientResolver(),
             new NotificationTemplateRenderer(),
+            new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
 
@@ -182,9 +186,13 @@ public sealed class NotificationServiceTests
             CancellationToken.None);
 
         Assert.NotNull(audit.LastNotification);
-        var request = Assert.Single(delivery.Requests);
+        Assert.Equal(2, delivery.Requests.Count);
+        var request = delivery.Requests.Single(r => r.Recipient.RecipientType == BookingNotificationRecipientTypes.Client);
+        var ccRequest = delivery.Requests.Single(r => r.Recipient.RecipientType == "ContactCentre");
+        
         Assert.Equal(NotificationChannel.Email, request.Channel);
         Assert.Equal("jane@example.test", request.Recipient.Email);
+        Assert.Equal("contact@centre.test", ccRequest.Recipient.Email);
         Assert.Equal("AFH Booking: Hold Created", request.Subject);
         Assert.Contains("temporary hold", request.TextBody);
         Assert.Contains("Alex Adviser", request.TextBody);
@@ -215,5 +223,10 @@ public sealed class NotificationServiceTests
             Requests.Add(request);
             return Task.FromResult(new NotificationDeliveryResult("Composed", "provider-1"));
         }
+    }
+
+    private sealed class StubContactCentreRoutingResolver : IContactCentreRoutingResolver
+    {
+        public string? GetContactCentreEmailAddress() => "contact@centre.test";
     }
 }

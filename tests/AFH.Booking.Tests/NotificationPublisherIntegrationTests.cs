@@ -7,6 +7,7 @@ using AFH.Notification.Infrastructure.Integration;
 using AFH.Notification.Contract.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Tests;
@@ -94,7 +95,8 @@ public sealed class NotificationPublisherIntegrationTests
                 BaseUrl = "https://notification.example",
                 RequestPath = "/api/v1/notifications/requests",
                 InternalToken = "internal-token"
-            }));
+            }),
+            Options.Create(new InternalApiAuthTokenOptions()));
 
         await publisher.PublishAsync(new NotificationRequested(
             new NotificationType("Booking", "BookingConfirmed"),
@@ -110,6 +112,86 @@ public sealed class NotificationPublisherIntegrationTests
         Assert.Equal("idem-123", captured.Headers.GetValues("Idempotency-Key").Single());
         Assert.Equal("Bearer", captured.Headers.Authorization?.Scheme);
         Assert.Equal("internal-token", captured.Headers.Authorization?.Parameter);
+    }
+
+    [Fact]
+    public async Task HttpNotificationPublisher_UsesNotificationInternalToken_WhenConfigured()
+    {
+        HttpRequestMessage? captured = null;
+        var publisher = CreateHttpPublisher(
+            request => captured = request,
+            notificationInternalToken: "notification-token",
+            internalApiAuthToken: null);
+
+        await publisher.PublishAsync(CreateNotification(), CancellationToken.None);
+
+        Assert.Equal("Bearer", captured?.Headers.Authorization?.Scheme);
+        Assert.Equal("notification-token", captured?.Headers.Authorization?.Parameter);
+    }
+
+    [Fact]
+    public async Task HttpNotificationPublisher_FallsBackToInternalApiAuthToken_WhenInternalTokenIsEmpty()
+    {
+        HttpRequestMessage? captured = null;
+        var publisher = CreateHttpPublisher(
+            request => captured = request,
+            notificationInternalToken: "  ",
+            internalApiAuthToken: "shared-host-token");
+
+        await publisher.PublishAsync(CreateNotification(), CancellationToken.None);
+
+        Assert.Equal("Bearer", captured?.Headers.Authorization?.Scheme);
+        Assert.Equal("shared-host-token", captured?.Headers.Authorization?.Parameter);
+    }
+
+    [Fact]
+    public async Task HttpNotificationPublisher_NotificationInternalTokenOverridesInternalApiAuthToken()
+    {
+        HttpRequestMessage? captured = null;
+        var publisher = CreateHttpPublisher(
+            request => captured = request,
+            notificationInternalToken: "notification-token",
+            internalApiAuthToken: "shared-host-token");
+
+        await publisher.PublishAsync(CreateNotification(), CancellationToken.None);
+
+        Assert.Equal("Bearer", captured?.Headers.Authorization?.Scheme);
+        Assert.Equal("notification-token", captured?.Headers.Authorization?.Parameter);
+    }
+
+    [Fact]
+    public async Task HttpNotificationPublisher_MissingInternalTokens_FailsClearly()
+    {
+        var publisher = CreateHttpPublisher(
+            _ => throw new InvalidOperationException("HTTP should not be called."),
+            notificationInternalToken: null,
+            internalApiAuthToken: null);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            publisher.PublishAsync(CreateNotification(), CancellationToken.None));
+
+        Assert.Equal(
+            "Notifications:Integration:Http:InternalToken or InternalApiAuth:Token is required for HTTP notification publishing.",
+            ex.Message);
+    }
+
+    [Fact]
+    public async Task HttpNotificationPublisher_DoesNotLogTokenValues()
+    {
+        HttpRequestMessage? captured = null;
+        var logger = new CapturingLogger<HttpNotificationPublisher>();
+        var publisher = CreateHttpPublisher(
+            request => captured = request,
+            notificationInternalToken: "notification-secret-token",
+            internalApiAuthToken: "shared-secret-token",
+            logger);
+
+        await publisher.PublishAsync(CreateNotification(), CancellationToken.None);
+
+        Assert.Equal("notification-secret-token", captured?.Headers.Authorization?.Parameter);
+        var logs = string.Join(Environment.NewLine, logger.Messages);
+        Assert.DoesNotContain("notification-secret-token", logs, StringComparison.Ordinal);
+        Assert.DoesNotContain("shared-secret-token", logs, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -146,9 +228,64 @@ public sealed class NotificationPublisherIntegrationTests
         return new ConfigurationBuilder().AddInMemoryCollection(values).Build();
     }
 
+    private static HttpNotificationPublisher CreateHttpPublisher(
+        Action<HttpRequestMessage> capture,
+        string? notificationInternalToken,
+        string? internalApiAuthToken,
+        ILogger<HttpNotificationPublisher>? logger = null)
+    {
+        return new HttpNotificationPublisher(
+            new HttpClient(new StubHttpMessageHandler(request =>
+            {
+                capture(request);
+                return new HttpResponseMessage(HttpStatusCode.Accepted);
+            }))
+            {
+                BaseAddress = new Uri("https://notification.example")
+            },
+            Options.Create(new HttpNotificationPublisherOptions
+            {
+                BaseUrl = "https://notification.example",
+                RequestPath = "/api/v1/notifications/requests",
+                InternalToken = notificationInternalToken
+            }),
+            Options.Create(new InternalApiAuthTokenOptions
+            {
+                Token = internalApiAuthToken
+            }),
+            logger);
+    }
+
+    private static NotificationRequested CreateNotification()
+        => new(
+            new NotificationType("Booking", "BookingConfirmed"),
+            "corr-123",
+            new NotificationActor("System", "Booking", null, null, null),
+            [new NotificationRecipient("Client", "Client", "client@example.com", null, null, [NotificationChannel.Email])],
+            new Dictionary<string, string> { ["IdempotencyKey"] = "idem-123" });
+
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> responder) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(responder(request));
+    }
+
+    private sealed class CapturingLogger<T> : ILogger<T>
+    {
+        public List<string> Messages { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            Messages.Add(formatter(state, exception));
+        }
     }
 }

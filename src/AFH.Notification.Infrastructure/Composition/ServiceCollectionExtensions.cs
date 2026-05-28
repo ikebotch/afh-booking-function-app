@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
         services.Configure<NotificationQueueOptions>(options => BindNotificationQueueOptions(configuration, options));
         services.Configure<NotificationIntegrationOptions>(configuration.GetSection(NotificationIntegrationOptions.SectionName));
         services.Configure<HttpNotificationPublisherOptions>(configuration.GetSection(HttpNotificationPublisherOptions.SectionName));
+        services.Configure<InternalApiAuthTokenOptions>(configuration.GetSection(InternalApiAuthTokenOptions.SectionName));
         services.Configure<ServiceBusNotificationPublisherOptions>(configuration.GetSection(ServiceBusNotificationPublisherOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("BookingDb")

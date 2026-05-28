@@ -21,7 +21,6 @@ public sealed class NotificationServiceTests
             deliveryAudit,
             CreateRecipientResolver(),
             CreateTemplateRenderer(),
-            new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
 
@@ -82,7 +81,6 @@ public sealed class NotificationServiceTests
             deliveryAudit,
             CreateRecipientResolver(),
             CreateTemplateRenderer(),
-            new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
 
@@ -129,7 +127,6 @@ public sealed class NotificationServiceTests
             deliveryAudit,
             CreateRecipientResolver(),
             CreateTemplateRenderer(),
-            new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
 
@@ -176,7 +173,6 @@ public sealed class NotificationServiceTests
             deliveryAudit,
             CreateRecipientResolver(),
             CreateTemplateRenderer(),
-            new StubContactCentreRoutingResolver(),
             [delivery],
             NullLogger<NotificationService>.Instance);
 
@@ -189,7 +185,11 @@ public sealed class NotificationServiceTests
                     new NotificationRecipient(
                         BookingNotificationRecipientTypes.Client,
                         "Jane Client",
-                        "jane@example.test")
+                        "jane@example.test"),
+                    new NotificationRecipient(
+                        BookingNotificationRecipientTypes.ContactCentre,
+                        "Contact Centre",
+                        "contact@centre.test")
                 ],
                 new Dictionary<string, string>
                 {
@@ -234,7 +234,6 @@ public sealed class NotificationServiceTests
             deliveryAudit,
             CreateRecipientResolver(),
             CreateTemplateRenderer(),
-            new StubContactCentreRoutingResolver(null),
             [delivery],
             NullLogger<NotificationService>.Instance);
 
@@ -309,11 +308,6 @@ public sealed class NotificationServiceTests
 
         public Task<NotificationDeliveryResult> SendAsync(NotificationDeliveryRequest request, CancellationToken ct)
             => throw new InvalidOperationException("Graph failed.");
-    }
-
-    private sealed class StubContactCentreRoutingResolver(string? email = "contact@centre.test") : IContactCentreRoutingResolver
-    {
-        public string? GetContactCentreEmailAddress() => email;
     }
 
     private static NotificationRecipientResolver CreateRecipientResolver()

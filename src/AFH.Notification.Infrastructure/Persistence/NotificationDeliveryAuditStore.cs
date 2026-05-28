@@ -38,6 +38,8 @@ public sealed class NotificationDeliveryAuditStore : INotificationDeliveryAuditS
             RecipientPhone = Truncate(record.RecipientPhone, 64),
             RecipientEmail = Truncate(record.RecipientEmail, 320),
             ProviderMessageId = Truncate(record.ProviderMessageId, 200),
+            MessageSubject = Truncate(record.MessageSubject, 500),
+            MessageBody = record.MessageBody,
             CreatedUtc = record.CreatedUtc,
             UpdatedUtc = record.UpdatedUtc,
             NotificationOutboxId = record.NotificationOutboxId,

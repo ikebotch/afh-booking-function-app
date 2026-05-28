@@ -1,8 +1,11 @@
 using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Infrastructure.Clients;
+using AFH.Notification.Infrastructure.Bouncebacks;
 using AFH.Notification.Infrastructure.Persistence;
 using AFH.Notification.Infrastructure.Persistence.Models;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace AFH.Booking.Tests;
@@ -23,7 +26,7 @@ public class EmailBounceServiceTests
             providerName: "Graph"));
         await db.SaveChangesAsync();
 
-        var sut = new EmailBounceService(db);
+        var sut = CreateService(db);
 
         await sut.RecordBounceAsync(new EmailBounceWebhookRequest
         {
@@ -48,7 +51,7 @@ public class EmailBounceServiceTests
         db.NotificationDispatches.Add(CreateDispatch(providerMessageId: "legacy-provider-1"));
         await db.SaveChangesAsync();
 
-        var sut = new EmailBounceService(db);
+        var sut = CreateService(db);
 
         await sut.RecordBounceAsync(new EmailBounceWebhookRequest
         {
@@ -67,7 +70,7 @@ public class EmailBounceServiceTests
     public async Task RecordBounceAsync_WithUnknownProviderMessageId_RecordsEventWithoutThrowing()
     {
         await using var db = CreateDbContext();
-        var sut = new EmailBounceService(db);
+        var sut = CreateService(db);
 
         await sut.RecordBounceAsync(new EmailBounceWebhookRequest
         {
@@ -85,10 +88,14 @@ public class EmailBounceServiceTests
     {
         var options = new DbContextOptionsBuilder<NotificationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         return new NotificationDbContext(options);
     }
+
+    private static EmailBounceService CreateService(NotificationDbContext db)
+        => new(new EmailBouncebackStore(db, NullLogger<EmailBouncebackStore>.Instance));
 
     private static NotificationDispatchModel CreateDispatch(
         string providerMessageId,

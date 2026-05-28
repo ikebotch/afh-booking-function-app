@@ -17,7 +17,6 @@ public class NotificationOutboxServiceTests
     private readonly Mock<INotificationQueuePublisher> _queuePublisherMock = new();
     private readonly Mock<INotificationIdempotencyKeyGenerator> _keyGeneratorMock = new();
     private readonly Mock<INotificationRecipientResolver> _recipientResolverMock = new();
-    private readonly Mock<IContactCentreRoutingResolver> _contactCentreResolverMock = new();
 
     private readonly NotificationOutboxService _sut;
 
@@ -28,7 +27,6 @@ public class NotificationOutboxServiceTests
             _queuePublisherMock.Object,
             _keyGeneratorMock.Object,
             _recipientResolverMock.Object,
-            _contactCentreResolverMock.Object,
             NullLogger<NotificationOutboxService>.Instance);
     }
 

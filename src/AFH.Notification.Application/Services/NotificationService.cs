@@ -13,7 +13,6 @@ public sealed class NotificationService : INotificationService, INotificationPub
     private readonly INotificationDeliveryAuditStore _deliveryAuditStore;
     private readonly INotificationRecipientResolver _recipientResolver;
     private readonly INotificationTemplateRenderer _templateRenderer;
-    private readonly IContactCentreRoutingResolver _contactCentreResolver;
     private readonly IReadOnlyList<INotificationDeliveryGateway> _deliveryGateways;
     private readonly ILogger<NotificationService> _logger;
 
@@ -22,7 +21,6 @@ public sealed class NotificationService : INotificationService, INotificationPub
         INotificationDeliveryAuditStore deliveryAuditStore,
         INotificationRecipientResolver recipientResolver,
         INotificationTemplateRenderer templateRenderer,
-        IContactCentreRoutingResolver contactCentreResolver,
         IEnumerable<INotificationDeliveryGateway> deliveryGateways,
         ILogger<NotificationService> logger)
     {
@@ -30,7 +28,6 @@ public sealed class NotificationService : INotificationService, INotificationPub
         _deliveryAuditStore = deliveryAuditStore;
         _recipientResolver = recipientResolver;
         _templateRenderer = templateRenderer;
-        _contactCentreResolver = contactCentreResolver;
         _deliveryGateways = deliveryGateways.ToArray();
         _logger = logger;
     }
@@ -62,22 +59,6 @@ public sealed class NotificationService : INotificationService, INotificationPub
             }
 
             var activeRecipients = route.Recipients.Where(x => x.PreferredChannels?.Contains(content.Channel) == true).ToList();
-            
-            if (route.CopyContactCentre)
-            {
-                var ccTarget = _contactCentreResolver.GetContactCentreEmailAddress();
-                if (content.Channel == NotificationChannel.Email)
-                {
-                    if (string.IsNullOrWhiteSpace(ccTarget))
-                    {
-                        _logger.LogWarning("Contact centre copy skipped: ContactCentreEmailAddress is missing or blank.");
-                    }
-                    else if (!activeRecipients.Any(r => string.Equals(r.Email, ccTarget, StringComparison.OrdinalIgnoreCase)))
-                    {
-                        activeRecipients.Add(new NotificationRecipient("ContactCentre", "Contact Centre", ccTarget, null, null, [content.Channel]));
-                    }
-                }
-            }
 
             foreach (var recipient in activeRecipients)
             {

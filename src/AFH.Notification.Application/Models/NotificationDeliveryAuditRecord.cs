@@ -20,4 +20,6 @@ public sealed record NotificationDeliveryAuditRecord(
     string? TemplateKey,
     string? TemplateVersion,
     DateTime CreatedUtc,
-    DateTime UpdatedUtc);
+    DateTime UpdatedUtc,
+    string? MessageSubject = null,
+    string? MessageBody = null);

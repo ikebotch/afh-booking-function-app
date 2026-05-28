@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<EmailBouncebackParser>();
         services.AddScoped<INotificationBouncebackStore, EmailBouncebackStore>();
+        services.AddScoped<INotificationBounceAuditStore, EmailBouncebackStore>();
         services.AddScoped<INotificationBouncebackProcessor, EmailBouncebackProcessor>();
 
         return services;

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AFH.Notification.Infrastructure.Bouncebacks;
 
-public sealed class EmailBouncebackStore : INotificationBouncebackStore
+public sealed class EmailBouncebackStore : INotificationBouncebackStore, INotificationBounceAuditStore
 {
     private readonly NotificationDbContext _db;
     private readonly ILogger<EmailBouncebackStore> _logger;
@@ -20,11 +20,21 @@ public sealed class EmailBouncebackStore : INotificationBouncebackStore
 
     public async Task RecordBouncebackAsync(NotificationBounceback bounceback, CancellationToken ct)
     {
+        await RecordAsync(new NotificationBounceAuditRecord(
+            bounceback.ProviderMessageId,
+            RecipientEmail: null,
+            bounceback.Status,
+            bounceback.BounceReason,
+            bounceback.TimestampUtc), ct);
+    }
+
+    public async Task<NotificationBounceAuditResult> RecordAsync(NotificationBounceAuditRecord record, CancellationToken ct)
+    {
         _logger.LogInformation(
             "Recording bounceback for ProviderMessageId={ProviderMessageId}, Status={Status}, Reason={Reason}",
-            bounceback.ProviderMessageId,
-            bounceback.Status,
-            bounceback.BounceReason);
+            record.ProviderMessageId,
+            record.ReasonCode,
+            record.ReasonDetail);
 
         await using var transaction = await _db.Database.BeginTransactionAsync(ct);
 
@@ -32,41 +42,51 @@ public sealed class EmailBouncebackStore : INotificationBouncebackStore
         {
             var now = DateTime.UtcNow;
             var dispatches = await _db.NotificationDispatches
-                .Where(x => x.ProviderMessageId == bounceback.ProviderMessageId)
+                .Where(x => x.ProviderMessageId == record.ProviderMessageId)
                 .ToListAsync(ct);
 
             if (dispatches.Count == 0)
             {
                 _logger.LogWarning(
                     "Bounceback ProviderMessageId={ProviderMessageId} did not match a NotificationDispatches row; recording EmailBounceEvents only.",
-                    bounceback.ProviderMessageId);
+                    record.ProviderMessageId);
             }
 
             foreach (var dispatch in dispatches)
             {
-                dispatch.EmailStatus = bounceback.Status;
-                dispatch.OutcomeCode = bounceback.Status;
-                dispatch.FailureDetails = bounceback.BounceReason;
+                dispatch.EmailStatus = record.ReasonCode ?? "Bounced";
+                dispatch.OutcomeCode = record.ReasonCode ?? "Bounced";
+                dispatch.FailureDetails = record.ReasonDetail;
                 dispatch.UpdatedUtc = now;
             }
 
+            var bounceId = Guid.NewGuid().ToString("N");
             await _db.EmailBounceEvents.AddAsync(new EmailBounceEventModel
             {
-                Id = Guid.NewGuid().ToString("N"),
-                ProviderMessageId = bounceback.ProviderMessageId,
-                ReasonCode = bounceback.Status,
-                ReasonDetail = bounceback.BounceReason,
-                OccurredUtc = bounceback.TimestampUtc,
+                Id = bounceId,
+                ProviderMessageId = record.ProviderMessageId,
+                RecipientEmail = record.RecipientEmail,
+                ReasonCode = record.ReasonCode,
+                ReasonDetail = record.ReasonDetail,
+                OccurredUtc = record.OccurredUtc,
                 ReceivedUtc = now
             }, ct);
 
             await _db.SaveChangesAsync(ct);
 
             await transaction.CommitAsync(ct);
+            return new NotificationBounceAuditResult(
+                bounceId,
+                record.ProviderMessageId,
+                record.RecipientEmail,
+                record.ReasonCode,
+                record.ReasonDetail,
+                record.OccurredUtc,
+                now);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to persist bounceback for message {MessageId}", bounceback.ProviderMessageId);
+            _logger.LogError(ex, "Failed to persist bounceback for message {MessageId}", record.ProviderMessageId);
             await transaction.RollbackAsync(ct);
             throw;
         }

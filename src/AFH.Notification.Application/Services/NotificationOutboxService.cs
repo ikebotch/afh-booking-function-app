@@ -14,7 +14,6 @@ public sealed class NotificationOutboxService : INotificationPublisher
     private readonly INotificationQueuePublisher _queuePublisher;
     private readonly INotificationIdempotencyKeyGenerator _keyGenerator;
     private readonly INotificationRecipientResolver _recipientResolver;
-    private readonly IContactCentreRoutingResolver _contactCentreResolver;
     private readonly ILogger<NotificationOutboxService> _logger;
 
     public NotificationOutboxService(
@@ -22,14 +21,12 @@ public sealed class NotificationOutboxService : INotificationPublisher
         INotificationQueuePublisher queuePublisher,
         INotificationIdempotencyKeyGenerator keyGenerator,
         INotificationRecipientResolver recipientResolver,
-        IContactCentreRoutingResolver contactCentreResolver,
         ILogger<NotificationOutboxService> logger)
     {
         _outboxStore = outboxStore;
         _queuePublisher = queuePublisher;
         _keyGenerator = keyGenerator;
         _recipientResolver = recipientResolver;
-        _contactCentreResolver = contactCentreResolver;
         _logger = logger;
     }
 
@@ -37,18 +34,7 @@ public sealed class NotificationOutboxService : INotificationPublisher
     {
         var route = await _recipientResolver.ResolveAsync(notification, ct);
 
-        var activeRecipients = route.Recipients.ToList();
-
-        if (route.CopyContactCentre)
-        {
-            var ccEmail = _contactCentreResolver.GetContactCentreEmailAddress();
-            if (!string.IsNullOrWhiteSpace(ccEmail) && !activeRecipients.Any(r => string.Equals(r.Email, ccEmail, StringComparison.OrdinalIgnoreCase)))
-            {
-                activeRecipients.Add(new NotificationRecipient("ContactCentre", "Contact Centre", ccEmail, null, null, [NotificationChannel.Email]));
-            }
-        }
-
-        foreach (var recipient in activeRecipients)
+        foreach (var recipient in route.Recipients)
         {
             var channels = recipient.PreferredChannels ?? Array.Empty<NotificationChannel>();
             foreach (var channel in channels)

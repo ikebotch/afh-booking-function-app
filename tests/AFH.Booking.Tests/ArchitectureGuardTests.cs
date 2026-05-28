@@ -317,6 +317,14 @@ public sealed class ArchitectureGuardTests
         Assert.DoesNotContain("BookingNotificationRuleRecipients", notificationDbSetNames);
     }
 
+    [Fact]
+    public void BookingProjects_DoNotReferenceNotificationInfrastructureInternals()
+    {
+        AssertDoesNotReference("AFH.Booking.Application", "AFH.Notification.Infrastructure");
+        AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Notification.Infrastructure");
+        AssertDoesNotReference("AFH.Booking.Domain", "AFH.Notification.Infrastructure");
+    }
+
     private static string[] GetHttpFunctionNames(Assembly functionAssembly) =>
         functionAssembly.GetTypes()
             .SelectMany(type => type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static))

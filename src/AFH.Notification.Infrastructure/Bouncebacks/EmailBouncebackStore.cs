@@ -54,6 +54,7 @@ public sealed class EmailBouncebackStore : INotificationBouncebackStore, INotifi
 
             foreach (var dispatch in dispatches)
             {
+                dispatch.Status = record.ReasonCode ?? "Bounced";
                 dispatch.EmailStatus = record.ReasonCode ?? "Bounced";
                 dispatch.OutcomeCode = record.ReasonCode ?? "Bounced";
                 dispatch.FailureDetails = record.ReasonDetail;

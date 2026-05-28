@@ -15,27 +15,12 @@ public sealed class NotificationDeliveryAuditStore : INotificationDeliveryAuditS
 
     public async Task RecordAttemptAsync(NotificationDeliveryAuditRecord record, CancellationToken ct)
     {
-        var isEmail = string.Equals(record.Channel, "Email", StringComparison.OrdinalIgnoreCase);
-        var bookingId = string.IsNullOrWhiteSpace(record.BookingId)
-            ? record.CorrelationId ?? record.NotificationOutboxId?.ToString("N") ?? record.Id
-            : record.BookingId;
-
         await _db.NotificationDispatches.AddAsync(new NotificationDispatchModel
         {
             Id = record.Id,
-            BookingId = TruncateRequired(bookingId, 64),
-            TransactionId = Truncate(record.TransactionId, 64),
-            TransactionRef = Truncate(record.TransactionRef, 128),
             CorrelationId = Truncate(record.CorrelationId, 150),
-            EventType = TruncateRequired(record.NotificationType, 64),
-            SmsRequested = !isEmail,
-            EmailRequested = isEmail,
-            SmsStatus = isEmail ? "Skipped" : TruncateRequired(record.Status, 32),
-            EmailStatus = isEmail ? TruncateRequired(record.Status, 32) : "Skipped",
-            OutcomeCode = TruncateRequired(record.Status, 64),
             FailureDetails = record.FailureDetails,
             RecipientType = Truncate(record.RecipientType, 100),
-            RecipientPhone = Truncate(record.RecipientPhone, 64),
             RecipientEmail = Truncate(record.RecipientEmail, 320),
             ProviderMessageId = Truncate(record.ProviderMessageId, 200),
             MessageSubject = Truncate(record.MessageSubject, 500),
@@ -44,12 +29,15 @@ public sealed class NotificationDeliveryAuditStore : INotificationDeliveryAuditS
             UpdatedUtc = record.UpdatedUtc,
             NotificationOutboxId = record.NotificationOutboxId,
             SourceApplication = TruncateRequired(record.SourceApplication, 100),
+            SourceReferenceType = Truncate(record.SourceReferenceType, 100),
+            SourceReferenceId = Truncate(record.SourceReferenceId, 150),
             NotificationType = TruncateRequired(record.NotificationType, 150),
+            RecipientMobile = Truncate(record.RecipientMobile, 50),
             Channel = TruncateRequired(record.Channel, 50),
             ProviderName = TruncateRequired(record.ProviderName, 100),
-            TemplateName = Truncate(record.TemplateKey, 200),
             TemplateKey = Truncate(record.TemplateKey, 150),
             TemplateVersion = Truncate(record.TemplateVersion, 50),
+            Status = TruncateRequired(record.Status, 50),
             CompletedUtc = string.Equals(record.Status, "Failed", StringComparison.OrdinalIgnoreCase) ? null : record.UpdatedUtc
         }, ct);
 

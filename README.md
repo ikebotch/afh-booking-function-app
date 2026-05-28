@@ -88,6 +88,10 @@
   - `BookingDbContext` owns `BookingNotificationRules`, `BookingNotificationRuleChannels`, and `BookingNotificationRuleRecipients`.
   - Booking policy rows reference notification templates by `TemplateKey` and `TemplateVersion`; Booking does not own template subject/body content.
   - Do not add recipient policy columns such as `SendToClient`, `SendToAdviser`, or `CopyContactCentre`; future recipient types are rows in `BookingNotificationRuleRecipients`.
+- `NotificationDispatches` is source-neutral for new queued delivery audit:
+  - New queued writes populate neutral columns such as `SourceApplication`, `SourceReferenceType`, `SourceReferenceId`, `NotificationType`, `RecipientType`, `RecipientEmail`, `RecipientMobile`, `Channel`, `ProviderName`, `ProviderMessageId`, `TemplateKey`, `TemplateVersion`, `Status`, and `FailureDetails`.
+  - Legacy Booking-specific columns (`BookingId`, `TransactionId`, `TransactionRef`, `LifecycleEventId`, `EventType`, `SmsRequested`, `EmailRequested`, `SmsStatus`, `EmailStatus`, `OutcomeCode`, `RecipientPhone`, and `TemplateName`) are retained only for compatibility with historical rows/reporting and older audit flows.
+  - `Status` is the neutral delivery-attempt status. `OutcomeCode`, `EmailStatus`, and `SmsStatus` are temporary compatibility fields and should be removed only after retention/reporting review.
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
 
 ## Notification Configuration Split

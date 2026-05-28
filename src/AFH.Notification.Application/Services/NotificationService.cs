@@ -141,17 +141,20 @@ public sealed class NotificationService : INotificationService, INotificationPub
         var data = notification.Data;
         data.TryGetValue("bookingId", out var bookingId);
         data.TryGetValue("holdId", out var holdId);
-        data.TryGetValue("transactionId", out var transactionId);
-        data.TryGetValue("transactionRef", out var transactionRef);
+        var sourceReferenceId = string.IsNullOrWhiteSpace(bookingId) ? holdId : bookingId;
+        var sourceReferenceType = string.IsNullOrWhiteSpace(bookingId) && !string.IsNullOrWhiteSpace(holdId)
+            ? "Hold"
+            : !string.IsNullOrWhiteSpace(bookingId)
+                ? "Booking"
+                : null;
 
         return new NotificationDeliveryAuditRecord(
             Guid.NewGuid().ToString("N"),
             notificationOutboxId,
             notification.SourceSystem,
+            sourceReferenceType,
+            sourceReferenceId,
             notification.Type.Name,
-            string.IsNullOrWhiteSpace(bookingId) ? holdId : bookingId,
-            transactionId,
-            transactionRef,
             channel.ToString(),
             recipient.RecipientType,
             recipient.Email,

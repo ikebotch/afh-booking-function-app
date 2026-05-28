@@ -37,6 +37,7 @@ public class EmailBounceServiceTests
         }, CancellationToken.None);
 
         var dispatch = await db.NotificationDispatches.SingleAsync(x => x.ProviderMessageId == "queued-provider-1");
+        Assert.Equal("Bounced", dispatch.Status);
         Assert.Equal("Bounced", dispatch.EmailStatus);
         Assert.Equal(outboxId, dispatch.NotificationOutboxId);
         Assert.Equal("Graph", dispatch.ProviderName);
@@ -61,6 +62,7 @@ public class EmailBounceServiceTests
         }, CancellationToken.None);
 
         var dispatch = await db.NotificationDispatches.SingleAsync(x => x.ProviderMessageId == "legacy-provider-1");
+        Assert.Equal("Bounced", dispatch.Status);
         Assert.Equal("Bounced", dispatch.EmailStatus);
         Assert.Null(dispatch.NotificationOutboxId);
         Assert.Single(await db.EmailBounceEvents.ToListAsync());

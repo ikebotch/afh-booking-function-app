@@ -60,7 +60,8 @@ public sealed class NotificationServiceTests
         Assert.Equal(LifecycleActors.Client, request.ProviderMetadata?["actorType"]);
         Assert.Equal("Booking", request.ProviderMetadata?["actorSourceApplication"]);
         var dispatch = Assert.Single(deliveryAudit.Records);
-        Assert.Equal("booking-1", dispatch.BookingId);
+        Assert.Equal("Booking", dispatch.SourceReferenceType);
+        Assert.Equal("booking-1", dispatch.SourceReferenceId);
         Assert.Equal("BookingConfirmed", dispatch.NotificationType);
         Assert.Equal("Email", dispatch.Channel);
         Assert.Equal("Composed", dispatch.ProviderName);

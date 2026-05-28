@@ -43,6 +43,9 @@ public sealed class HttpNotificationPublisher : INotificationPublisher
             request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey.Trim());
 
         var internalToken = ResolveInternalToken();
+        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
+            request.Headers.TryAddWithoutValidation("x-functions-key", _options.FunctionKey.Trim());
+
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", internalToken);
 
         _logger.LogInformation(
@@ -77,6 +80,6 @@ public sealed class HttpNotificationPublisher : INotificationPublisher
             return _options.InternalToken.Trim();
 
         throw new InvalidOperationException(
-            "Notifications:Integration:Http:InternalToken is required for HTTP notification publishing.");
+            "InternalApiAuth:Token is required for HTTP notification publishing unless Notifications:Integration:Http:InternalToken is configured.");
     }
 }

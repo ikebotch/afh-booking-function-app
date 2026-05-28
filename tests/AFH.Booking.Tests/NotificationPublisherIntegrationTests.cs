@@ -78,6 +78,23 @@ public sealed class NotificationPublisherIntegrationTests
     }
 
     [Fact]
+    public void AddNotificationInfrastructure_UsesSharedInternalApiToken_WhenNotificationTokenIsNotConfigured()
+    {
+        var config = CreateConfig(
+            ("Notifications:Integration:Http:BaseUrl", "https://notification.example"),
+            ("InternalApiAuth:Token", "shared-internal-token"));
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+        services.AddNotificationInfrastructure(config);
+        using var provider = services.BuildServiceProvider();
+
+        var options = provider.GetRequiredService<IOptions<HttpNotificationPublisherOptions>>().Value;
+
+        Assert.Equal("shared-internal-token", options.InternalToken);
+    }
+
+    [Fact]
     public async Task HttpNotificationPublisher_PostsNotificationRequested_WithCorrelationAndIdempotencyHeaders()
     {
         HttpRequestMessage? captured = null;
@@ -94,6 +111,7 @@ public sealed class NotificationPublisherIntegrationTests
             {
                 BaseUrl = "https://notification.example",
                 RequestPath = "/api/v1/notifications/requests",
+                FunctionKey = "notification-function-key",
                 InternalToken = "internal-token"
             }));
 
@@ -109,6 +127,7 @@ public sealed class NotificationPublisherIntegrationTests
         Assert.Equal("https://notification.example/api/v1/notifications/requests", captured.RequestUri?.ToString());
         Assert.Equal("corr-123", captured.Headers.GetValues("x-correlation-id").Single());
         Assert.Equal("idem-123", captured.Headers.GetValues("Idempotency-Key").Single());
+        Assert.Equal("notification-function-key", captured.Headers.GetValues("x-functions-key").Single());
         Assert.Equal("Bearer", captured.Headers.Authorization?.Scheme);
         Assert.Equal("internal-token", captured.Headers.Authorization?.Parameter);
     }
@@ -128,6 +147,23 @@ public sealed class NotificationPublisherIntegrationTests
     }
 
     [Fact]
+    public async Task HttpNotificationPublisher_UsesFunctionKeyHeader_WhenConfigured()
+    {
+        HttpRequestMessage? captured = null;
+        var publisher = CreateHttpPublisher(
+            request => captured = request,
+            notificationInternalToken: "notification-token",
+            notificationFunctionKey: "notification-function-key");
+
+        await publisher.PublishAsync(CreateNotification(), CancellationToken.None);
+
+        Assert.NotNull(captured);
+        Assert.True(captured!.Headers.TryGetValues("x-functions-key", out var functionKeyValues));
+        Assert.Equal("notification-function-key", functionKeyValues!.Single());
+        Assert.DoesNotContain("code=", captured!.RequestUri!.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task HttpNotificationPublisher_MissingInternalToken_FailsClearly()
     {
         var publisher = CreateHttpPublisher(
@@ -138,7 +174,7 @@ public sealed class NotificationPublisherIntegrationTests
             publisher.PublishAsync(CreateNotification(), CancellationToken.None));
 
         Assert.Equal(
-            "Notifications:Integration:Http:InternalToken is required for HTTP notification publishing.",
+            "InternalApiAuth:Token is required for HTTP notification publishing unless Notifications:Integration:Http:InternalToken is configured.",
             ex.Message);
     }
 
@@ -153,7 +189,7 @@ public sealed class NotificationPublisherIntegrationTests
             publisher.PublishAsync(CreateNotification(), CancellationToken.None));
 
         Assert.Equal(
-            "Notifications:Integration:Http:InternalToken is required for HTTP notification publishing.",
+            "InternalApiAuth:Token is required for HTTP notification publishing unless Notifications:Integration:Http:InternalToken is configured.",
             ex.Message);
     }
 
@@ -165,7 +201,7 @@ public sealed class NotificationPublisherIntegrationTests
         var publisher = CreateHttpPublisher(
             request => captured = request,
             notificationInternalToken: "notification-secret-token",
-            logger);
+            logger: logger);
 
         await publisher.PublishAsync(CreateNotification(), CancellationToken.None);
 
@@ -211,6 +247,7 @@ public sealed class NotificationPublisherIntegrationTests
     private static HttpNotificationPublisher CreateHttpPublisher(
         Action<HttpRequestMessage> capture,
         string? notificationInternalToken,
+        string? notificationFunctionKey = null,
         ILogger<HttpNotificationPublisher>? logger = null)
     {
         return new HttpNotificationPublisher(
@@ -226,6 +263,7 @@ public sealed class NotificationPublisherIntegrationTests
             {
                 BaseUrl = "https://notification.example",
                 RequestPath = "/api/v1/notifications/requests",
+                FunctionKey = notificationFunctionKey,
                 InternalToken = notificationInternalToken
             }),
             logger);

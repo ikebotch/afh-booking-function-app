@@ -30,7 +30,13 @@ public static class ServiceCollectionExtensions
         services.Configure<PushDeliveryOptions>(configuration.GetSection(PushDeliveryOptions.SectionName));
         services.Configure<NotificationQueueOptions>(options => BindNotificationQueueOptions(configuration, options));
         services.Configure<NotificationIntegrationOptions>(configuration.GetSection(NotificationIntegrationOptions.SectionName));
-        services.Configure<HttpNotificationPublisherOptions>(configuration.GetSection(HttpNotificationPublisherOptions.SectionName));
+        services.Configure<HttpNotificationPublisherOptions>(options =>
+        {
+            configuration.GetSection(HttpNotificationPublisherOptions.SectionName).Bind(options);
+
+            if (string.IsNullOrWhiteSpace(options.InternalToken))
+                options.InternalToken = configuration["InternalApiAuth:Token"];
+        });
         services.Configure<ServiceBusNotificationPublisherOptions>(configuration.GetSection(ServiceBusNotificationPublisherOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("BookingDb")

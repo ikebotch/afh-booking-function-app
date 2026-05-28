@@ -499,6 +499,7 @@ public sealed class ArchitectureGuardTests
 
         Assert.Contains("Notifications:Integration:Transport", template, StringComparison.Ordinal);
         Assert.Contains("Notifications:Integration:Http:BaseUrl", template, StringComparison.Ordinal);
+        Assert.Contains("Notifications:Integration:Http:FunctionKey", template, StringComparison.Ordinal);
         Assert.Contains("Notifications:Integration:ServiceBus:TopicName", template, StringComparison.Ordinal);
         Assert.Contains("Notifications:Inbound:ServiceBus:Enabled", template, StringComparison.Ordinal);
         Assert.Contains("Notifications:Inbound:ServiceBus:TopicName", template, StringComparison.Ordinal);

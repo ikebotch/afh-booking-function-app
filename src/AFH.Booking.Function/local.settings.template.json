@@ -94,7 +94,7 @@
     "Notifications:Integration:Http:BaseUrl": "https://notification.example",
     "Notifications:Integration:Http:RequestPath": "/api/v1/notifications/requests",
     "Notifications:Integration:Http:TimeoutSeconds": "30",
-    "Notifications:Integration:Http:InternalToken": "<notification-outbound-internal-token>",
+    "Notifications:Integration:Http:FunctionKey": "<notification-function-key>",
     "Notifications:Integration:ServiceBus:FullyQualifiedNamespace": "<service-bus-namespace>.servicebus.windows.net",
     "Notifications:Integration:ServiceBus:ConnectionString": "<service-bus-connection-string>",
     "Notifications:Integration:ServiceBus:TopicName": "notification-requests",

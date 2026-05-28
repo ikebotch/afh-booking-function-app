@@ -140,8 +140,10 @@
   - `Notifications:Integration:Http:BaseUrl`
   - `Notifications:Integration:Http:RequestPath`
   - `Notifications:Integration:Http:TimeoutSeconds`
+  - `Notifications:Integration:Http:FunctionKey`
+    - Required when the receiving notification endpoint uses Azure Functions `AuthorizationLevel.Function`; sent as `x-functions-key`.
   - `Notifications:Integration:Http:InternalToken`
-    - Required for HTTP publishing. `InternalApiAuth:Token` remains receiver-side validation only and is not used as an outbound publisher fallback.
+    - Optional override for HTTP publishing. When omitted, the publisher uses the shared `InternalApiAuth:Token`.
   - `Notifications:Integration:ServiceBus:FullyQualifiedNamespace`
   - `Notifications:Integration:ServiceBus:ConnectionString`
   - `Notifications:Integration:ServiceBus:TopicName`

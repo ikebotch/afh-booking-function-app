@@ -52,24 +52,26 @@
 ## Notification Architecture
 - Applications publish notification intent. Booking lifecycle owns when notification intent is created.
 - Booking owns notification policy/routing decisions for Booking events.
-- Notification bounded context owns execution, templates, queueing, delivery audit, and bounceback processing.
+- Notification bounded context owns execution, templates, queueing, rendered-message audit, delivery audit, and bounceback processing.
 - Email is the first channel supported; SMS and Push are future channels.
 - Notification templates are stored in `NotificationTemplates` through EF migrations for `NotificationDbContext`; embedded `.txt` templates are retained as a one-release fallback.
 - Bouncebacks are provider feedback handled explicitly by Notification Infrastructure.
 - Contact-centre copy is a Booking recipient policy row, not a column on `NotificationOutbox` or `NotificationDispatches`.
-- Hold notifications are enabled; they should be configuration-gated before production if the business has not explicitly approved them.
+- Hold notifications are disabled by default and must remain configuration-gated unless the business explicitly approves them.
 - Both notification paths are intentionally active during the Sprint 7 transition.
 - New hybrid queued path:
-  - `BookingNotificationStep` -> `NotificationOutbox` -> Azure Queue message containing only `outboxId` -> `SendNotificationQueueTrigger` -> `NotificationService` -> `GraphEmailDeliveryGateway` -> `NotificationOutbox` status update.
-  - `NotificationOutbox` is the new hybrid queued dispatcher and its schema is deployed through EF migrations for `NotificationDbContext`.
+  - Current in-process transition: `BookingNotificationStep` -> `NotificationOutbox` -> Azure Queue message containing only `outboxId` -> `SendNotificationQueueTrigger` -> `NotificationService` -> `GraphEmailDeliveryGateway` -> `NotificationOutbox` status update.
+  - Final service split target: Booking resolves policy/recipients/template/channel, publishes a durable `NotificationRequested` integration message, and stops; Notification consumes that message, creates `NotificationOutbox`, and uses the internal OutboxId queue.
+  - `NotificationOutbox` is Notification-owned. The Azure Queue `outboxId` message is internal to the Notification service, not the Booking-to-Notification boundary.
+  - Use Azure Service Bus or an equivalent durable integration transport for the Booking-to-Notification boundary. Do not use HTTP for the primary send path unless there is a strong operational reason.
 - Retained compatibility path:
   - `ApprovalNotificationService`, queued delivery audit, and bouncebacks continue to use `NotificationDispatches`.
   - `NotificationDispatches` remains active for delivery audit and bounceback correlation. Do not drop it yet.
 - The new path uses a hybrid dispatch model.
   - SQL stores the full notification payload, processing state, idempotency key, and audit metadata in `NotificationOutbox`.
-  - Azure Storage Queue is used only as a wake-up signal and contains only `outboxId`.
-  - Flow: Booking lifecycle event -> `NotificationOutbox` row in SQL -> Azure Queue message containing only `outboxId` -> queue trigger loads full payload from SQL -> `NotificationService` dispatches through Graph -> SQL status is updated.
-  - Azure Queue does not contain sensitive notification data.
+  - Azure Storage Queue is used only as an internal Notification-service wake-up signal and contains only `outboxId`.
+  - Transitional flow: Booking lifecycle event -> `NotificationOutbox` row in SQL -> Azure Queue message containing only `outboxId` -> queue trigger loads full payload from SQL -> `NotificationService` dispatches through Graph -> SQL status is updated.
+  - Azure Queue does not contain sensitive notification data. Do not put rendered subject/body, render data, provider metadata content, or full `NotificationRequested` payloads in Azure Queue, Azure Table storage, or external queue payloads.
   - SQL remains the source of truth.
   - No Event Grid subscription is needed for Azure Queue sending; the queue trigger listens automatically.
   - Queue settings are required: `Notifications__Queue__QueueName` and `Notifications__Queue__ConnectionString`.
@@ -83,14 +85,20 @@
 - Production deployment requires Key Vault/App Settings for Graph credentials and mailbox permissions for SendMail.
 - Contact-centre copies require `Notifications:Email:ContactCentreEmailAddress`.
 - Bounceback auditing persists `EmailBounceEvents` and correlates with the unified `NotificationDispatches` delivery-attempt audit table. `NotificationOutbox` remains job-level; `NotificationDispatches` remains recipient/channel/provider attempt-level.
+- Rendered message audit is stored in `NotificationMessageLogs`, not `NotificationDispatches`.
+  - `NotificationMessageLogs` is Notification-owned SQL data and is allowed to contain sensitive rendered notification content because SQL is the approved sensitive store for this flow.
+  - It stores exact rendered subject/body, template key/version, channel, recipient metadata, dispatch id, outbox id, render data JSON, body hash, and created timestamp.
+  - Treat `NotificationMessageLogs` as sensitive audit data. Do not log rendered bodies to application logs and do not include rendered content in queue messages, Azure Table storage, or provider correlation metadata.
+  - Storing rendered body content is a separate business/compliance decision from lightweight delivery metadata. `NotificationDispatches` must remain lightweight for normal dispatch queries.
 - Table ownership is logical even though the tables live in the same Booking SQL database:
-  - `NotificationDbContext` owns `NotificationOutbox`, `NotificationDispatches`, `EmailBounceEvents`, and `NotificationTemplates`.
+  - `NotificationDbContext` owns `NotificationOutbox`, `NotificationDispatches`, `NotificationMessageLogs`, `EmailBounceEvents`, and `NotificationTemplates`.
   - `BookingDbContext` owns `BookingNotificationRules`, `BookingNotificationRuleChannels`, and `BookingNotificationRuleRecipients`.
   - Booking policy rows reference notification templates by `TemplateKey` and `TemplateVersion`; Booking does not own template subject/body content.
   - Do not add recipient policy columns such as `SendToClient`, `SendToAdviser`, or `CopyContactCentre`; future recipient types are rows in `BookingNotificationRuleRecipients`.
 - `NotificationDispatches` is source-neutral for new queued delivery audit:
   - New queued writes populate neutral columns such as `SourceApplication`, `SourceReferenceType`, `SourceReferenceId`, `NotificationType`, `RecipientType`, `RecipientEmail`, `RecipientMobile`, `Channel`, `ProviderName`, `ProviderMessageId`, `TemplateKey`, `TemplateVersion`, `Status`, and `FailureDetails`.
   - Legacy Booking-specific columns (`BookingId`, `TransactionId`, `TransactionRef`, `LifecycleEventId`, `EventType`, `SmsRequested`, `EmailRequested`, `SmsStatus`, `EmailStatus`, `OutcomeCode`, `RecipientPhone`, and `TemplateName`) are retained only for compatibility with historical rows/reporting and older audit flows.
+  - `MessageSubject` and `MessageBody` are compatibility columns only; new queued writes do not populate them as the primary rendered-content store.
   - `Status` is the neutral delivery-attempt status. `OutcomeCode`, `EmailStatus`, and `SmsStatus` are temporary compatibility fields and should be removed only after retention/reporting review.
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
 
@@ -139,7 +147,7 @@
 - Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.
 - Create and apply an EF migration from the infrastructure project before deploying to shared environments.
 - `NotificationOutbox` schema is deployed through EF migrations for `NotificationDbContext`.
-- `NotificationTemplates`, `NotificationDispatches`, and `EmailBounceEvents` are notification-owned and mapped by `NotificationDbContext`.
+- `NotificationTemplates`, `NotificationDispatches`, `NotificationMessageLogs`, and `EmailBounceEvents` are notification-owned and mapped by `NotificationDbContext`.
 - Booking notification policy tables are Booking-owned and mapped by `BookingDbContext`.
 - Do not manually maintain `notification-outbox.sql` as the source of truth.
 - Treat that migration as required infra work for this backend phase.

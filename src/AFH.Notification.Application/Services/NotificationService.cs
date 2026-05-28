@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
 using AFH.Notification.Contract.Abstractions;
@@ -96,7 +99,8 @@ public sealed class NotificationService : INotificationService, INotificationPub
                                 result.Status,
                                 result.ProviderMessageId,
                                 null,
-                                now),
+                                now,
+                                content),
                             ct);
                     }
                     catch (Exception ex)
@@ -111,7 +115,8 @@ public sealed class NotificationService : INotificationService, INotificationPub
                                 "Failed",
                                 null,
                                 ex.Message,
-                                now),
+                                now,
+                                content),
                             ct);
                         throw;
                     }
@@ -136,7 +141,8 @@ public sealed class NotificationService : INotificationService, INotificationPub
         string status,
         string? providerMessageId,
         string? failureDetails,
-        DateTime now)
+        DateTime now,
+        NotificationChannelContent content)
     {
         var data = notification.Data;
         data.TryGetValue("bookingId", out var bookingId);
@@ -147,9 +153,18 @@ public sealed class NotificationService : INotificationService, INotificationPub
             : !string.IsNullOrWhiteSpace(bookingId)
                 ? "Booking"
                 : null;
+        var dispatchUid = Guid.NewGuid();
+        var templateKey = data.TryGetValue("TemplateKey", out var resolvedTemplateKey)
+            ? resolvedTemplateKey
+            : $"{notification.SourceSystem}.{notification.Type.Name}";
+        var templateVersion = data.TryGetValue("TemplateVersion", out var resolvedTemplateVersion)
+            ? resolvedTemplateVersion
+            : "v1";
+        var body = content.HtmlBody ?? content.TextBody;
 
         return new NotificationDeliveryAuditRecord(
-            Guid.NewGuid().ToString("N"),
+            dispatchUid.ToString("N"),
+            dispatchUid,
             notificationOutboxId,
             notification.SourceSystem,
             sourceReferenceType,
@@ -164,10 +179,36 @@ public sealed class NotificationService : INotificationService, INotificationPub
             providerMessageId,
             failureDetails,
             notification.CorrelationId,
-            data.TryGetValue("TemplateKey", out var templateKey) ? templateKey : $"{notification.SourceSystem}.{notification.Type.Name}",
-            data.TryGetValue("TemplateVersion", out var templateVersion) ? templateVersion : null,
+            templateKey,
+            templateVersion,
             now,
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            MessageLog: new NotificationMessageLogRecord(
+                Guid.NewGuid(),
+                dispatchUid,
+                notificationOutboxId,
+                notification.SourceSystem,
+                notification.Type.Name,
+                notification.CorrelationId,
+                recipient.RecipientType,
+                recipient.Email,
+                recipient.MobileNumber,
+                channel.ToString(),
+                templateKey,
+                templateVersion,
+                TemplateContentId: null,
+                content.Subject,
+                body,
+                content.ContentType,
+                JsonSerializer.Serialize(data),
+                ComputeSha256(body),
+                now));
+    }
+
+    private static string ComputeSha256(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     private static string GetTargetKey(NotificationRecipient recipient, NotificationChannel channel)

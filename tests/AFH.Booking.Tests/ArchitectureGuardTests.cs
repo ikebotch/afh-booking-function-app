@@ -303,6 +303,7 @@ public sealed class ArchitectureGuardTests
 
         Assert.DoesNotContain("NotificationOutbox", bookingDbSetNames);
         Assert.DoesNotContain("NotificationDispatches", bookingDbSetNames);
+        Assert.DoesNotContain("NotificationMessageLogs", bookingDbSetNames);
         Assert.DoesNotContain("EmailBounceEvents", bookingDbSetNames);
         Assert.Contains("BookingNotificationRules", bookingDbSetNames);
         Assert.Contains("BookingNotificationRuleChannels", bookingDbSetNames);
@@ -310,6 +311,7 @@ public sealed class ArchitectureGuardTests
 
         Assert.Contains("NotificationOutbox", notificationDbSetNames);
         Assert.Contains("NotificationDispatches", notificationDbSetNames);
+        Assert.Contains("NotificationMessageLogs", notificationDbSetNames);
         Assert.Contains("EmailBounceEvents", notificationDbSetNames);
         Assert.Contains("NotificationTemplates", notificationDbSetNames);
         Assert.DoesNotContain("BookingNotificationRules", notificationDbSetNames);
@@ -323,6 +325,66 @@ public sealed class ArchitectureGuardTests
         AssertDoesNotReference("AFH.Booking.Application", "AFH.Notification.Infrastructure");
         AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Notification.Infrastructure");
         AssertDoesNotReference("AFH.Booking.Domain", "AFH.Notification.Infrastructure");
+    }
+
+    [Fact]
+    public void BookingCode_DoesNotDependDirectlyOnNotificationOutboxPersistenceTypes()
+    {
+        var bookingProjectPaths = new[]
+        {
+            GetProjectPath("AFH.Booking.Application"),
+            GetProjectPath("AFH.Booking.Infrastructure"),
+            GetProjectPath("AFH.Booking.Domain")
+        };
+
+        foreach (var file in bookingProjectPaths.SelectMany(path => Directory.GetFiles(path, "*.cs", SearchOption.AllDirectories)))
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("NotificationDbContext", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("NotificationOutboxStore", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("NotificationOutboxService", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void BookingLifecycleServices_UseNotificationPublisherSeamOnly()
+    {
+        var applicationPath = GetProjectPath("AFH.Booking.Application");
+        var lifecycleFiles = Directory.GetFiles(applicationPath, "*.cs", SearchOption.AllDirectories)
+            .Where(file => file.Contains($"{Path.DirectorySeparatorChar}Services{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToArray();
+
+        foreach (var file in lifecycleFiles)
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("NotificationOutboxService", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("NotificationDbContext", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("NotificationOutboxStore", text, StringComparison.Ordinal);
+        }
+
+        var step = File.ReadAllText(Path.Combine(applicationPath, "Services", "Lifecycle", "BookingNotificationStep.cs"));
+        Assert.Contains("INotificationPublisher", step, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NotificationDeliveryLogs_DoNotWriteRenderedBodyToApplicationLogs()
+    {
+        var notificationInfrastructurePath = GetProjectPath("AFH.Notification.Infrastructure");
+        var notificationApplicationPath = GetProjectPath("AFH.Notification.Application");
+        var files = Directory.GetFiles(notificationInfrastructurePath, "*.cs", SearchOption.AllDirectories)
+            .Concat(Directory.GetFiles(notificationApplicationPath, "*.cs", SearchOption.AllDirectories))
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToArray();
+
+        foreach (var file in files)
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("{TextBody}", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("{Body}", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("request.TextBody,", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("record.MessageLog.Body", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("MessageLog.Body", text, StringComparison.Ordinal);
+        }
     }
 
     private static string[] GetHttpFunctionNames(Assembly functionAssembly) =>

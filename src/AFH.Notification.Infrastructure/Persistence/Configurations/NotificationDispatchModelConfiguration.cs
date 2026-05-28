@@ -12,6 +12,7 @@ public sealed class NotificationDispatchModelConfiguration : IEntityTypeConfigur
         b.HasKey(x => x.Id);
 
         b.Property(x => x.Id).HasMaxLength(64).IsRequired();
+        b.Property(x => x.DispatchUid).IsRequired();
         b.Property(x => x.BookingId).HasMaxLength(64);
         b.Property(x => x.TransactionId).HasMaxLength(64);
         b.Property(x => x.TransactionRef).HasMaxLength(128);
@@ -44,6 +45,7 @@ public sealed class NotificationDispatchModelConfiguration : IEntityTypeConfigur
         b.HasIndex(x => x.CreatedUtc);
         b.HasIndex(x => x.ProviderMessageId);
         b.HasIndex(x => x.NotificationOutboxId);
+        b.HasIndex(x => x.DispatchUid).IsUnique();
         b.HasIndex(x => new { x.RecipientEmail, x.CreatedUtc });
         b.HasIndex(x => new { x.Status, x.CreatedUtc });
         b.HasIndex(x => new { x.NotificationType, x.CreatedUtc });

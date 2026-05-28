@@ -16,6 +16,7 @@ public sealed class NotificationDispatchRepository : INotificationDispatchReposi
     public Task AddAsync(NotificationDispatchRecord record, CancellationToken ct)
         => _auditStore.RecordAttemptAsync(new NotificationDeliveryAuditRecord(
             record.Id,
+            Guid.NewGuid(),
             record.NotificationOutboxId,
             record.SourceApplication ?? "Booking",
             "Booking",

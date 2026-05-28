@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
 using AFH.Notification.Application.Policies.Booking;
@@ -69,6 +71,18 @@ public sealed class NotificationServiceTests
         Assert.Equal("booking-confirmed", dispatch.TemplateKey);
         Assert.Equal("v1", dispatch.TemplateVersion);
         Assert.Null(dispatch.FailureDetails);
+        Assert.Null(dispatch.MessageSubject);
+        Assert.Null(dispatch.MessageBody);
+
+        var messageLog = Assert.Single(deliveryAudit.Records.Select(x => x.MessageLog));
+        Assert.NotNull(messageLog);
+        Assert.Equal(dispatch.DispatchUid, messageLog!.NotificationDispatchId);
+        Assert.Equal(request.Subject, messageLog.Subject);
+        Assert.Equal(request.TextBody, messageLog.Body);
+        Assert.Equal("booking-confirmed", messageLog.TemplateKey);
+        Assert.Equal("v1", messageLog.TemplateVersion);
+        Assert.Equal("text/plain", messageLog.ContentType);
+        Assert.Equal(ComputeSha256(request.TextBody), messageLog.BodyHash);
     }
 
     [Fact]
@@ -264,6 +278,20 @@ public sealed class NotificationServiceTests
         Assert.Equal("Graph", dispatch.ProviderName);
         Assert.Contains("Graph failed", dispatch.FailureDetails);
         Assert.DoesNotContain("Your booking is now confirmed", dispatch.FailureDetails);
+
+        var messageLog = Assert.Single(deliveryAudit.Records.Select(x => x.MessageLog));
+        Assert.NotNull(messageLog);
+        Assert.Equal(dispatch.DispatchUid, messageLog!.NotificationDispatchId);
+        Assert.Equal("AFH Booking: Booking Confirmed", messageLog.Subject);
+        Assert.Contains("Your booking is now confirmed", messageLog.Body);
+        Assert.Equal(ComputeSha256(messageLog.Body), messageLog.BodyHash);
+        Assert.Null(dispatch.MessageBody);
+    }
+
+    private static string ComputeSha256(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     private sealed class StubNotificationAuditStore : INotificationAuditStore

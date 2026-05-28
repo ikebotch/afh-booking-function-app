@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
 using AFH.Notification.Infrastructure.Persistence.Models;
@@ -15,16 +17,15 @@ public sealed class NotificationDeliveryAuditStore : INotificationDeliveryAuditS
 
     public async Task RecordAttemptAsync(NotificationDeliveryAuditRecord record, CancellationToken ct)
     {
-        await _db.NotificationDispatches.AddAsync(new NotificationDispatchModel
+        var dispatch = new NotificationDispatchModel
         {
             Id = record.Id,
+            DispatchUid = record.DispatchUid,
             CorrelationId = Truncate(record.CorrelationId, 150),
             FailureDetails = record.FailureDetails,
             RecipientType = Truncate(record.RecipientType, 100),
             RecipientEmail = Truncate(record.RecipientEmail, 320),
             ProviderMessageId = Truncate(record.ProviderMessageId, 200),
-            MessageSubject = Truncate(record.MessageSubject, 500),
-            MessageBody = record.MessageBody,
             CreatedUtc = record.CreatedUtc,
             UpdatedUtc = record.UpdatedUtc,
             NotificationOutboxId = record.NotificationOutboxId,
@@ -39,9 +40,44 @@ public sealed class NotificationDeliveryAuditStore : INotificationDeliveryAuditS
             TemplateVersion = Truncate(record.TemplateVersion, 50),
             Status = TruncateRequired(record.Status, 50),
             CompletedUtc = string.Equals(record.Status, "Failed", StringComparison.OrdinalIgnoreCase) ? null : record.UpdatedUtc
-        }, ct);
+        };
+
+        await _db.NotificationDispatches.AddAsync(dispatch, ct);
+
+        if (record.MessageLog is not null)
+            await _db.NotificationMessageLogs.AddAsync(MapMessageLog(record.MessageLog), ct);
 
         await _db.SaveChangesAsync(ct);
+    }
+
+    private static NotificationMessageLogModel MapMessageLog(NotificationMessageLogRecord record)
+        => new()
+        {
+            Id = record.Id,
+            NotificationDispatchId = record.NotificationDispatchId,
+            NotificationOutboxId = record.NotificationOutboxId,
+            SourceApplication = Truncate(record.SourceApplication, 100),
+            NotificationType = Truncate(record.NotificationType, 150),
+            CorrelationId = Truncate(record.CorrelationId, 150),
+            RecipientType = Truncate(record.RecipientType, 100),
+            RecipientEmail = Truncate(record.RecipientEmail, 320),
+            RecipientMobile = Truncate(record.RecipientMobile, 50),
+            Channel = TruncateRequired(record.Channel, 50),
+            TemplateKey = TruncateRequired(record.TemplateKey, 150),
+            TemplateVersion = TruncateRequired(record.TemplateVersion, 50),
+            TemplateContentId = record.TemplateContentId,
+            Subject = Truncate(record.Subject, 500),
+            Body = record.Body,
+            ContentType = TruncateRequired(record.ContentType, 50),
+            RenderDataJson = record.RenderDataJson,
+            BodyHash = Truncate(record.BodyHash, 128) ?? ComputeSha256(record.Body),
+            CreatedUtc = record.CreatedUtc
+        };
+
+    private static string ComputeSha256(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 
     private static string TruncateRequired(string value, int maxLength)

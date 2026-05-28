@@ -2,6 +2,7 @@ namespace AFH.Notification.Application.Models;
 
 public sealed record NotificationDeliveryAuditRecord(
     string Id,
+    Guid DispatchUid,
     Guid? NotificationOutboxId,
     string SourceApplication,
     string? SourceReferenceType,
@@ -21,4 +22,26 @@ public sealed record NotificationDeliveryAuditRecord(
     DateTime CreatedUtc,
     DateTime UpdatedUtc,
     string? MessageSubject = null,
-    string? MessageBody = null);
+    string? MessageBody = null,
+    NotificationMessageLogRecord? MessageLog = null);
+
+public sealed record NotificationMessageLogRecord(
+    Guid Id,
+    Guid NotificationDispatchId,
+    Guid? NotificationOutboxId,
+    string? SourceApplication,
+    string? NotificationType,
+    string? CorrelationId,
+    string? RecipientType,
+    string? RecipientEmail,
+    string? RecipientMobile,
+    string Channel,
+    string TemplateKey,
+    string TemplateVersion,
+    Guid? TemplateContentId,
+    string? Subject,
+    string Body,
+    string ContentType,
+    string? RenderDataJson,
+    string? BodyHash,
+    DateTime CreatedUtc);

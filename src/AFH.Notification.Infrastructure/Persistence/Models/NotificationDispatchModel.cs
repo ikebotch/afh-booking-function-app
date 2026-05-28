@@ -3,6 +3,7 @@ namespace AFH.Notification.Infrastructure.Persistence.Models;
 public sealed class NotificationDispatchModel
 {
     public string Id { get; set; } = default!;
+    public Guid DispatchUid { get; set; }
     public string? BookingId { get; set; }
     public string? TransactionId { get; set; }
     public string? TransactionRef { get; set; }

@@ -6,4 +6,5 @@ public sealed record NotificationChannelContent(
     NotificationChannel Channel,
     string? Subject,
     string? HtmlBody,
-    string TextBody);
+    string TextBody,
+    string ContentType = "text/plain");

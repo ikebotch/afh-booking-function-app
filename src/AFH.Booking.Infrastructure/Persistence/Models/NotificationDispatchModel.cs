@@ -25,6 +25,8 @@ public sealed class NotificationDispatchModel
     public string? Channel { get; set; }
     public string? ProviderName { get; set; }
     public string? TemplateName { get; set; }
+    public string? TemplateKey { get; set; }
+    public string? TemplateVersion { get; set; }
     public DateTime CreatedUtc { get; set; }
     public DateTime? UpdatedUtc { get; set; }
 }

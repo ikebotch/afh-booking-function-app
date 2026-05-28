@@ -16,6 +16,7 @@ public sealed record NotificationDeliveryAuditRecord(
     string? ProviderMessageId,
     string? FailureDetails,
     string? CorrelationId,
-    string? TemplateName,
+    string? TemplateKey,
+    string? TemplateVersion,
     DateTime CreatedUtc,
     DateTime UpdatedUtc);

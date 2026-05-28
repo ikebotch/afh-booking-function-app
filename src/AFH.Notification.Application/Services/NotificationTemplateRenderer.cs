@@ -20,7 +20,7 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
         NotificationRequested notification,
         CancellationToken ct)
     {
-        var template = await LoadTemplateAsync(GetTemplateName(notification.Type), ct);
+        var template = await LoadTemplateAsync(GetTemplateName(notification), ct);
         var parsed = ParseTemplate(template);
         var body = ReplaceTokens(parsed.Body, notification.Data);
 
@@ -34,9 +34,19 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
         ]);
     }
 
-    private string GetTemplateName(NotificationType notificationType)
-        => _policies.FirstOrDefault(policy => policy.CanHandle(notificationType))?.GetTemplateName(notificationType)
-           ?? throw new NotSupportedException($"Notification template '{notificationType}' is not supported yet.");
+    private string GetTemplateName(NotificationRequested notification)
+    {
+        if (notification.Data.TryGetValue("TemplateKey", out var templateKey) &&
+            notification.Data.TryGetValue("TemplateVersion", out var templateVersion) &&
+            !string.IsNullOrWhiteSpace(templateKey) &&
+            !string.IsNullOrWhiteSpace(templateVersion))
+        {
+            return $"{notification.Type.SourceApplication}.{templateKey.Trim()}.{templateVersion.Trim()}.txt";
+        }
+
+        return _policies.FirstOrDefault(policy => policy.CanHandle(notification.Type))?.GetTemplateName(notification.Type)
+               ?? throw new NotSupportedException($"Notification template '{notification.Type}' is not supported yet.");
+    }
 
     private static async Task<string> LoadTemplateAsync(string templateName, CancellationToken ct)
     {

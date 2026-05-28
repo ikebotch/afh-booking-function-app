@@ -25,4 +25,6 @@ public sealed record NotificationDispatchRecord(
     string? NotificationType = null,
     string? Channel = null,
     string? ProviderName = null,
-    string? TemplateName = null);
+    string? TemplateName = null,
+    string? TemplateKey = null,
+    string? TemplateVersion = null);

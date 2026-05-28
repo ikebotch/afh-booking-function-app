@@ -1,0 +1,4 @@
+subject=AFH Booking
+channel=Sms
+---
+Your AFH booking has been rescheduled. When: {{whenLine}}. Adviser: {{adviserName}}.

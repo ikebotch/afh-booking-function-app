@@ -45,7 +45,9 @@ public sealed class NotificationServiceTests
                     ["when"] = "2026-03-26 12:00 (Europe/London) -> 2026-03-26 13:00 (Europe/London)",
                     ["whereLine"] = "Join link: https://meeting.example/join",
                     ["travelLine"] = "Travel: N/A (remote meeting)",
-                    ["manageBookingLinks"] = string.Empty
+                    ["manageBookingLinks"] = string.Empty,
+                    ["TemplateKey"] = "booking-confirmed",
+                    ["TemplateVersion"] = "v1"
                 }),
             CancellationToken.None);
 
@@ -64,6 +66,8 @@ public sealed class NotificationServiceTests
         Assert.Equal("Email", dispatch.Channel);
         Assert.Equal("Composed", dispatch.ProviderName);
         Assert.Equal("provider-1", dispatch.ProviderMessageId);
+        Assert.Equal("booking-confirmed", dispatch.TemplateKey);
+        Assert.Equal("v1", dispatch.TemplateVersion);
         Assert.Null(dispatch.FailureDetails);
     }
 

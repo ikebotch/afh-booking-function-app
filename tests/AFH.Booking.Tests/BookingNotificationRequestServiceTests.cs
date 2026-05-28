@@ -1,9 +1,11 @@
 using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Notifications;
+using AFH.Booking.Application.Models.Lifecycle.Constants;
+using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Application.Services.Notifications;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Client;
-using AFH.Notification.Contract.Abstractions;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Moq;
@@ -24,20 +26,19 @@ public sealed class BookingNotificationRequestServiceTests
     [InlineData("BookingHoldCreated", "BookingHoldCreated")]
     public async Task SendAsync_PublishesManualNotificationToOutboxPublisher(string eventType, string expectedNotificationType)
     {
-        var publisher = new CapturingNotificationPublisher();
-        var sut = CreateSut(publisher);
+        var notificationStep = new CapturingBookingNotificationStep();
+        var sut = CreateSut(notificationStep);
 
         var result = await sut.SendAsync("booking-1", eventType, null, sendSms: false, sendEmail: true, "corr-1", CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         Assert.Equal("Queued", result.Value?.EmailStatus);
         Assert.Equal("corr-1", result.Value?.DispatchId);
-        Assert.NotNull(publisher.LastNotification);
-        Assert.Equal("Booking", publisher.LastNotification!.SourceSystem);
-        Assert.Equal(expectedNotificationType, publisher.LastNotification.Type.Name);
-        Assert.Equal("corr-1", publisher.LastNotification.CorrelationId);
-        Assert.Equal("Internal", publisher.LastNotification.Actor.ActorType);
-        var recipient = Assert.Single(publisher.LastNotification.Recipients);
+        Assert.NotNull(notificationStep.Request);
+        Assert.Equal(expectedNotificationType, notificationStep.NotificationType?.Name);
+        Assert.Equal("corr-1", notificationStep.Request!.CorrelationId);
+        Assert.Equal(LifecycleActors.System, notificationStep.Request.ActorType);
+        var recipient = Assert.Single(notificationStep.Request.Recipients);
         Assert.Equal(BookingNotificationRecipientTypes.Client, recipient.RecipientType);
         Assert.Equal(NotificationChannel.Email, Assert.Single(recipient.PreferredChannels ?? []));
         Assert.Equal("jane.client@example.test", recipient.Email);
@@ -46,60 +47,60 @@ public sealed class BookingNotificationRequestServiceTests
     [Fact]
     public async Task SendAsync_RejectsUnsupportedEventType()
     {
-        var publisher = new CapturingNotificationPublisher();
-        var sut = CreateSut(publisher);
+        var notificationStep = new CapturingBookingNotificationStep();
+        var sut = CreateSut(notificationStep);
 
         var result = await sut.SendAsync("booking-1", "BookingChanged", null, sendSms: false, sendEmail: true, null, CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
         Assert.Contains("Unsupported EventType", result.ErrorMessage);
-        Assert.Null(publisher.LastNotification);
+        Assert.Null(notificationStep.Request);
     }
 
     [Fact]
     public async Task SendAsync_RejectsSmsBecauseQueuedSmsDeliveryIsNotImplemented()
     {
-        var publisher = new CapturingNotificationPublisher();
-        var sut = CreateSut(publisher);
+        var notificationStep = new CapturingBookingNotificationStep();
+        var sut = CreateSut(notificationStep);
 
         var result = await sut.SendAsync("booking-1", "Booked", null, sendSms: true, sendEmail: true, null, CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
         Assert.Contains("SMS is not supported", result.ErrorMessage);
-        Assert.Null(publisher.LastNotification);
+        Assert.Null(notificationStep.Request);
     }
 
     [Fact]
     public async Task SendAsync_RejectsNoSupportedChannel()
     {
-        var publisher = new CapturingNotificationPublisher();
-        var sut = CreateSut(publisher);
+        var notificationStep = new CapturingBookingNotificationStep();
+        var sut = CreateSut(notificationStep);
 
         var result = await sut.SendAsync("booking-1", "Booked", null, sendSms: false, sendEmail: false, null, CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
         Assert.Contains("At least one supported notification channel", result.ErrorMessage);
-        Assert.Null(publisher.LastNotification);
+        Assert.Null(notificationStep.Request);
     }
 
     [Fact]
     public async Task SendAsync_RejectsMessageOverrideUntilQueuedTemplatesSupportIt()
     {
-        var publisher = new CapturingNotificationPublisher();
-        var sut = CreateSut(publisher);
+        var notificationStep = new CapturingBookingNotificationStep();
+        var sut = CreateSut(notificationStep);
 
         var result = await sut.SendAsync("booking-1", "Booked", "Custom text", sendSms: false, sendEmail: true, null, CancellationToken.None);
 
         Assert.False(result.IsSuccess);
         Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
         Assert.Contains("MessageOverride is not supported", result.ErrorMessage);
-        Assert.Null(publisher.LastNotification);
+        Assert.Null(notificationStep.Request);
     }
 
-    private static IBookingNotificationRequestService CreateSut(CapturingNotificationPublisher publisher)
+    private static IBookingNotificationRequestService CreateSut(CapturingBookingNotificationStep notificationStep)
     {
         var now = DateTime.UtcNow;
         var hold = BookingHold.Rehydrate(
@@ -165,17 +166,38 @@ public sealed class BookingNotificationRequestServiceTests
                 Phone = "+447700900123"
             });
 
-        return new BookingNotificationRequestService(holds.Object, slots.Object, transactions.Object, clients.Object, publisher);
+        return new BookingNotificationRequestService(holds.Object, slots.Object, transactions.Object, clients.Object, notificationStep);
     }
 
-    private sealed class CapturingNotificationPublisher : INotificationPublisher
+    private sealed class CapturingBookingNotificationStep : IBookingNotificationStep
     {
-        public NotificationRequested? LastNotification { get; private set; }
-
-        public Task PublishAsync(NotificationRequested notification, CancellationToken ct)
+        public CapturedRequest? Request { get; private set; }
+        public NotificationType? NotificationType => Request?.LifecycleEventType switch
         {
-            LastNotification = notification;
-            return Task.CompletedTask;
+            LifecycleEventTypes.Booked => BookingNotificationTypes.BookingConfirmed,
+            LifecycleEventTypes.Rearranged => BookingNotificationTypes.BookingRescheduled,
+            LifecycleEventTypes.Cancelled => BookingNotificationTypes.BookingCancelled,
+            LifecycleEventTypes.HoldCreated => BookingNotificationTypes.BookingHoldCreated,
+            _ => null
+        };
+
+        public Task<(string Status, string? ErrorCode, string? ErrorDetails)> ExecuteAsync(
+            string lifecycleEventType,
+            string correlationId,
+            string actorType,
+            IReadOnlyList<NotificationRecipient> recipients,
+            IReadOnlyDictionary<string, string> data,
+            CancellationToken ct)
+        {
+            Request = new CapturedRequest(lifecycleEventType, correlationId, actorType, recipients, data);
+            return Task.FromResult<(string, string?, string?)>((LifecycleStepStatuses.Succeeded, null, null));
         }
     }
+
+    private sealed record CapturedRequest(
+        string LifecycleEventType,
+        string CorrelationId,
+        string ActorType,
+        IReadOnlyList<NotificationRecipient> Recipients,
+        IReadOnlyDictionary<string, string> Data);
 }

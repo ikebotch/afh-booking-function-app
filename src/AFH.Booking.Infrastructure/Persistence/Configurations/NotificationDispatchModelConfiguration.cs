@@ -31,6 +31,8 @@ public sealed class NotificationDispatchModelConfiguration : IEntityTypeConfigur
         b.Property(x => x.Channel).HasMaxLength(50);
         b.Property(x => x.ProviderName).HasMaxLength(100);
         b.Property(x => x.TemplateName).HasMaxLength(200);
+        b.Property(x => x.TemplateKey).HasMaxLength(150);
+        b.Property(x => x.TemplateVersion).HasMaxLength(50);
 
         b.HasIndex(x => x.BookingId);
         b.HasIndex(x => x.TransactionId);

@@ -1,7 +1,8 @@
 using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Notifications;
+using AFH.Booking.Application.Models.Lifecycle.Constants;
 using AFH.Booking.Application.Models.Notifications;
-using AFH.Notification.Contract.Abstractions;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 
@@ -13,20 +14,20 @@ public sealed class BookingNotificationRequestService : IBookingNotificationRequ
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
     private readonly IClientDirectory _clients;
-    private readonly INotificationPublisher _publisher;
+    private readonly IBookingNotificationStep _notificationStep;
 
     public BookingNotificationRequestService(
         IBookingHoldRepository holds,
         IBookingSlotRepository slots,
         IBookingTransactionRepository transactions,
         IClientDirectory clients,
-        INotificationPublisher publisher)
+        IBookingNotificationStep notificationStep)
     {
         _holds = holds;
         _slots = slots;
         _transactions = transactions;
         _clients = clients;
-        _publisher = publisher;
+        _notificationStep = notificationStep;
     }
 
     public async Task<Result<NotificationDispatchResponse>> SendAsync(
@@ -50,8 +51,8 @@ public sealed class BookingNotificationRequestService : IBookingNotificationRequ
         if (!string.IsNullOrWhiteSpace(messageOverride))
             return Result<NotificationDispatchResponse>.Fail(HttpStatusCode.BadRequest, "MessageOverride is not supported by queued booking notification templates yet.", Errors.Validation);
 
-        var notificationType = MapEventType(eventType);
-        if (notificationType is null)
+        var mapping = MapEventType(eventType);
+        if (mapping is null)
         {
             return Result<NotificationDispatchResponse>.Fail(
                 HttpStatusCode.BadRequest,
@@ -76,38 +77,37 @@ public sealed class BookingNotificationRequestService : IBookingNotificationRequ
             ? $"manual-{hold.Id}-{Guid.NewGuid():N}"
             : correlationId.Trim();
 
-        await _publisher.PublishAsync(
-            new NotificationRequested(
-                notificationType,
-                publishCorrelationId,
-                new NotificationActor("Internal", "Booking", null, "Manual notification", null),
-                BuildRecipients(client),
-                BuildData(notificationType, hold, slot, transaction)),
+        var notificationStepResult = await _notificationStep.ExecuteAsync(
+            mapping.Value.LifecycleEventType,
+            publishCorrelationId,
+            LifecycleActors.System,
+            BuildRecipients(client),
+            BuildData(mapping.Value.NotificationType, hold, slot, transaction),
             ct);
 
         return Result<NotificationDispatchResponse>.Ok(new NotificationDispatchResponse
         {
             DispatchId = publishCorrelationId,
             BookingId = hold.Id,
-            EventType = notificationType.Name,
+            EventType = mapping.Value.NotificationType.Name,
             SmsRequested = false,
             EmailRequested = true,
             SmsStatus = "Skipped",
-            EmailStatus = "Queued",
+            EmailStatus = notificationStepResult.Status == LifecycleStepStatuses.Skipped ? "Skipped" : "Queued",
             ProviderMessageId = null,
             CreatedUtc = DateTime.UtcNow
         });
     }
 
-    private static NotificationType? MapEventType(string? eventType)
+    private static ManualNotificationMapping? MapEventType(string? eventType)
     {
         var value = eventType?.Trim();
         return value switch
         {
-            "Booked" or "BookingConfirmed" => BookingNotificationTypes.BookingConfirmed,
-            "Rearranged" or "BookingRescheduled" => BookingNotificationTypes.BookingRescheduled,
-            "Cancelled" or "BookingCancelled" => BookingNotificationTypes.BookingCancelled,
-            "HoldCreated" or "BookingHoldCreated" => BookingNotificationTypes.BookingHoldCreated,
+            "Booked" or "BookingConfirmed" => new ManualNotificationMapping(LifecycleEventTypes.Booked, BookingNotificationTypes.BookingConfirmed),
+            "Rearranged" or "BookingRescheduled" => new ManualNotificationMapping(LifecycleEventTypes.Rearranged, BookingNotificationTypes.BookingRescheduled),
+            "Cancelled" or "BookingCancelled" => new ManualNotificationMapping(LifecycleEventTypes.Cancelled, BookingNotificationTypes.BookingCancelled),
+            "HoldCreated" or "BookingHoldCreated" => new ManualNotificationMapping(LifecycleEventTypes.HoldCreated, BookingNotificationTypes.BookingHoldCreated),
             _ => null
         };
     }
@@ -190,4 +190,8 @@ public sealed class BookingNotificationRequestService : IBookingNotificationRequ
             return utc.ToUniversalTime().ToString("ddd dd MMM yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC";
         }
     }
+
+    private readonly record struct ManualNotificationMapping(
+        string LifecycleEventType,
+        NotificationType NotificationType);
 }

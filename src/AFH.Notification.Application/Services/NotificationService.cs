@@ -46,6 +46,7 @@ public sealed class NotificationService : INotificationService, INotificationPub
 
         foreach (var content in rendered.ChannelContent)
         {
+            var sentTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var gateways = _deliveryGateways
                 .Where(gateway => gateway.CanSend(content.Channel))
                 .ToArray();
@@ -80,6 +81,9 @@ public sealed class NotificationService : INotificationService, INotificationPub
 
             foreach (var recipient in activeRecipients)
             {
+                if (!sentTargets.Add(GetTargetKey(recipient, content.Channel)))
+                    continue;
+
                 var request = new NotificationDeliveryRequest(
                     notification.CorrelationId,
                     content.Channel,
@@ -175,10 +179,20 @@ public sealed class NotificationService : INotificationService, INotificationPub
             providerMessageId,
             failureDetails,
             notification.CorrelationId,
-            $"{notification.SourceSystem}.{notification.Type.Name}",
+            data.TryGetValue("TemplateKey", out var templateKey) ? templateKey : $"{notification.SourceSystem}.{notification.Type.Name}",
+            data.TryGetValue("TemplateVersion", out var templateVersion) ? templateVersion : null,
             now,
             DateTime.UtcNow);
     }
+
+    private static string GetTargetKey(NotificationRecipient recipient, NotificationChannel channel)
+        => channel switch
+        {
+            NotificationChannel.Email => $"{channel}:{recipient.Email?.Trim()}",
+            NotificationChannel.Sms => $"{channel}:{recipient.MobileNumber?.Trim()}",
+            NotificationChannel.Push => $"{channel}:{recipient.PushTarget?.Trim()}",
+            _ => $"{channel}:"
+        };
 
     private static string ResolveProviderName(INotificationDeliveryGateway gateway)
     {

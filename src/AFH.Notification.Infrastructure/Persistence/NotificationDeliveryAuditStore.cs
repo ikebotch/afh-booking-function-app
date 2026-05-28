@@ -50,7 +50,9 @@ INSERT INTO NotificationDispatches
     NotificationType,
     Channel,
     ProviderName,
-    TemplateName
+    TemplateName,
+    TemplateKey,
+    TemplateVersion
 )
 VALUES
 (
@@ -78,7 +80,9 @@ VALUES
     @notificationType,
     @channel,
     @providerName,
-    @templateName
+    @templateName,
+    @templateKey,
+    @templateVersion
 )";
 
         var isEmail = string.Equals(record.Channel, "Email", StringComparison.OrdinalIgnoreCase);
@@ -108,7 +112,9 @@ VALUES
         command.Parameters.AddWithValue("@notificationType", TruncateRequired(record.NotificationType, 150));
         command.Parameters.AddWithValue("@channel", TruncateRequired(record.Channel, 50));
         command.Parameters.AddWithValue("@providerName", TruncateRequired(record.ProviderName, 100));
-        command.Parameters.AddWithValue("@templateName", DbValue(Truncate(record.TemplateName, 200)));
+        command.Parameters.AddWithValue("@templateName", DbValue(Truncate(record.TemplateKey, 200)));
+        command.Parameters.AddWithValue("@templateKey", DbValue(Truncate(record.TemplateKey, 150)));
+        command.Parameters.AddWithValue("@templateVersion", DbValue(Truncate(record.TemplateVersion, 50)));
 
         await command.ExecuteNonQueryAsync(ct);
     }

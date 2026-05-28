@@ -49,7 +49,7 @@ public class NotificationOutboxServiceTests
         _recipientResolverMock.Setup(x => x.ResolveAsync(request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(resolvedRoute);
 
-        _keyGeneratorMock.Setup(x => x.GenerateKey(request, NotificationChannel.Email, resolvedRoute.Recipients[0]))
+        _keyGeneratorMock.Setup(x => x.GenerateKey(It.IsAny<NotificationRequested>(), NotificationChannel.Email, resolvedRoute.Recipients[0]))
             .Returns("TestApp:TestType:corr-123:Email:Client:test@test.com:v1");
 
         var outboxItem = new NotificationOutboxItem(
@@ -90,7 +90,7 @@ public class NotificationOutboxServiceTests
         _recipientResolverMock.Setup(x => x.ResolveAsync(request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(resolvedRoute);
 
-        _keyGeneratorMock.Setup(x => x.GenerateKey(request, NotificationChannel.Email, resolvedRoute.Recipients[0]))
+        _keyGeneratorMock.Setup(x => x.GenerateKey(It.IsAny<NotificationRequested>(), NotificationChannel.Email, resolvedRoute.Recipients[0]))
             .Returns("TestApp:TestType:corr-123:Email:Client:test@test.com:v1");
 
         var outboxItem = new NotificationOutboxItem(
@@ -156,7 +156,7 @@ public class NotificationOutboxServiceTests
 
         _recipientResolverMock.Setup(x => x.ResolveAsync(request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(resolvedRoute);
-        _keyGeneratorMock.Setup(x => x.GenerateKey(request, NotificationChannel.Email, recipient))
+        _keyGeneratorMock.Setup(x => x.GenerateKey(It.IsAny<NotificationRequested>(), NotificationChannel.Email, recipient))
             .Returns("TestApp:TestType:corr-123:Email:Client:test@test.com:v1");
 
         var outboxItem = new NotificationOutboxItem(
@@ -193,7 +193,7 @@ public class NotificationOutboxServiceTests
 
         _recipientResolverMock.Setup(x => x.ResolveAsync(request, It.IsAny<CancellationToken>()))
             .ReturnsAsync(resolvedRoute);
-        _keyGeneratorMock.Setup(x => x.GenerateKey(request, NotificationChannel.Email, recipient))
+        _keyGeneratorMock.Setup(x => x.GenerateKey(It.IsAny<NotificationRequested>(), NotificationChannel.Email, recipient))
             .Returns("key");
         _outboxStoreMock.Setup(x => x.CreateOrGetAsync(It.IsAny<NotificationOutboxItem>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new NotificationOutboxCreateResult(outboxItem, true));
@@ -204,6 +204,51 @@ public class NotificationOutboxServiceTests
 
         Assert.Equal("queue unavailable", ex.Message);
         _outboxStoreMock.Verify(x => x.MarkQueuedAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task PublishAsync_SerializesSingleRecipientAndChannelWithChannelTemplateData()
+    {
+        var request = new NotificationRequested(
+            new NotificationType("Booking", "BookingConfirmed"),
+            "corr-123",
+            new NotificationActor("System", "Booking", null, null, null),
+            Array.Empty<NotificationRecipient>(),
+            new Dictionary<string, string>
+            {
+                ["TemplateKey:Email"] = "booking-confirmed",
+                ["TemplateVersion:Email"] = "v1",
+                ["TemplateKey:Sms"] = "booking-confirmed-sms",
+                ["TemplateVersion:Sms"] = "v1"
+            });
+
+        var recipient = new NotificationRecipient("Client", "John", "test@test.com", "07123456789", null, [NotificationChannel.Email, NotificationChannel.Sms]);
+        _recipientResolverMock.Setup(x => x.ResolveAsync(request, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotificationRoute([recipient], false));
+        _keyGeneratorMock.Setup(x => x.GenerateKey(It.IsAny<NotificationRequested>(), It.IsAny<NotificationChannel>(), It.IsAny<NotificationRecipient>()))
+            .Returns<NotificationRequested, NotificationChannel, NotificationRecipient>((_, channel, _) => $"key-{channel}");
+        var captured = new List<NotificationOutboxItem>();
+        _outboxStoreMock.Setup(x => x.CreateOrGetAsync(It.IsAny<NotificationOutboxItem>(), It.IsAny<CancellationToken>()))
+            .Callback<NotificationOutboxItem, CancellationToken>((item, _) => captured.Add(item))
+            .ReturnsAsync((NotificationOutboxItem item, CancellationToken _) => new NotificationOutboxCreateResult(item, false));
+
+        await _sut.PublishAsync(request, CancellationToken.None);
+
+        Assert.Equal(2, captured.Count);
+        var emailPayload = JsonSerializer.Deserialize<NotificationRequested>(captured.Single(x => x.IdempotencyKey == "key-Email").PayloadJson);
+        var smsPayload = JsonSerializer.Deserialize<NotificationRequested>(captured.Single(x => x.IdempotencyKey == "key-Sms").PayloadJson);
+
+        Assert.NotNull(emailPayload);
+        Assert.Single(emailPayload!.Recipients);
+        Assert.Equal([NotificationChannel.Email], emailPayload.Recipients[0].PreferredChannels);
+        Assert.Equal("booking-confirmed", emailPayload.Data["TemplateKey"]);
+        Assert.Equal("v1", emailPayload.Data["TemplateVersion"]);
+
+        Assert.NotNull(smsPayload);
+        Assert.Single(smsPayload!.Recipients);
+        Assert.Equal([NotificationChannel.Sms], smsPayload.Recipients[0].PreferredChannels);
+        Assert.Equal("booking-confirmed-sms", smsPayload.Data["TemplateKey"]);
+        Assert.Equal("v1", smsPayload.Data["TemplateVersion"]);
     }
 }
 
@@ -225,7 +270,7 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Email, recipient);
 
-        Assert.Equal("booking:type:165b5ea005f94d759252f1331f42b2f2d47ad75195b45d7d8cc2ab663c43ecd9", key);
+        Assert.Equal("booking:type:f279d65656fd04546df178b7497bbfe425a7a36e65afca62d5c3597a74395d90", key);
     }
 
     [Fact]
@@ -242,7 +287,7 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Email, recipient);
 
-        Assert.Equal("booking:type:e91c1226e835565db08694d5195f5c428d4f37d866969100380d357d60a9f4bd", key);
+        Assert.Equal("booking:type:feebb9a66319b25577c95ba8b63aa2e8431db807d9a7c63439b4c955288251bb", key);
     }
 
     [Fact]
@@ -259,7 +304,7 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Email, recipient);
 
-        Assert.Equal("booking:type:be3f91bdfdca1b7147254f855d7bff98a58031b59f8c3d977f27d3c2a8afb776", key);
+        Assert.Equal("booking:type:5a86f1c9aa604103a17f0ca8fca4475f5f16b1d3c9a0efeab196c63032eb4b96", key);
     }
 
     [Fact]
@@ -276,7 +321,7 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Email, recipient);
 
-        Assert.Equal("app:type:23810f4961f31e45f351a0ca3269a389cc39242b307a2f7f35b6266be76d6dc5", key);
+        Assert.Equal("app:type:b5afd53117f926392a6091d55fc457f1753e049d8c746ef1a0caa25829285660", key);
     }
 
     [Fact]
@@ -293,7 +338,25 @@ public class NotificationIdempotencyKeyGeneratorTests
 
         var key = _sut.GenerateKey(request, NotificationChannel.Sms, recipient);
 
-        Assert.Equal("app:type:5d63d0555ead69e366e3e52be466df87d840cb4fec61db3f34167b619232c3f9", key);
+        Assert.Equal("app:type:6f2a4673fdf93f9a5546607c972cb9e7e52b0e0b7187c80f000cff0d66fb5218", key);
+    }
+
+    [Fact]
+    public void GenerateKey_DeduplicatesByRecipientAddressAndChannel()
+    {
+        var request = new NotificationRequested(
+            new NotificationType("Booking", "Type"),
+            "corr-123",
+            new NotificationActor("Sys", "Booking", null, null, null),
+            Array.Empty<NotificationRecipient>(),
+            new Dictionary<string, string> { { "BookingId", "book-456" } });
+
+        var client = new NotificationRecipient("Client", "John", "john@test.com", null, null, null);
+        var adviser = new NotificationRecipient("Adviser", "John", "john@test.com", null, null, null);
+
+        Assert.Equal(
+            _sut.GenerateKey(request, NotificationChannel.Email, client),
+            _sut.GenerateKey(request, NotificationChannel.Email, adviser));
     }
 
     [Fact]

@@ -37,7 +37,6 @@ public sealed class NotificationOutboxService : INotificationPublisher
     {
         var route = await _recipientResolver.ResolveAsync(notification, ct);
 
-        var payloadJson = JsonSerializer.Serialize(notification);
         var activeRecipients = route.Recipients.ToList();
 
         if (route.CopyContactCentre)
@@ -54,7 +53,9 @@ public sealed class NotificationOutboxService : INotificationPublisher
             var channels = recipient.PreferredChannels ?? Array.Empty<NotificationChannel>();
             foreach (var channel in channels)
             {
-                var key = _keyGenerator.GenerateKey(notification, channel, recipient);
+                var channelNotification = CreateChannelNotification(notification, recipient, channel);
+                var payloadJson = JsonSerializer.Serialize(channelNotification);
+                var key = _keyGenerator.GenerateKey(channelNotification, channel, recipient);
 
                 var outboxItem = new NotificationOutboxItem(
                     Guid.NewGuid(),
@@ -97,5 +98,29 @@ public sealed class NotificationOutboxService : INotificationPublisher
                 }
             }
         }
+    }
+
+    private static NotificationRequested CreateChannelNotification(
+        NotificationRequested notification,
+        NotificationRecipient recipient,
+        NotificationChannel channel)
+    {
+        var data = notification.Data.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        if (data.TryGetValue($"TemplateKey:{channel}", out var templateKey))
+            data["TemplateKey"] = templateKey;
+        if (data.TryGetValue($"TemplateVersion:{channel}", out var templateVersion))
+            data["TemplateVersion"] = templateVersion;
+
+        return notification with
+        {
+            Recipients =
+            [
+                recipient with
+                {
+                    PreferredChannels = [channel]
+                }
+            ],
+            Data = data
+        };
     }
 }

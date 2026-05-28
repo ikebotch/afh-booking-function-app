@@ -37,6 +37,8 @@ public sealed class NotificationDispatchRepository : INotificationDispatchReposi
             Channel = record.Channel,
             ProviderName = record.ProviderName,
             TemplateName = record.TemplateName,
+            TemplateKey = record.TemplateKey,
+            TemplateVersion = record.TemplateVersion,
             LifecycleEventId = record.LifecycleEventId,
             CorrelationId = record.CorrelationId,
             CreatedUtc = record.CreatedUtc,

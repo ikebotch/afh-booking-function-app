@@ -1,0 +1,4 @@
+subject=AFH Booking
+channel=Sms
+---
+Your AFH booking is confirmed. When: {{when}}. Adviser: {{adviserName}}.

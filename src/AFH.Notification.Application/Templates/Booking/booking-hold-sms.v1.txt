@@ -1,0 +1,4 @@
+subject=AFH Booking
+channel=Sms
+---
+Your AFH booking hold has been created. When: {{when}}. Adviser: {{adviserName}}.

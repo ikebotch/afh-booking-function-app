@@ -37,9 +37,7 @@ public sealed class NotificationIdempotencyKeyGenerator : INotificationIdempoten
         var sourceSystem = request.SourceSystem.Trim().ToLowerInvariant();
         var typeName = request.Type.Name.Trim().ToLowerInvariant();
         var channelName = channel.ToString().Trim().ToLowerInvariant();
-        var recipientType = recipient.RecipientType.Trim().ToLowerInvariant();
-
-        var rawKey = $"{sourceSystem}:{typeName}:{primaryId}:{channelName}:{recipientType}:{recipientAddress}:{templateVersion}";
+        var rawKey = $"{sourceSystem}:{typeName}:{primaryId}:{channelName}:{recipientAddress}:{templateVersion}";
 
         using var sha256 = SHA256.Create();
         var hashBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(rawKey));

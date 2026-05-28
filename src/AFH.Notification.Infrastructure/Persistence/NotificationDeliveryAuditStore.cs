@@ -1,126 +1,58 @@
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
-using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
+using AFH.Notification.Infrastructure.Persistence.Models;
 
 namespace AFH.Notification.Infrastructure.Persistence;
 
 public sealed class NotificationDeliveryAuditStore : INotificationDeliveryAuditStore
 {
-    private readonly string _connectionString;
+    private readonly NotificationDbContext _db;
 
-    public NotificationDeliveryAuditStore(IConfiguration configuration)
+    public NotificationDeliveryAuditStore(NotificationDbContext db)
     {
-        _connectionString = configuration.GetConnectionString("BookingDb")
-            ?? configuration["Values:ConnectionStrings:BookingDb"]
-            ?? configuration["Values:BookingDb:ConnectionString"]
-            ?? throw new InvalidOperationException("BookingDb connection string is not configured.");
+        _db = db;
     }
 
     public async Task RecordAttemptAsync(NotificationDeliveryAuditRecord record, CancellationToken ct)
     {
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-
-        await using var command = connection.CreateCommand();
-        command.CommandText = @"
-INSERT INTO NotificationDispatches
-(
-    Id,
-    BookingId,
-    TransactionId,
-    TransactionRef,
-    LifecycleEventId,
-    CorrelationId,
-    EventType,
-    SmsRequested,
-    EmailRequested,
-    SmsStatus,
-    EmailStatus,
-    OutcomeCode,
-    FailureDetails,
-    RecipientPhone,
-    RecipientEmail,
-    ProviderMessageId,
-    MessageBody,
-    CreatedUtc,
-    UpdatedUtc,
-    NotificationOutboxId,
-    SourceApplication,
-    NotificationType,
-    Channel,
-    ProviderName,
-    TemplateName,
-    TemplateKey,
-    TemplateVersion
-)
-VALUES
-(
-    @id,
-    @bookingId,
-    @transactionId,
-    @transactionRef,
-    NULL,
-    @correlationId,
-    @eventType,
-    @smsRequested,
-    @emailRequested,
-    @smsStatus,
-    @emailStatus,
-    @outcomeCode,
-    @failureDetails,
-    @recipientPhone,
-    @recipientEmail,
-    @providerMessageId,
-    NULL,
-    @createdUtc,
-    @updatedUtc,
-    @notificationOutboxId,
-    @sourceApplication,
-    @notificationType,
-    @channel,
-    @providerName,
-    @templateName,
-    @templateKey,
-    @templateVersion
-)";
-
         var isEmail = string.Equals(record.Channel, "Email", StringComparison.OrdinalIgnoreCase);
         var bookingId = string.IsNullOrWhiteSpace(record.BookingId)
             ? record.CorrelationId ?? record.NotificationOutboxId?.ToString("N") ?? record.Id
             : record.BookingId;
 
-        command.Parameters.AddWithValue("@id", record.Id);
-        command.Parameters.AddWithValue("@bookingId", TruncateRequired(bookingId, 64));
-        command.Parameters.AddWithValue("@transactionId", DbValue(Truncate(record.TransactionId, 64)));
-        command.Parameters.AddWithValue("@transactionRef", DbValue(Truncate(record.TransactionRef, 128)));
-        command.Parameters.AddWithValue("@correlationId", DbValue(Truncate(record.CorrelationId, 128)));
-        command.Parameters.AddWithValue("@eventType", TruncateRequired(record.NotificationType, 64));
-        command.Parameters.AddWithValue("@smsRequested", !isEmail);
-        command.Parameters.AddWithValue("@emailRequested", isEmail);
-        command.Parameters.AddWithValue("@smsStatus", isEmail ? "Skipped" : TruncateRequired(record.Status, 32));
-        command.Parameters.AddWithValue("@emailStatus", isEmail ? TruncateRequired(record.Status, 32) : "Skipped");
-        command.Parameters.AddWithValue("@outcomeCode", TruncateRequired(record.Status, 64));
-        command.Parameters.AddWithValue("@failureDetails", DbValue(Truncate(record.FailureDetails, 2048)));
-        command.Parameters.AddWithValue("@recipientPhone", DbValue(Truncate(record.RecipientPhone, 64)));
-        command.Parameters.AddWithValue("@recipientEmail", DbValue(Truncate(record.RecipientEmail, 256)));
-        command.Parameters.AddWithValue("@providerMessageId", DbValue(Truncate(record.ProviderMessageId, 128)));
-        command.Parameters.AddWithValue("@createdUtc", record.CreatedUtc);
-        command.Parameters.AddWithValue("@updatedUtc", record.UpdatedUtc);
-        command.Parameters.AddWithValue("@notificationOutboxId", record.NotificationOutboxId.HasValue ? record.NotificationOutboxId.Value : DBNull.Value);
-        command.Parameters.AddWithValue("@sourceApplication", TruncateRequired(record.SourceApplication, 100));
-        command.Parameters.AddWithValue("@notificationType", TruncateRequired(record.NotificationType, 150));
-        command.Parameters.AddWithValue("@channel", TruncateRequired(record.Channel, 50));
-        command.Parameters.AddWithValue("@providerName", TruncateRequired(record.ProviderName, 100));
-        command.Parameters.AddWithValue("@templateName", DbValue(Truncate(record.TemplateKey, 200)));
-        command.Parameters.AddWithValue("@templateKey", DbValue(Truncate(record.TemplateKey, 150)));
-        command.Parameters.AddWithValue("@templateVersion", DbValue(Truncate(record.TemplateVersion, 50)));
+        await _db.NotificationDispatches.AddAsync(new NotificationDispatchModel
+        {
+            Id = record.Id,
+            BookingId = TruncateRequired(bookingId, 64),
+            TransactionId = Truncate(record.TransactionId, 64),
+            TransactionRef = Truncate(record.TransactionRef, 128),
+            CorrelationId = Truncate(record.CorrelationId, 150),
+            EventType = TruncateRequired(record.NotificationType, 64),
+            SmsRequested = !isEmail,
+            EmailRequested = isEmail,
+            SmsStatus = isEmail ? "Skipped" : TruncateRequired(record.Status, 32),
+            EmailStatus = isEmail ? TruncateRequired(record.Status, 32) : "Skipped",
+            OutcomeCode = TruncateRequired(record.Status, 64),
+            FailureDetails = record.FailureDetails,
+            RecipientType = Truncate(record.RecipientType, 100),
+            RecipientPhone = Truncate(record.RecipientPhone, 64),
+            RecipientEmail = Truncate(record.RecipientEmail, 320),
+            ProviderMessageId = Truncate(record.ProviderMessageId, 200),
+            CreatedUtc = record.CreatedUtc,
+            UpdatedUtc = record.UpdatedUtc,
+            NotificationOutboxId = record.NotificationOutboxId,
+            SourceApplication = TruncateRequired(record.SourceApplication, 100),
+            NotificationType = TruncateRequired(record.NotificationType, 150),
+            Channel = TruncateRequired(record.Channel, 50),
+            ProviderName = TruncateRequired(record.ProviderName, 100),
+            TemplateName = Truncate(record.TemplateKey, 200),
+            TemplateKey = Truncate(record.TemplateKey, 150),
+            TemplateVersion = Truncate(record.TemplateVersion, 50),
+            CompletedUtc = string.Equals(record.Status, "Failed", StringComparison.OrdinalIgnoreCase) ? null : record.UpdatedUtc
+        }, ct);
 
-        await command.ExecuteNonQueryAsync(ct);
+        await _db.SaveChangesAsync(ct);
     }
-
-    private static object DbValue(string? value)
-        => string.IsNullOrWhiteSpace(value) ? DBNull.Value : value;
 
     private static string TruncateRequired(string value, int maxLength)
         => value.Length <= maxLength ? value : value[..maxLength];

@@ -1,4 +1,4 @@
-namespace AFH.Booking.Infrastructure.Persistence.Models;
+namespace AFH.Notification.Infrastructure.Persistence.Models;
 
 public sealed class NotificationDispatchModel
 {
@@ -15,9 +15,11 @@ public sealed class NotificationDispatchModel
     public string EmailStatus { get; set; } = default!;
     public string OutcomeCode { get; set; } = "Pending";
     public string? FailureDetails { get; set; }
+    public string? RecipientType { get; set; }
     public string? RecipientPhone { get; set; }
     public string? RecipientEmail { get; set; }
     public string? ProviderMessageId { get; set; }
+    public string? MessageSubject { get; set; }
     public string? MessageBody { get; set; }
     public Guid? NotificationOutboxId { get; set; }
     public string? SourceApplication { get; set; }
@@ -29,4 +31,5 @@ public sealed class NotificationDispatchModel
     public string? TemplateVersion { get; set; }
     public DateTime CreatedUtc { get; set; }
     public DateTime? UpdatedUtc { get; set; }
+    public DateTime? CompletedUtc { get; set; }
 }

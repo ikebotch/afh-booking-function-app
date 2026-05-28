@@ -1,4 +1,4 @@
-namespace AFH.Booking.Infrastructure.Persistence.Models;
+namespace AFH.Notification.Infrastructure.Persistence.Models;
 
 public sealed class EmailBounceEventModel
 {

@@ -9,10 +9,16 @@ public sealed class NotificationDbContext : DbContext
     public NotificationDbContext(DbContextOptions<NotificationDbContext> options) : base(options) { }
 
     public DbSet<NotificationOutboxModel> NotificationOutbox => Set<NotificationOutboxModel>();
+    public DbSet<NotificationDispatchModel> NotificationDispatches => Set<NotificationDispatchModel>();
+    public DbSet<EmailBounceEventModel> EmailBounceEvents => Set<EmailBounceEventModel>();
+    public DbSet<NotificationTemplateModel> NotificationTemplates => Set<NotificationTemplateModel>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfiguration(new NotificationOutboxConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationDispatchModelConfiguration());
+        modelBuilder.ApplyConfiguration(new EmailBounceEventModelConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationTemplateModelConfiguration());
         base.OnModelCreating(modelBuilder);
     }
 }

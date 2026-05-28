@@ -1,16 +1,16 @@
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Models.Approvals;
-using AFH.Booking.Infrastructure.Persistence;
-using AFH.Booking.Infrastructure.Persistence.Models;
+using AFH.Notification.Infrastructure.Persistence;
+using AFH.Notification.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace AFH.Booking.Infrastructure.Clients;
 
 public sealed class EmailBounceService : IEmailBounceService
 {
-    private readonly BookingDbContext _db;
+    private readonly NotificationDbContext _db;
 
-    public EmailBounceService(BookingDbContext db)
+    public EmailBounceService(NotificationDbContext db)
     {
         _db = db;
     }

@@ -13,20 +13,6 @@ namespace AFH.Booking.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "TemplateKey",
-                table: "NotificationDispatches",
-                type: "nvarchar(150)",
-                maxLength: 150,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "TemplateVersion",
-                table: "NotificationDispatches",
-                type: "nvarchar(50)",
-                maxLength: 50,
-                nullable: true);
-
             migrationBuilder.CreateTable(
                 name: "BookingNotificationRules",
                 columns: table => new
@@ -164,14 +150,6 @@ namespace AFH.Booking.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "BookingNotificationRules");
-
-            migrationBuilder.DropColumn(
-                name: "TemplateKey",
-                table: "NotificationDispatches");
-
-            migrationBuilder.DropColumn(
-                name: "TemplateVersion",
-                table: "NotificationDispatches");
         }
     }
 }

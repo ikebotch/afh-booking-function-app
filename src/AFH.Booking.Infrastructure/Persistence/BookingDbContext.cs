@@ -14,13 +14,11 @@ public sealed class BookingDbContext : DbContext
     public DbSet<BookingHoldModel> Holds => Set<BookingHoldModel>();
     public DbSet<ApprovalRequestModel> ApprovalRequests => Set<ApprovalRequestModel>();
     public DbSet<ApprovalHistoryModel> ApprovalHistory => Set<ApprovalHistoryModel>();
-    public DbSet<NotificationDispatchModel> NotificationDispatches => Set<NotificationDispatchModel>();
     public DbSet<BookingNotificationRuleModel> BookingNotificationRules => Set<BookingNotificationRuleModel>();
     public DbSet<BookingNotificationRuleChannelModel> BookingNotificationRuleChannels => Set<BookingNotificationRuleChannelModel>();
     public DbSet<BookingNotificationRuleRecipientModel> BookingNotificationRuleRecipients => Set<BookingNotificationRuleRecipientModel>();
     public DbSet<LifecycleEventModel> LifecycleEvents => Set<LifecycleEventModel>();
     public DbSet<LifecycleStepModel> LifecycleSteps => Set<LifecycleStepModel>();
-    public DbSet<EmailBounceEventModel> EmailBounceEvents => Set<EmailBounceEventModel>();
     public DbSet<DuplicateClientCaseModel> DuplicateClientCases => Set<DuplicateClientCaseModel>();
     public DbSet<DownstreamUpdateModel> DownstreamUpdates => Set<DownstreamUpdateModel>();
     public DbSet<OperationalIssueModel> OperationalIssues => Set<OperationalIssueModel>();

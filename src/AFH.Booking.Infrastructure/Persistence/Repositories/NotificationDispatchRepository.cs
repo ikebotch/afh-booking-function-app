@@ -1,13 +1,14 @@
 using AFH.Booking.Application.Abstractions.Persistence;
-using AFH.Booking.Infrastructure.Persistence.Models;
+using AFH.Notification.Infrastructure.Persistence;
+using AFH.Notification.Infrastructure.Persistence.Models;
 
 namespace AFH.Booking.Infrastructure.Persistence.Repositories;
 
 public sealed class NotificationDispatchRepository : INotificationDispatchRepository
 {
-    private readonly BookingDbContext _db;
+    private readonly NotificationDbContext _db;
 
-    public NotificationDispatchRepository(BookingDbContext db)
+    public NotificationDispatchRepository(NotificationDbContext db)
     {
         _db = db;
     }
@@ -27,6 +28,7 @@ public sealed class NotificationDispatchRepository : INotificationDispatchReposi
             EmailStatus = record.EmailStatus,
             OutcomeCode = record.OutcomeCode,
             FailureDetails = record.FailureDetails,
+            RecipientType = null,
             RecipientPhone = record.RecipientPhone,
             RecipientEmail = record.RecipientEmail,
             ProviderMessageId = record.ProviderMessageId,

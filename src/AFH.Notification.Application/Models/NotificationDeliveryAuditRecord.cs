@@ -9,6 +9,7 @@ public sealed record NotificationDeliveryAuditRecord(
     string? TransactionId,
     string? TransactionRef,
     string Channel,
+    string? RecipientType,
     string? RecipientEmail,
     string? RecipientPhone,
     string ProviderName,

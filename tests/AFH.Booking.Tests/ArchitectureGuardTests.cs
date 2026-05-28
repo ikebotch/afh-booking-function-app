@@ -188,8 +188,9 @@ public sealed class ArchitectureGuardTests
     {
         var bookingInfrastructure = Assembly.Load("AFH.Booking.Infrastructure");
         var bookingApplication = Assembly.Load("AFH.Booking.Application");
+        var notificationInfrastructure = Assembly.Load("AFH.Notification.Infrastructure");
 
-        AssertLegacyTypeIsPresentAndNotObsolete(bookingInfrastructure, "AFH.Booking.Infrastructure.Persistence.Models.NotificationDispatchModel");
+        AssertLegacyTypeIsPresentAndNotObsolete(notificationInfrastructure, "AFH.Notification.Infrastructure.Persistence.Models.NotificationDispatchModel");
         AssertLegacyTypeIsPresentAndNotObsolete(bookingInfrastructure, "AFH.Booking.Infrastructure.Persistence.Repositories.NotificationDispatchRepository");
         AssertLegacyTypeIsPresentAndNotObsolete(bookingApplication, "AFH.Booking.Application.Abstractions.Persistence.INotificationDispatchRepository");
     }
@@ -283,9 +284,37 @@ public sealed class ArchitectureGuardTests
     }
 
     [Fact]
-    public void BookingInfrastructure_DoesNotReferenceNotificationInfrastructure()
+    public void DbContexts_RespectNotificationTableOwnership()
     {
-        AssertDoesNotReference("AFH.Booking.Infrastructure", "AFH.Notification.Infrastructure");
+        var bookingDbContext = Assembly.Load("AFH.Booking.Infrastructure")
+            .GetType("AFH.Booking.Infrastructure.Persistence.BookingDbContext");
+        var notificationDbContext = Assembly.Load("AFH.Notification.Infrastructure")
+            .GetType("AFH.Notification.Infrastructure.Persistence.NotificationDbContext");
+
+        Assert.NotNull(bookingDbContext);
+        Assert.NotNull(notificationDbContext);
+
+        var bookingDbSetNames = bookingDbContext!.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Select(x => x.Name)
+            .ToArray();
+        var notificationDbSetNames = notificationDbContext!.GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Select(x => x.Name)
+            .ToArray();
+
+        Assert.DoesNotContain("NotificationOutbox", bookingDbSetNames);
+        Assert.DoesNotContain("NotificationDispatches", bookingDbSetNames);
+        Assert.DoesNotContain("EmailBounceEvents", bookingDbSetNames);
+        Assert.Contains("BookingNotificationRules", bookingDbSetNames);
+        Assert.Contains("BookingNotificationRuleChannels", bookingDbSetNames);
+        Assert.Contains("BookingNotificationRuleRecipients", bookingDbSetNames);
+
+        Assert.Contains("NotificationOutbox", notificationDbSetNames);
+        Assert.Contains("NotificationDispatches", notificationDbSetNames);
+        Assert.Contains("EmailBounceEvents", notificationDbSetNames);
+        Assert.Contains("NotificationTemplates", notificationDbSetNames);
+        Assert.DoesNotContain("BookingNotificationRules", notificationDbSetNames);
+        Assert.DoesNotContain("BookingNotificationRuleChannels", notificationDbSetNames);
+        Assert.DoesNotContain("BookingNotificationRuleRecipients", notificationDbSetNames);
     }
 
     private static string[] GetHttpFunctionNames(Assembly functionAssembly) =>

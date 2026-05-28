@@ -1,22 +1,20 @@
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
-using Microsoft.Data.SqlClient;
+using AFH.Notification.Infrastructure.Persistence;
+using AFH.Notification.Infrastructure.Persistence.Models;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Configuration;
 
 namespace AFH.Notification.Infrastructure.Bouncebacks;
 
 public sealed class EmailBouncebackStore : INotificationBouncebackStore
 {
-    private readonly string _connectionString;
+    private readonly NotificationDbContext _db;
     private readonly ILogger<EmailBouncebackStore> _logger;
 
-    public EmailBouncebackStore(IConfiguration configuration, ILogger<EmailBouncebackStore> logger)
+    public EmailBouncebackStore(NotificationDbContext db, ILogger<EmailBouncebackStore> logger)
     {
-        _connectionString = configuration.GetConnectionString("BookingDb")
-            ?? configuration["Values:ConnectionStrings:BookingDb"]
-            ?? configuration["Values:BookingDb:ConnectionString"]
-            ?? throw new InvalidOperationException("BookingDb connection string is not configured.");
+        _db = db;
         _logger = logger;
     }
 
@@ -28,49 +26,41 @@ public sealed class EmailBouncebackStore : INotificationBouncebackStore
             bounceback.Status,
             bounceback.BounceReason);
 
-        await using var connection = new SqlConnection(_connectionString);
-        await connection.OpenAsync(ct);
-
-        await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(ct);
+        await using var transaction = await _db.Database.BeginTransactionAsync(ct);
 
         try
         {
-            await using var updateCmd = connection.CreateCommand();
-            updateCmd.Transaction = transaction;
-            updateCmd.CommandText = @"
-                UPDATE NotificationDispatches
-                SET EmailStatus = @status,
-                    FailureDetails = @reason,
-                    UpdatedUtc = @now
-                WHERE ProviderMessageId = @messageId";
+            var now = DateTime.UtcNow;
+            var dispatches = await _db.NotificationDispatches
+                .Where(x => x.ProviderMessageId == bounceback.ProviderMessageId)
+                .ToListAsync(ct);
 
-            updateCmd.Parameters.AddWithValue("@status", bounceback.Status);
-            updateCmd.Parameters.AddWithValue("@reason", bounceback.BounceReason ?? (object)DBNull.Value);
-            updateCmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
-            updateCmd.Parameters.AddWithValue("@messageId", bounceback.ProviderMessageId);
-
-            var updatedRows = await updateCmd.ExecuteNonQueryAsync(ct);
-            if (updatedRows == 0)
+            if (dispatches.Count == 0)
             {
                 _logger.LogWarning(
                     "Bounceback ProviderMessageId={ProviderMessageId} did not match a NotificationDispatches row; recording EmailBounceEvents only.",
                     bounceback.ProviderMessageId);
             }
 
-            await using var insertCmd = connection.CreateCommand();
-            insertCmd.Transaction = transaction;
-            insertCmd.CommandText = @"
-                INSERT INTO EmailBounceEvents (Id, ProviderMessageId, ReasonCode, ReasonDetail, OccurredUtc, ReceivedUtc)
-                VALUES (@id, @messageId, @statusCode, @reason, @occurred, @now)";
+            foreach (var dispatch in dispatches)
+            {
+                dispatch.EmailStatus = bounceback.Status;
+                dispatch.OutcomeCode = bounceback.Status;
+                dispatch.FailureDetails = bounceback.BounceReason;
+                dispatch.UpdatedUtc = now;
+            }
 
-            insertCmd.Parameters.AddWithValue("@id", Guid.NewGuid().ToString("N"));
-            insertCmd.Parameters.AddWithValue("@messageId", bounceback.ProviderMessageId);
-            insertCmd.Parameters.AddWithValue("@statusCode", bounceback.Status);
-            insertCmd.Parameters.AddWithValue("@reason", bounceback.BounceReason ?? (object)DBNull.Value);
-            insertCmd.Parameters.AddWithValue("@occurred", bounceback.TimestampUtc);
-            insertCmd.Parameters.AddWithValue("@now", DateTime.UtcNow);
+            await _db.EmailBounceEvents.AddAsync(new EmailBounceEventModel
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ProviderMessageId = bounceback.ProviderMessageId,
+                ReasonCode = bounceback.Status,
+                ReasonDetail = bounceback.BounceReason,
+                OccurredUtc = bounceback.TimestampUtc,
+                ReceivedUtc = now
+            }, ct);
 
-            await insertCmd.ExecuteNonQueryAsync(ct);
+            await _db.SaveChangesAsync(ct);
 
             await transaction.CommitAsync(ct);
         }

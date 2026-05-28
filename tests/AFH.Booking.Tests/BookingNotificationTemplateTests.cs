@@ -2,6 +2,8 @@ using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Calendar;
+using AFH.Notification.Application.Abstractions;
+using AFH.Notification.Application.Models;
 using AFH.Notification.Application.Policies.Booking;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Contract.V1.Dtos;
@@ -271,6 +273,81 @@ Manage your booking:
         Assert.Null(content.HtmlBody);
     }
 
+    [Fact]
+    public async Task RenderAsync_UsesDbTemplateWhenPresent()
+    {
+        var renderer = new NotificationTemplateRenderer(
+            [new BookingNotificationTemplatePolicy()],
+            new StubTemplateStore(new NotificationTemplateDefinition(
+                "booking-confirmed",
+                "v1",
+                NotificationChannel.Email,
+                "DB confirmed",
+                null,
+                "DB subject {{bookingId}}",
+                "DB body {{bookingId}}",
+                "text/plain",
+                true)));
+
+        var rendered = await renderer.RenderAsync(CreateExplicitTemplateRequest("booking-confirmed", "v1"), CancellationToken.None);
+
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal("DB subject booking-1", content.Subject);
+        Assert.Equal("DB body booking-1", content.TextBody);
+    }
+
+    [Fact]
+    public async Task RenderAsync_UsesFileFallbackOnlyWhenDbTemplateIsMissing()
+    {
+        var renderer = new NotificationTemplateRenderer(
+            [new BookingNotificationTemplatePolicy()],
+            new StubTemplateStore(null));
+
+        var rendered = await renderer.RenderAsync(CreateExplicitTemplateRequest("booking-confirmed", "v1"), CancellationToken.None);
+
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal("AFH Booking: Booking Confirmed", content.Subject);
+        Assert.Contains("Booking ID: booking-1", content.TextBody);
+    }
+
+    [Fact]
+    public async Task RenderAsync_MissingDbAndFileTemplateFailsClearly()
+    {
+        var renderer = new NotificationTemplateRenderer(
+            [new BookingNotificationTemplatePolicy()],
+            new StubTemplateStore(null));
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            renderer.RenderAsync(CreateExplicitTemplateRequest("missing-template", "v9"), CancellationToken.None));
+
+        Assert.Contains("missing-template", ex.Message);
+    }
+
+    [Fact]
+    public async Task RenderAsync_ResolvesTemplateVersionPerChannel()
+    {
+        var renderer = new NotificationTemplateRenderer(
+            [new BookingNotificationTemplatePolicy()],
+            new StubTemplateStore(new NotificationTemplateDefinition(
+                "booking-confirmed-sms",
+                "v1",
+                NotificationChannel.Sms,
+                "DB confirmed SMS",
+                null,
+                "SMS subject",
+                "SMS body {{bookingId}}",
+                "text/plain",
+                true)));
+
+        var rendered = await renderer.RenderAsync(
+            CreateExplicitTemplateRequest("booking-confirmed-sms", "v1", NotificationChannel.Sms),
+            CancellationToken.None);
+
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal(NotificationChannel.Sms, content.Channel);
+        Assert.Equal("SMS body booking-1", content.TextBody);
+    }
+
     private static BookingSelfServiceLinks CreateLinks()
         => new(
             "https://client.example/bookings/booking-1?token=token",
@@ -295,6 +372,52 @@ Manage your booking:
 
     private static NotificationTemplateRenderer CreateRenderer()
         => new([new BookingNotificationTemplatePolicy()]);
+
+    private static NotificationRequested CreateExplicitTemplateRequest(
+        string templateKey,
+        string templateVersion,
+        NotificationChannel channel = NotificationChannel.Email)
+        => new(
+            BookingNotificationTypes.BookingConfirmed,
+            "booking-1",
+            new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
+            [new NotificationRecipient("Client", "Jane Client", channel == NotificationChannel.Email ? "jane@example.com" : null, channel == NotificationChannel.Sms ? "+447700900000" : null, null, [channel])],
+            new Dictionary<string, string>
+            {
+                ["TemplateKey"] = templateKey,
+                ["TemplateVersion"] = templateVersion,
+                ["bookingId"] = "booking-1",
+                ["transactionRef"] = "TRX-1",
+                ["adviserName"] = "Alex Adviser",
+                ["meetingType"] = "Review",
+                ["when"] = "Thu 26 Mar 2026",
+                ["whereLine"] = "",
+                ["travelLine"] = "",
+                ["manageBookingLinks"] = ""
+            });
+
+    private sealed class StubTemplateStore : INotificationTemplateStore
+    {
+        private readonly NotificationTemplateDefinition? _template;
+
+        public StubTemplateStore(NotificationTemplateDefinition? template)
+        {
+            _template = template;
+        }
+
+        public Task<NotificationTemplateDefinition?> GetAsync(
+            string templateKey,
+            string templateVersion,
+            NotificationChannel channel,
+            CancellationToken ct)
+            => Task.FromResult(
+                _template is not null &&
+                _template.TemplateKey == templateKey &&
+                _template.TemplateVersion == templateVersion &&
+                _template.Channel == channel
+                    ? _template
+                    : null);
+    }
 
     private static BookingTransaction CreateTransaction(DateTime now, bool isRemote) =>
         BookingTransaction.Rehydrate(

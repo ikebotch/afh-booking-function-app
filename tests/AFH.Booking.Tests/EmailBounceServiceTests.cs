@@ -1,7 +1,7 @@
 using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Infrastructure.Clients;
-using AFH.Booking.Infrastructure.Persistence;
-using AFH.Booking.Infrastructure.Persistence.Models;
+using AFH.Notification.Infrastructure.Persistence;
+using AFH.Notification.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 
@@ -81,13 +81,13 @@ public class EmailBounceServiceTests
         Assert.Empty(await db.NotificationDispatches.ToListAsync());
     }
 
-    private static BookingDbContext CreateDbContext()
+    private static NotificationDbContext CreateDbContext()
     {
-        var options = new DbContextOptionsBuilder<BookingDbContext>()
+        var options = new DbContextOptionsBuilder<NotificationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
 
-        return new BookingDbContext(options);
+        return new NotificationDbContext(options);
     }
 
     private static NotificationDispatchModel CreateDispatch(

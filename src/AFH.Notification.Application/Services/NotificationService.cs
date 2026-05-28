@@ -172,6 +172,7 @@ public sealed class NotificationService : INotificationService, INotificationPub
             transactionId,
             transactionRef,
             channel.ToString(),
+            recipient.RecipientType,
             recipient.Email,
             recipient.MobileNumber,
             providerName,

@@ -51,11 +51,12 @@
 
 ## Notification Architecture
 - Applications publish notification intent. Booking lifecycle owns when notification intent is created.
-- Notification bounded context owns execution (templates, channels, routing).
+- Booking owns notification policy/routing decisions for Booking events.
+- Notification bounded context owns execution, templates, queueing, delivery audit, and bounceback processing.
 - Email is the first channel supported; SMS and Push are future channels.
-- Templates are currently `.txt` only; no HTML/multipart yet.
+- Notification templates are stored in `NotificationTemplates` through EF migrations for `NotificationDbContext`; embedded `.txt` templates are retained as a one-release fallback.
 - Bouncebacks are provider feedback handled explicitly by Notification Infrastructure.
-- Contact-centre copy is a Booking routing policy evaluated through Notification policy interfaces, not hardcoded template logic.
+- Contact-centre copy is a Booking recipient policy row, not a column on `NotificationOutbox` or `NotificationDispatches`.
 - Hold notifications are enabled; they should be configuration-gated before production if the business has not explicitly approved them.
 - Both notification paths are intentionally active during the Sprint 7 transition.
 - New hybrid queued path:
@@ -82,6 +83,11 @@
 - Production deployment requires Key Vault/App Settings for Graph credentials and mailbox permissions for SendMail.
 - Contact-centre copies require `Notifications:Email:ContactCentreEmailAddress`.
 - Bounceback auditing persists `EmailBounceEvents` and correlates with the unified `NotificationDispatches` delivery-attempt audit table. `NotificationOutbox` remains job-level; `NotificationDispatches` remains recipient/channel/provider attempt-level.
+- Table ownership is logical even though the tables live in the same Booking SQL database:
+  - `NotificationDbContext` owns `NotificationOutbox`, `NotificationDispatches`, `EmailBounceEvents`, and `NotificationTemplates`.
+  - `BookingDbContext` owns `BookingNotificationRules`, `BookingNotificationRuleChannels`, and `BookingNotificationRuleRecipients`.
+  - Booking policy rows reference notification templates by `TemplateKey` and `TemplateVersion`; Booking does not own template subject/body content.
+  - Do not add recipient policy columns such as `SendToClient`, `SendToAdviser`, or `CopyContactCentre`; future recipient types are rows in `BookingNotificationRuleRecipients`.
 - **Wording Note:** Current live lifecycle wording uses `Rearranged`, whereas notification template naming uses `Rescheduled`. Do not change wording in Sprint 7 unless product confirms it.
 
 ## Notification Configuration Split
@@ -109,7 +115,7 @@
 - Use `ClientSecretCredential` only with `Notifications:Email:Graph:UseManagedIdentity=false`.
 - Secrets belong in Key Vault/App Settings only; do not commit real secrets to source-controlled configuration.
 - The Graph app registration or managed identity must have permission to send as/from `Notifications:Email:Graph:SenderMailbox`; deployment requires admin consent and the appropriate Microsoft Graph SendMail permissions/mailbox access.
-- Templates remain `.txt` only for now, so Graph sends plain text bodies. HTML/multipart delivery is intentionally out of scope.
+- Database templates remain plain text for now, so Graph sends plain text bodies. HTML/multipart delivery is intentionally out of scope.
 - Microsoft Graph `sendMail` returns `202 Accepted` without a provider message id. The service stores an internal provider correlation id as `ProviderMessageId` for tracing successful sends.
 - Because the Graph `ProviderMessageId` is internal rather than a Graph-generated message id, queued Graph dispatch rows are ready for bounceback correlation by stored provider correlation id, but production provider metadata should be verified end-to-end before relying on Graph bouncebacks operationally.
 - Legacy direct Booking email sending has been removed from active runtime paths; approval/audit/bounceback compatibility remains through `NotificationDispatches`.
@@ -129,6 +135,8 @@
 - Lifecycle and Outlook-governance changes now require database schema support for lifecycle audit tables and `OperationalIssues`.
 - Create and apply an EF migration from the infrastructure project before deploying to shared environments.
 - `NotificationOutbox` schema is deployed through EF migrations for `NotificationDbContext`.
+- `NotificationTemplates`, `NotificationDispatches`, and `EmailBounceEvents` are notification-owned and mapped by `NotificationDbContext`.
+- Booking notification policy tables are Booking-owned and mapped by `BookingDbContext`.
 - Do not manually maintain `notification-outbox.sql` as the source of truth.
 - Treat that migration as required infra work for this backend phase.
 - Current `NotificationOutboxStore` persistence tests depend on a local SQL Server instance; add CI-backed SQL integration coverage before production cutover.

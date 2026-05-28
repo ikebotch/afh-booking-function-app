@@ -10,28 +10,87 @@ namespace AFH.Notification.Application.Services;
 public sealed partial class NotificationTemplateRenderer : INotificationTemplateRenderer
 {
     private readonly IReadOnlyList<INotificationTemplatePolicy> _policies;
+    private readonly INotificationTemplateStore? _templateStore;
 
-    public NotificationTemplateRenderer(IEnumerable<INotificationTemplatePolicy> policies)
+    public NotificationTemplateRenderer(
+        IEnumerable<INotificationTemplatePolicy> policies,
+        INotificationTemplateStore? templateStore = null)
     {
         _policies = policies.ToArray();
+        _templateStore = templateStore;
     }
 
     public async Task<NotificationTemplateRenderResult> RenderAsync(
         NotificationRequested notification,
         CancellationToken ct)
     {
-        var template = await LoadTemplateAsync(GetTemplateName(notification), ct);
-        var parsed = ParseTemplate(template);
+        var parsed = await ResolveTemplateAsync(notification, ct);
         var body = ReplaceTokens(parsed.Body, notification.Data);
+        var subject = ReplaceTokens(parsed.Subject, notification.Data);
 
         return new NotificationTemplateRenderResult(
         [
             new NotificationChannelContent(
                 parsed.Channel,
-                parsed.Subject,
+                subject,
                 HtmlBody: null,
                 body)
         ]);
+    }
+
+    private async Task<TemplateParts> ResolveTemplateAsync(NotificationRequested notification, CancellationToken ct)
+    {
+        if (TryGetExplicitTemplate(notification, out var templateKey, out var templateVersion, out var channel))
+        {
+            if (_templateStore is not null)
+            {
+                var dbTemplate = await _templateStore.GetAsync(templateKey, templateVersion, channel, ct);
+                if (dbTemplate is not null)
+                {
+                    return new TemplateParts(
+                        dbTemplate.SubjectTemplate ?? string.Empty,
+                        dbTemplate.Channel,
+                        dbTemplate.BodyTemplate);
+                }
+            }
+
+            var templateName = $"{notification.Type.SourceApplication}.{templateKey}.{templateVersion}.txt";
+            return ParseTemplate(await LoadTemplateAsync(templateName, ct));
+        }
+
+        return ParseTemplate(await LoadTemplateAsync(GetTemplateName(notification), ct));
+    }
+
+    private static bool TryGetExplicitTemplate(
+        NotificationRequested notification,
+        out string templateKey,
+        out string templateVersion,
+        out NotificationChannel channel)
+    {
+        templateKey = string.Empty;
+        templateVersion = string.Empty;
+        channel = default;
+
+        if (!notification.Data.TryGetValue("TemplateKey", out var key) ||
+            !notification.Data.TryGetValue("TemplateVersion", out var version) ||
+            string.IsNullOrWhiteSpace(key) ||
+            string.IsNullOrWhiteSpace(version))
+        {
+            return false;
+        }
+
+        var requestedChannels = notification.Recipients
+            .SelectMany(x => x.PreferredChannels ?? [])
+            .Distinct()
+            .ToArray();
+
+        if (requestedChannels.Length != 1)
+            return false;
+
+        templateKey = key.Trim();
+        templateVersion = version.Trim();
+        channel = requestedChannels[0];
+        return true;
     }
 
     private string GetTemplateName(NotificationRequested notification)

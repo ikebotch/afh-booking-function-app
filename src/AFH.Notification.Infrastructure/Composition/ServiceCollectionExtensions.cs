@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
 
         services.AddScoped<INotificationAuditStore, NotificationAuditStore>();
         services.AddScoped<INotificationDeliveryAuditStore, NotificationDeliveryAuditStore>();
+        services.AddScoped<INotificationTemplateStore, NotificationTemplateStore>();
         AddEmailDeliveryGateway(services, configuration);
         services.AddScoped<IContactCentreRoutingResolver, ContactCentreRoutingResolver>();
 

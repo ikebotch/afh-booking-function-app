@@ -1,4 +1,5 @@
 using System.Net;
+using AFH.Notification.Application.Composition;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using AFH.Notification.Infrastructure.Composition;
@@ -37,6 +38,42 @@ public sealed class NotificationPublisherIntegrationTests
             descriptor.ServiceType == typeof(INotificationPublisher) &&
             (descriptor.ImplementationType == expectedPublisherType ||
              descriptor.ImplementationFactory is not null && expectedPublisherType == typeof(HttpNotificationPublisher)));
+    }
+
+    [Fact]
+    public void NotificationPublisher_ResolvesHttpPublisher_WhenTransportIsHttp()
+    {
+        var config = CreateConfig(
+            ("Notifications:Integration:Transport", "Http"),
+            ("Notifications:Integration:Http:BaseUrl", "https://notification.example"));
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+        services.AddNotificationApplication();
+        services.AddNotificationInfrastructure(config);
+        using var provider = services.BuildServiceProvider();
+
+        var publisher = provider.GetRequiredService<INotificationPublisher>();
+
+        Assert.IsType<HttpNotificationPublisher>(publisher);
+    }
+
+    [Fact]
+    public void NotificationPublisher_ResolvesHttpPublisher_WhenNotificationApplicationIsRegisteredAfterInfrastructure()
+    {
+        var config = CreateConfig(
+            ("Notifications:Integration:Transport", "Http"),
+            ("Notifications:Integration:Http:BaseUrl", "https://notification.example"));
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+        services.AddNotificationInfrastructure(config);
+        services.AddNotificationApplication();
+        using var provider = services.BuildServiceProvider();
+
+        var publisher = provider.GetRequiredService<INotificationPublisher>();
+
+        Assert.IsType<HttpNotificationPublisher>(publisher);
     }
 
     [Fact]

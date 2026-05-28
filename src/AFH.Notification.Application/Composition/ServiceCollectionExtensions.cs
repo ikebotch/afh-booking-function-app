@@ -3,6 +3,7 @@ using AFH.Notification.Application.Policies.Booking;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Contract.Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace AFH.Notification.Application.Composition;
 
@@ -13,7 +14,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<NotificationService>();
         services.AddScoped<INotificationService>(sp => sp.GetRequiredService<NotificationService>());
         services.AddScoped<NotificationOutboxService>();
-        services.AddScoped<INotificationPublisher>(sp => sp.GetRequiredService<NotificationOutboxService>());
+        services.TryAddScoped<INotificationPublisher>(sp => sp.GetRequiredService<NotificationOutboxService>());
         services.AddScoped<INotificationRequestIngestionService, NotificationRequestIngestionService>();
         services.AddScoped<INotificationTemplateAdminService, NotificationTemplateAdminService>();
         services.AddScoped<INotificationTemplatePreviewService, NotificationTemplatePreviewService>();

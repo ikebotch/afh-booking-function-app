@@ -36,13 +36,34 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
         IReadOnlyDictionary<string, string> data,
         CancellationToken ct)
     {
+        _logger.LogInformation(
+            "Booking notification step started. LifecycleEventType={LifecycleEventType} CorrelationId={CorrelationId} RequestedRecipientCount={RecipientCount}",
+            lifecycleEventType,
+            correlationId,
+            recipients.Count);
+
         var notificationType = MapEventType(lifecycleEventType);
         if (notificationType is null)
+        {
+            _logger.LogInformation(
+                "Booking notification step skipped because lifecycle event has no notification mapping. LifecycleEventType={LifecycleEventType}",
+                lifecycleEventType);
             return (LifecycleStepStatuses.Skipped, null, null);
+        }
+
+        _logger.LogInformation(
+            "Booking notification step mapped lifecycle event. LifecycleEventType={LifecycleEventType} NotificationType={NotificationType}",
+            lifecycleEventType,
+            notificationType.Name);
 
         try
         {
             var policy = await _policyProvider.GetAsync("Booking", notificationType, ct);
+            _logger.LogInformation(
+                "Booking notification policy evaluated. NotificationType={NotificationType} PolicyEnabled={PolicyEnabled}",
+                notificationType.Name,
+                policy.Enabled);
+
             if (!policy.Enabled)
             {
                 _logger.LogInformation(
@@ -52,6 +73,11 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
             }
 
             var resolvedRecipients = await _recipientResolver.ResolveAsync(policy, recipients, data, ct);
+            _logger.LogInformation(
+                "Booking notification recipients resolved. NotificationType={NotificationType} RecipientCount={RecipientCount}",
+                notificationType.Name,
+                resolvedRecipients.Count);
+
             if (resolvedRecipients.Count == 0)
             {
                 _logger.LogInformation(
@@ -59,6 +85,11 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
                     notificationType.Name);
                 return (LifecycleStepStatuses.Skipped, null, null);
             }
+
+            _logger.LogInformation(
+                "Booking notification publish started. NotificationType={NotificationType} PublisherTransport={PublisherTransport}",
+                notificationType.Name,
+                _publisher.GetType().Name);
 
             await _publisher.PublishAsync(
                 new NotificationRequested(
@@ -69,10 +100,20 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
                     BuildPolicyData(data, policy)),
                 ct);
 
+            _logger.LogInformation(
+                "Booking notification publish succeeded. NotificationType={NotificationType} PublisherTransport={PublisherTransport}",
+                notificationType.Name,
+                _publisher.GetType().Name);
+
             return (LifecycleStepStatuses.Succeeded, null, null);
         }
         catch (Exception ex)
         {
+            _logger.LogError(
+                ex,
+                "Booking notification publish failed. LifecycleEventType={LifecycleEventType} NotificationType={NotificationType}",
+                lifecycleEventType,
+                notificationType.Name);
             return (LifecycleStepStatuses.Failed, LifecycleErrorCodes.NotificationFailed, ex.Message);
         }
     }

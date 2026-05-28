@@ -31,8 +31,12 @@ public sealed class NotificationOutboxService : INotificationPublisher
     }
 
     public async Task PublishAsync(NotificationRequested notification, CancellationToken ct)
+        => await AcceptAsync(notification, ct);
+
+    public async Task<NotificationOutboxAcceptResult> AcceptAsync(NotificationRequested notification, CancellationToken ct)
     {
         var route = await _recipientResolver.ResolveAsync(notification, ct);
+        var accepted = new List<NotificationOutboxCreateResult>();
 
         foreach (var recipient in route.Recipients)
         {
@@ -58,6 +62,7 @@ public sealed class NotificationOutboxService : INotificationPublisher
                     null);
 
                 var result = await _outboxStore.CreateOrGetAsync(outboxItem, ct);
+                accepted.Add(result);
 
                 if (result.Created)
                 {
@@ -84,6 +89,8 @@ public sealed class NotificationOutboxService : INotificationPublisher
                 }
             }
         }
+
+        return new NotificationOutboxAcceptResult(accepted);
     }
 
     private static NotificationRequested CreateChannelNotification(

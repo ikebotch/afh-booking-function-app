@@ -4,7 +4,7 @@ using AFH.Notification.Application.Services;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
-namespace AFH.Booking.Function.Functions.V1.Notifications;
+namespace AFH.Booking.Function.Functions.V1.Notifications.Dispatch;
 
 public class SendNotificationQueueTrigger
 {

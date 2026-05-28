@@ -59,11 +59,20 @@
 - Contact-centre copy is a Booking recipient policy row, not a column on `NotificationOutbox` or `NotificationDispatches`.
 - Hold notifications are disabled by default and must remain configuration-gated unless the business explicitly approves them.
 - Both notification paths are intentionally active during the Sprint 7 transition.
-- New hybrid queued path:
-  - Current in-process transition: `BookingNotificationStep` -> `NotificationOutbox` -> Azure Queue message containing only `outboxId` -> `SendNotificationQueueTrigger` -> `NotificationService` -> `GraphEmailDeliveryGateway` -> `NotificationOutbox` status update.
-  - Final service split target: Booking resolves policy/recipients/template/channel, publishes a durable `NotificationRequested` integration message, and stops; Notification consumes that message, creates `NotificationOutbox`, and uses the internal OutboxId queue.
+- Shared-host transition:
+  - `AFH.Booking.Function` temporarily hosts Booking HTTP functions plus Notification-owned inbound, dispatch, and bounceback functions.
+  - Transitional Notification functions are grouped under `Functions/V1/Notifications/Inbound`, `Functions/V1/Notifications/Dispatch`, and `Functions/V1/Notifications/Bouncebacks`.
+  - The shared Function host may reference both Booking and Notification modules for composition; Booking Application/Infrastructure must still depend only on `AFH.Notification.Contract` abstractions and must not reference `AFH.Notification.Infrastructure`.
+- Source-to-Notification boundary:
+  - Source applications submit the source-neutral `NotificationRequested` contract by HTTP or Azure Service Bus.
+  - HTTP path: source app -> `HttpNotificationPublisher` -> `POST /api/v1/notifications/requests` -> `NotificationRequestIngestionService`.
+  - Service Bus path: source app -> `ServiceBusNotificationPublisher` -> `notification-requests` topic/queue -> Notification Service Bus consumer -> `NotificationRequestIngestionService`.
+  - HTTP is the current/default near-term transport. Service Bus is available for asynchronous decoupling and multi-source integration.
+  - Both inbound transports call the same shared ingestion service; neither sends email synchronously.
+- Internal Notification dispatch:
+  - After ingestion, `NotificationRequested` -> `NotificationOutbox` -> Azure Queue message containing only `outboxId` -> `SendNotificationQueueTrigger` -> `NotificationService` -> `NotificationTemplates` -> `GraphEmailDeliveryGateway` -> `NotificationDispatches` -> `NotificationMessageLogs`.
+  - Final service split target: Booking resolves policy/recipients/template/channel, publishes `NotificationRequested`, and stops; Notification consumes that request, creates `NotificationOutbox`, and uses the internal OutboxId queue.
   - `NotificationOutbox` is Notification-owned. The Azure Queue `outboxId` message is internal to the Notification service, not the Booking-to-Notification boundary.
-  - Use Azure Service Bus or an equivalent durable integration transport for the Booking-to-Notification boundary. Do not use HTTP for the primary send path unless there is a strong operational reason.
 - Retained compatibility path:
   - `ApprovalNotificationService`, queued delivery audit, and bouncebacks continue to use `NotificationDispatches`.
   - `NotificationDispatches` remains active for delivery audit and bounceback correlation. Do not drop it yet.
@@ -105,13 +114,32 @@
 ## Notification Configuration Split
 - Legacy Booking self-service link options are flat keys under `Notifications`:
   - `Notifications:ClientPortalBaseUrl`
-- New Notification infrastructure options are nested:
+- Source-side outbound publishing uses `Notifications:Integration:*`:
+  - `Notifications:Integration:Transport` is `Http` by default; allowed values are `Http`, `ServiceBus`, and transitional/local `InProcess`.
+  - `Notifications:Integration:Http:BaseUrl`
+  - `Notifications:Integration:Http:RequestPath`
+  - `Notifications:Integration:Http:TimeoutSeconds`
+  - `Notifications:Integration:Http:InternalToken`
+  - `Notifications:Integration:ServiceBus:FullyQualifiedNamespace`
+  - `Notifications:Integration:ServiceBus:ConnectionString`
+  - `Notifications:Integration:ServiceBus:TopicName`
+  - `Notifications:Integration:ServiceBus:QueueName`
+- Notification-side inbound receiving uses `Notifications:Inbound:*`:
+  - `Notifications:Inbound:ServiceBus:Enabled`
+  - `Notifications:Inbound:ServiceBus:FullyQualifiedNamespace`
+  - `Notifications:Inbound:ServiceBus:ConnectionString`
+  - `Notifications:Inbound:ServiceBus:TopicName`
+  - `Notifications:Inbound:ServiceBus:SubscriptionName`
+  - `Notifications:Inbound:ServiceBus:QueueName`
+- Notification internal queue dispatch uses `Notifications:Queue:*`:
   - `Notifications:Queue:QueueName`
   - `Notifications:Queue:ConnectionString`
+- Delivery/provider options remain under nested Notification infrastructure settings:
   - `Notifications:Email:Enabled`
   - `Notifications:Email:ProviderName`
   - `Notifications:Email:ContactCentreEmailAddress`
   - `Notifications:Email:Graph:*`
+- Azure Functions-safe app settings use double underscores, for example `Notifications__Integration__Transport`, `Notifications__Integration__Http__BaseUrl`, `Notifications__Inbound__ServiceBus__Enabled`, and `Notifications__Queue__QueueName`.
 - Keep `Notifications:ClientPortalBaseUrl` configured until Booking self-service link generation moves to a dedicated options section.
 
 ## Microsoft Graph Email Delivery

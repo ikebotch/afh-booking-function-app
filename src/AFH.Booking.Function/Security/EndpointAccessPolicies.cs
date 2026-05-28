@@ -48,6 +48,7 @@ public static class EndpointAccessPolicies
             ["Clients_CreateDuplicateCase"] = EndpointAccessPolicy.InternalOnly,
             ["Clients_ListDuplicateCases"] = EndpointAccessPolicy.InternalOnly,
             ["Clients_ResolveDuplicateCase"] = EndpointAccessPolicy.InternalOnly,
+            ["Notifications_RequestHttpV1"] = EndpointAccessPolicy.InternalOnly,
             ["Transactions_Availability"] = EndpointAccessPolicy.Public,
             ["Transactions_Availability_V2"] = EndpointAccessPolicy.InternalOnly,
             ["Users_GetCurrentUser"] = EndpointAccessPolicy.UserAuthenticated,

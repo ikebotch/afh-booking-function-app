@@ -6,6 +6,7 @@ using AFH.Common.Errors.Abstractions;
 using AFH.Common.Errors.AzureFunctions.DependencyInjection;
 using AFH.Notification.Application.Composition;
 using AFH.Notification.Infrastructure.Composition;
+using AFH.Notification.Infrastructure.Integration.Inbound;
 using Azure.Core.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -124,6 +125,9 @@ static void AddValidatedSecurityOptions(IServiceCollection services, IConfigurat
     services.AddOptions<DomainUserAuthOptions>()
         .Bind(configuration.GetSection(DomainUserAuthOptions.SectionName))
         .ValidateOnStart();
+
+    services.AddOptions<NotificationInboundServiceBusOptions>()
+        .Bind(configuration.GetSection(NotificationInboundServiceBusOptions.SectionName));
 }
 
 static void ConfigureWorkerSerialization(IServiceCollection services, bool caseInsensitivePropertyNames)

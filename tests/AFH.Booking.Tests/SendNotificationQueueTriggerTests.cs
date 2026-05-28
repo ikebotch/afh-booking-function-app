@@ -1,5 +1,5 @@
 using System.Text.Json;
-using AFH.Booking.Function.Functions.V1.Notifications;
+using AFH.Booking.Function.Functions.V1.Notifications.Dispatch;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
 using AFH.Notification.Application.Services;

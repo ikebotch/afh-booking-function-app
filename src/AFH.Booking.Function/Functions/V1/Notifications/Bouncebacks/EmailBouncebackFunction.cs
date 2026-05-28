@@ -4,7 +4,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
 using System.Net;
 
-namespace AFH.Booking.Function.Functions.V1.Notifications;
+namespace AFH.Booking.Function.Functions.V1.Notifications.Bouncebacks;
 
 public sealed class EmailBouncebackFunction
 {

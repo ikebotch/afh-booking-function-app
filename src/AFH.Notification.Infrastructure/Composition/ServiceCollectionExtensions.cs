@@ -2,10 +2,12 @@ using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Infrastructure.Delivery.Email;
 using AFH.Notification.Infrastructure.Delivery.Email.Graph;
+using AFH.Notification.Infrastructure.Integration;
 using AFH.Notification.Infrastructure.Options;
 using AFH.Notification.Infrastructure.Bouncebacks;
 using AFH.Notification.Infrastructure.Persistence;
 using AFH.Notification.Infrastructure.Queue;
+using AFH.Notification.Contract.Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.EntityFrameworkCore;
@@ -24,6 +26,9 @@ public static class ServiceCollectionExtensions
         services.Configure<SmsDeliveryOptions>(configuration.GetSection(SmsDeliveryOptions.SectionName));
         services.Configure<PushDeliveryOptions>(configuration.GetSection(PushDeliveryOptions.SectionName));
         services.Configure<NotificationQueueOptions>(options => BindNotificationQueueOptions(configuration, options));
+        services.Configure<NotificationIntegrationOptions>(configuration.GetSection(NotificationIntegrationOptions.SectionName));
+        services.Configure<HttpNotificationPublisherOptions>(configuration.GetSection(HttpNotificationPublisherOptions.SectionName));
+        services.Configure<ServiceBusNotificationPublisherOptions>(configuration.GetSection(ServiceBusNotificationPublisherOptions.SectionName));
 
         var connectionString = configuration.GetConnectionString("BookingDb")
             ?? configuration["Values:ConnectionStrings:BookingDb"]
@@ -47,8 +52,36 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationBouncebackStore, EmailBouncebackStore>();
         services.AddScoped<INotificationBounceAuditStore, EmailBouncebackStore>();
         services.AddScoped<INotificationBouncebackProcessor, EmailBouncebackProcessor>();
+        AddSourcePublisher(services, configuration);
 
         return services;
+    }
+
+    private static void AddSourcePublisher(IServiceCollection services, IConfiguration configuration)
+    {
+        var options = configuration.GetSection(NotificationIntegrationOptions.SectionName).Get<NotificationIntegrationOptions>()
+            ?? new NotificationIntegrationOptions();
+
+        if (string.Equals(options.Transport, "ServiceBus", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<INotificationPublisher, ServiceBusNotificationPublisher>();
+            return;
+        }
+
+        if (string.Equals(options.Transport, "InProcess", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<INotificationPublisher, InProcessNotificationPublisher>();
+            return;
+        }
+
+        services.AddHttpClient<INotificationPublisher, HttpNotificationPublisher>((sp, http) =>
+        {
+            var httpOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<HttpNotificationPublisherOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(httpOptions.BaseUrl))
+                http.BaseAddress = new Uri(httpOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
+            http.Timeout = TimeSpan.FromSeconds(httpOptions.TimeoutSeconds <= 0 ? 30 : httpOptions.TimeoutSeconds);
+        });
     }
 
     private static void AddEmailDeliveryGateway(IServiceCollection services, IConfiguration configuration)

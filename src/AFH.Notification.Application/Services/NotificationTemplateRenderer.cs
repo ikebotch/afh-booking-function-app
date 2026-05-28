@@ -24,52 +24,62 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
         NotificationRequested notification,
         CancellationToken ct)
     {
-        var parsed = await ResolveTemplateAsync(notification, ct);
-        var body = ReplaceTokens(parsed.Body, notification.Data);
-        var subject = ReplaceTokens(parsed.Subject, notification.Data);
+        var parsed = await ResolveTemplatesAsync(notification, ct);
 
         return new NotificationTemplateRenderResult(
-        [
-            new NotificationChannelContent(
-                parsed.Channel,
-                subject,
-                HtmlBody: null,
-                body)
-        ]);
+            parsed
+                .Select(template => new NotificationChannelContent(
+                    template.Channel,
+                    string.IsNullOrWhiteSpace(template.Subject) ? null : ReplaceTokens(template.Subject, notification.Data),
+                    HtmlBody: null,
+                    ReplaceTokens(template.Body, notification.Data),
+                    template.ContentType))
+                .ToArray());
     }
 
-    private async Task<TemplateParts> ResolveTemplateAsync(NotificationRequested notification, CancellationToken ct)
+    private async Task<IReadOnlyList<TemplateParts>> ResolveTemplatesAsync(NotificationRequested notification, CancellationToken ct)
     {
-        if (TryGetExplicitTemplate(notification, out var templateKey, out var templateVersion, out var channel))
+        if (TryGetExplicitTemplate(notification, out var templateKey, out var templateVersion, out var channels))
         {
+            var resolved = new List<TemplateParts>(channels.Length);
             if (_templateStore is not null)
             {
-                var dbTemplate = await _templateStore.GetAsync(templateKey, templateVersion, channel, ct);
-                if (dbTemplate is not null)
+                foreach (var requestedChannel in channels)
                 {
-                    return new TemplateParts(
-                        dbTemplate.SubjectTemplate ?? string.Empty,
-                        dbTemplate.Channel,
-                        dbTemplate.BodyTemplate);
+                    var dbTemplate = await _templateStore.GetAsync(templateKey, templateVersion, requestedChannel, ct);
+                    if (dbTemplate is not null)
+                    {
+                        resolved.Add(new TemplateParts(
+                            dbTemplate.SubjectTemplate ?? string.Empty,
+                            dbTemplate.Channel,
+                            dbTemplate.BodyTemplate,
+                            dbTemplate.ContentType));
+                    }
                 }
+
+                if (resolved.Count == channels.Length)
+                    return resolved;
             }
 
+            if (channels.Length != 1)
+                throw new InvalidOperationException($"Notification DB templates '{templateKey}' version '{templateVersion}' were not found for all requested channels.");
+
             var templateName = $"{notification.Type.SourceApplication}.{templateKey}.{templateVersion}.txt";
-            return ParseTemplate(await LoadTemplateAsync(templateName, ct));
+            return [ParseTemplate(await LoadTemplateAsync(templateName, ct))];
         }
 
-        return ParseTemplate(await LoadTemplateAsync(GetTemplateName(notification), ct));
+        return [ParseTemplate(await LoadTemplateAsync(GetTemplateName(notification), ct))];
     }
 
     private static bool TryGetExplicitTemplate(
         NotificationRequested notification,
         out string templateKey,
         out string templateVersion,
-        out NotificationChannel channel)
+        out NotificationChannel[] channels)
     {
         templateKey = string.Empty;
         templateVersion = string.Empty;
-        channel = default;
+        channels = [];
 
         if (!notification.Data.TryGetValue("TemplateKey", out var key) ||
             !notification.Data.TryGetValue("TemplateVersion", out var version) ||
@@ -81,15 +91,16 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
 
         var requestedChannels = notification.Recipients
             .SelectMany(x => x.PreferredChannels ?? [])
+            .Where(channel => channel != NotificationChannel.Unknown)
             .Distinct()
             .ToArray();
 
-        if (requestedChannels.Length != 1)
+        if (requestedChannels.Length == 0)
             return false;
 
         templateKey = key.Trim();
         templateVersion = version.Trim();
-        channel = requestedChannels[0];
+        channels = requestedChannels;
         return true;
     }
 
@@ -145,7 +156,7 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
             ? parsedChannel
             : throw new InvalidOperationException("Notification template channel is required.");
 
-        return new TemplateParts(subject, channel, split[1].TrimEnd('\n'));
+        return new TemplateParts(subject, channel, split[1].TrimEnd('\n'), "text/plain");
     }
 
     private static string ReplaceTokens(string template, IReadOnlyDictionary<string, string> data)
@@ -163,5 +174,6 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
     private sealed record TemplateParts(
         string Subject,
         NotificationChannel Channel,
-        string Body);
+        string Body,
+        string ContentType);
 }

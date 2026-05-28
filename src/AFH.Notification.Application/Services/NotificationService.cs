@@ -98,7 +98,7 @@ public sealed class NotificationService : INotificationService, INotificationPub
                                 result.ProviderName ?? ResolveProviderName(gateway),
                                 result.Status,
                                 result.ProviderMessageId,
-                                null,
+                                result.FailureDetails,
                                 now,
                                 content),
                             ct);

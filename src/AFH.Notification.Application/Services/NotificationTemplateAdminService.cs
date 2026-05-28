@@ -59,6 +59,11 @@ public sealed class NotificationTemplateAdminService : INotificationTemplateAdmi
             throw new NotificationRequestValidationException("SubjectTemplate is required for Email templates.");
         if (string.IsNullOrWhiteSpace(template.ContentType))
             throw new NotificationRequestValidationException("ContentType is required.");
+        if (template.Channel == NotificationChannel.Sms &&
+            !string.Equals(template.ContentType.Trim(), "text/plain", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new NotificationRequestValidationException("SMS templates must use text/plain ContentType.");
+        }
     }
 
     private static NotificationTemplateUpsert Normalize(NotificationTemplateUpsert template)

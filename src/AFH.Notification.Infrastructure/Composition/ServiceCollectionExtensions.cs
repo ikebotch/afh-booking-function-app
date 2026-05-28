@@ -2,6 +2,7 @@ using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Services;
 using AFH.Notification.Infrastructure.Delivery.Email;
 using AFH.Notification.Infrastructure.Delivery.Email.Graph;
+using AFH.Notification.Infrastructure.Delivery.Sms;
 using AFH.Notification.Infrastructure.Integration;
 using AFH.Notification.Infrastructure.Options;
 using AFH.Notification.Infrastructure.Bouncebacks;
@@ -24,6 +25,8 @@ public static class ServiceCollectionExtensions
         services.Configure<EmailDeliveryOptions>(configuration.GetSection(EmailDeliveryOptions.SectionName));
         services.Configure<GraphEmailOptions>(configuration.GetSection(GraphEmailOptions.SectionName));
         services.Configure<SmsDeliveryOptions>(configuration.GetSection(SmsDeliveryOptions.SectionName));
+        services.Configure<AzureCommunicationSmsOptions>(configuration.GetSection(AzureCommunicationSmsOptions.SectionName));
+        services.Configure<TwilioSmsOptions>(configuration.GetSection(TwilioSmsOptions.SectionName));
         services.Configure<PushDeliveryOptions>(configuration.GetSection(PushDeliveryOptions.SectionName));
         services.Configure<NotificationQueueOptions>(options => BindNotificationQueueOptions(configuration, options));
         services.Configure<NotificationIntegrationOptions>(configuration.GetSection(NotificationIntegrationOptions.SectionName));
@@ -48,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationTemplateAdminStore, NotificationTemplateAdminStore>();
         services.AddScoped<INotificationStatusService, NotificationStatusService>();
         AddEmailDeliveryGateway(services, configuration);
+        AddSmsDeliveryGateway(services, configuration);
         services.AddScoped<IContactCentreRoutingResolver, ContactCentreRoutingResolver>();
 
         services.AddSingleton<EmailBouncebackParser>();
@@ -115,6 +119,47 @@ public static class ServiceCollectionExtensions
         }
 
         services.AddScoped<INotificationDeliveryGateway, EmailNotificationDeliveryGateway>();
+    }
+
+    private static void AddSmsDeliveryGateway(IServiceCollection services, IConfiguration configuration)
+    {
+        var smsOptions = configuration.GetSection(SmsDeliveryOptions.SectionName).Get<SmsDeliveryOptions>()
+            ?? new SmsDeliveryOptions();
+
+        if (!smsOptions.Enabled ||
+            string.IsNullOrWhiteSpace(smsOptions.ProviderName) ||
+            string.Equals(smsOptions.ProviderName, "Composed", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<INotificationDeliveryGateway, SmsNotificationDeliveryGateway>();
+            return;
+        }
+
+        if (string.Equals(smsOptions.ProviderName, "AzureCommunicationServices", StringComparison.OrdinalIgnoreCase))
+        {
+            var acsOptions = configuration.GetSection(AzureCommunicationSmsOptions.SectionName).Get<AzureCommunicationSmsOptions>()
+                ?? new AzureCommunicationSmsOptions();
+            acsOptions.Validate();
+            services.AddHttpClient<AzureCommunicationSmsSender>();
+            services.AddScoped<ISmsProviderSender>(sp => sp.GetRequiredService<AzureCommunicationSmsSender>());
+            services.AddScoped<INotificationDeliveryGateway, SmsNotificationDeliveryGateway>();
+            return;
+        }
+
+        if (string.Equals(smsOptions.ProviderName, "Twilio", StringComparison.OrdinalIgnoreCase))
+        {
+            var twilioOptions = configuration.GetSection(TwilioSmsOptions.SectionName).Get<TwilioSmsOptions>()
+                ?? new TwilioSmsOptions();
+            twilioOptions.Validate();
+            services.AddHttpClient<TwilioSmsSender>(http =>
+            {
+                http.BaseAddress = new Uri("https://api.twilio.com/", UriKind.Absolute);
+            });
+            services.AddScoped<ISmsProviderSender>(sp => sp.GetRequiredService<TwilioSmsSender>());
+            services.AddScoped<INotificationDeliveryGateway, SmsNotificationDeliveryGateway>();
+            return;
+        }
+
+        throw new InvalidOperationException($"{SmsDeliveryOptions.SectionName}:ProviderName must be Composed, AzureCommunicationServices, or Twilio.");
     }
 
     private static void AddQueuePublisher(IServiceCollection services, IConfiguration configuration)

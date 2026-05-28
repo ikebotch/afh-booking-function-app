@@ -11,8 +11,8 @@ using AFH.Notification.Contract.Abstractions;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
@@ -210,6 +210,86 @@ public sealed class BookingNotificationPolicyTests
         Assert.Equal(emailTargets.Distinct(StringComparer.OrdinalIgnoreCase).Count(), emailTargets.Length);
     }
 
+    [Fact]
+    public async Task Resolver_ContactCentreEmailAddress_ResolvesOneContactCentreRecipient()
+    {
+        var recipients = await ResolveWithContactCentreOptions(
+            contactCentreEmailAddress: "contact@example.com",
+            adminBccRecipients: null);
+
+        var contact = Assert.Single(ContactCentreRecipients(recipients));
+        Assert.Equal("contact@example.com", contact.Email);
+    }
+
+    [Fact]
+    public async Task Resolver_AdminBccRecipients_ResolvesMultipleContactCentreRecipients()
+    {
+        var recipients = await ResolveWithContactCentreOptions(
+            contactCentreEmailAddress: null,
+            adminBccRecipients: "admin-one@example.com;admin-two@example.com");
+
+        Assert.Equal(
+            ["admin-one@example.com", "admin-two@example.com"],
+            ContactCentreEmails(recipients));
+    }
+
+    [Fact]
+    public async Task Resolver_AdminBccRecipients_TakesPrecedenceOverContactCentreEmailAddress()
+    {
+        var recipients = await ResolveWithContactCentreOptions(
+            contactCentreEmailAddress: "contact@example.com",
+            adminBccRecipients: "admin@example.com");
+
+        var contact = Assert.Single(ContactCentreRecipients(recipients));
+        Assert.Equal("admin@example.com", contact.Email);
+    }
+
+    [Fact]
+    public async Task Resolver_AdminBccRecipients_SupportsSemicolonAndCommaSeparatedValues()
+    {
+        var recipients = await ResolveWithContactCentreOptions(
+            contactCentreEmailAddress: null,
+            adminBccRecipients: "admin-one@example.com; admin-two@example.com,admin-three@example.com");
+
+        Assert.Equal(
+            ["admin-one@example.com", "admin-two@example.com", "admin-three@example.com"],
+            ContactCentreEmails(recipients));
+    }
+
+    [Fact]
+    public async Task Resolver_AdminBccRecipients_RemovesDuplicatesCaseInsensitively()
+    {
+        var recipients = await ResolveWithContactCentreOptions(
+            contactCentreEmailAddress: null,
+            adminBccRecipients: "Admin@example.com;admin@example.com,other@example.com");
+
+        Assert.Equal(
+            ["Admin@example.com", "other@example.com"],
+            ContactCentreEmails(recipients));
+    }
+
+    [Fact]
+    public async Task Resolver_AdminBccRecipients_IgnoresBlankEntries()
+    {
+        var recipients = await ResolveWithContactCentreOptions(
+            contactCentreEmailAddress: null,
+            adminBccRecipients: " ; admin@example.com, , ; second@example.com ; ");
+
+        Assert.Equal(
+            ["admin@example.com", "second@example.com"],
+            ContactCentreEmails(recipients));
+    }
+
+    [Fact]
+    public async Task Resolver_NoContactCentreEmailConfigured_ReturnsNoContactCentreRecipients()
+    {
+        var recipients = await ResolveWithContactCentreOptions(
+            contactCentreEmailAddress: null,
+            adminBccRecipients: null);
+
+        Assert.Empty(ContactCentreRecipients(recipients));
+    }
+
     private static BookingDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<BookingDbContext>()
@@ -231,7 +311,10 @@ public sealed class BookingNotificationPolicyTests
                 new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.ContactCentre, true)
             ]);
 
-    private static BookingNotificationRecipientResolver CreateRecipientResolver(string? adviserEmail)
+    private static BookingNotificationRecipientResolver CreateRecipientResolver(
+        string? adviserEmail,
+        string? contactCentreEmailAddress = "contact@example.com",
+        string? adminBccRecipients = null)
     {
         var advisers = new Mock<IAdviserProfileProjectionRepository>();
         advisers.Setup(x => x.GetAsync("adv-1", It.IsAny<CancellationToken>()))
@@ -239,18 +322,41 @@ public sealed class BookingNotificationPolicyTests
                 ? new AdviserProfileProjectionRecord { AdviserId = "adv-1", DisplayName = "Ada Adviser", MailboxUserId = string.Empty }
                 : new AdviserProfileProjectionRecord { AdviserId = "adv-1", DisplayName = "Ada Adviser", MailboxUserId = adviserEmail });
 
-        var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Notifications:Email:ContactCentreEmailAddress"] = "contact@example.com"
-            })
-            .Build();
-
         return new BookingNotificationRecipientResolver(
             advisers.Object,
-            configuration,
+            Options.Create(new NotificationEmailOptions
+            {
+                ContactCentreEmailAddress = contactCentreEmailAddress,
+                AdminBccRecipients = adminBccRecipients
+            }),
             NullLogger<BookingNotificationRecipientResolver>.Instance);
     }
+
+    private static async Task<IReadOnlyList<NotificationRecipient>> ResolveWithContactCentreOptions(
+        string? contactCentreEmailAddress,
+        string? adminBccRecipients)
+    {
+        return await CreateRecipientResolver(
+                adviserEmail: null,
+                contactCentreEmailAddress,
+                adminBccRecipients)
+            .ResolveAsync(
+                DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
+                [new NotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+                new Dictionary<string, string> { ["adviserId"] = "adv-1" },
+                CancellationToken.None);
+    }
+
+    private static NotificationRecipient[] ContactCentreRecipients(IReadOnlyList<NotificationRecipient> recipients)
+        => recipients
+            .Where(x => x.RecipientType == BookingNotificationRecipientTypes.ContactCentre)
+            .ToArray();
+
+    private static string[] ContactCentreEmails(IReadOnlyList<NotificationRecipient> recipients)
+        => ContactCentreRecipients(recipients)
+            .Select(x => x.Email)
+            .OfType<string>()
+            .ToArray();
 
     private sealed class StubPolicyProvider(BookingNotificationPolicy policy) : IBookingNotificationPolicyProvider
     {

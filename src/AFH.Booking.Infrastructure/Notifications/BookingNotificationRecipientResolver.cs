@@ -3,24 +3,24 @@ using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.Notifications;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Infrastructure.Notifications;
 
 public sealed class BookingNotificationRecipientResolver : IBookingNotificationRecipientResolver
 {
     private readonly IAdviserProfileProjectionRepository _advisers;
-    private readonly IConfiguration _configuration;
+    private readonly NotificationEmailOptions _emailOptions;
     private readonly ILogger<BookingNotificationRecipientResolver> _logger;
 
     public BookingNotificationRecipientResolver(
         IAdviserProfileProjectionRepository advisers,
-        IConfiguration configuration,
+        IOptions<NotificationEmailOptions> emailOptions,
         ILogger<BookingNotificationRecipientResolver> logger)
     {
         _advisers = advisers;
-        _configuration = configuration;
+        _emailOptions = emailOptions.Value;
         _logger = logger;
     }
 
@@ -45,8 +45,8 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
 
         foreach (var recipientPolicy in policy.Recipients.Where(x => x.Enabled))
         {
-            var candidate = await ResolveRecipientAsync(recipientPolicy.RecipientType, requestedRecipients, data, ct);
-            if (candidate is null)
+            var candidates = await ResolveRecipientsAsync(recipientPolicy.RecipientType, requestedRecipients, data, ct);
+            if (candidates.Count == 0)
             {
                 _logger.LogWarning(
                     "Notification recipient skipped because recipient type could not be resolved. NotificationType={NotificationType} RecipientType={RecipientType}",
@@ -55,27 +55,30 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
                 continue;
             }
 
-            var channels = enabledChannels
-                .Where(channel => HasTarget(candidate, channel))
-                .Where(channel => usedTargets.Add(GetTargetKey(candidate, channel)))
-                .ToArray();
-
-            if (channels.Length == 0)
+            foreach (var candidate in candidates)
             {
-                _logger.LogWarning(
-                    "Notification recipient skipped because no enabled channel target is available or target was already used. NotificationType={NotificationType} RecipientType={RecipientType}",
-                    policy.NotificationType,
-                    recipientPolicy.RecipientType);
-                continue;
-            }
+                var channels = enabledChannels
+                    .Where(channel => HasTarget(candidate, channel))
+                    .Where(channel => usedTargets.Add(GetTargetKey(candidate, channel)))
+                    .ToArray();
 
-            resolved.Add(candidate with { PreferredChannels = channels });
+                if (channels.Length == 0)
+                {
+                    _logger.LogWarning(
+                        "Notification recipient skipped because no enabled channel target is available or target was already used. NotificationType={NotificationType} RecipientType={RecipientType}",
+                        policy.NotificationType,
+                        recipientPolicy.RecipientType);
+                    continue;
+                }
+
+                resolved.Add(candidate with { PreferredChannels = channels });
+            }
         }
 
         return resolved;
     }
 
-    private async Task<NotificationRecipient?> ResolveRecipientAsync(
+    private async Task<IReadOnlyList<NotificationRecipient>> ResolveRecipientsAsync(
         string recipientType,
         IReadOnlyList<NotificationRecipient> requestedRecipients,
         IReadOnlyDictionary<string, string> data,
@@ -85,15 +88,18 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
             string.Equals(x.RecipientType, recipientType, StringComparison.OrdinalIgnoreCase));
 
         if (requested is not null)
-            return requested;
+            return [requested];
 
         if (string.Equals(recipientType, BookingNotificationRecipientTypes.Adviser, StringComparison.OrdinalIgnoreCase))
-            return await ResolveAdviserAsync(data, ct);
+        {
+            var adviser = await ResolveAdviserAsync(data, ct);
+            return adviser is null ? [] : [adviser];
+        }
 
         if (string.Equals(recipientType, BookingNotificationRecipientTypes.ContactCentre, StringComparison.OrdinalIgnoreCase))
             return ResolveContactCentre();
 
-        return null;
+        return [];
     }
 
     private async Task<NotificationRecipient?> ResolveAdviserAsync(
@@ -117,21 +123,29 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
             null);
     }
 
-    private NotificationRecipient? ResolveContactCentre()
+    private IReadOnlyList<NotificationRecipient> ResolveContactCentre()
     {
-        var email = _configuration["Notifications:Email:ContactCentreEmailAddress"]
-            ?? _configuration["Values:Notifications:Email:ContactCentreEmailAddress"]
-            ?? _configuration["Notifications__Email__ContactCentreEmailAddress"];
+        var configured = !string.IsNullOrWhiteSpace(_emailOptions.AdminBccRecipients)
+            ? _emailOptions.AdminBccRecipients
+            : _emailOptions.ContactCentreEmailAddress;
 
-        if (string.IsNullOrWhiteSpace(email))
-            return null;
-
-        return new NotificationRecipient(
-            BookingNotificationRecipientTypes.ContactCentre,
-            "Contact Centre",
-            email.Trim(),
-            null);
+        return SplitEmailAddresses(configured)
+            .Select(email => new NotificationRecipient(
+                BookingNotificationRecipientTypes.ContactCentre,
+                "Contact Centre",
+                email,
+                null))
+            .ToArray();
     }
+
+    private static string[] SplitEmailAddresses(string? value)
+        => string.IsNullOrWhiteSpace(value)
+            ? []
+            : value
+                .Split([',', ';'], StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Where(email => !string.IsNullOrWhiteSpace(email))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
 
     private static bool HasTarget(NotificationRecipient recipient, NotificationChannel channel)
         => channel switch

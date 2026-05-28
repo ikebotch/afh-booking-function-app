@@ -53,6 +53,8 @@ public static class ServiceCollectionExtensions
         services.Configure<LifecycleGovernanceOptions>(config.GetSection(LifecycleGovernanceOptions.SectionName));
         services.Configure<OutlookGovernanceOptions>(config.GetSection(OutlookGovernanceOptions.SectionName));
         services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
+        services.AddOptions<NotificationEmailOptions>()
+            .Bind(config.GetSection(NotificationEmailOptions.SectionName));
         services.Configure<AvailabilityRulesOptions>(config.GetSection(AvailabilityRulesOptions.SectionName));
         services.Configure<ApplicationLoggingOptions>(config.GetSection(ApplicationLoggingOptions.SectionName));
         services.Configure<FinalRouteTimeGuardOptions>(config.GetSection(FinalRouteTimeGuardOptions.SectionName));

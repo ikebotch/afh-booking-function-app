@@ -141,8 +141,7 @@
   - `Notifications:Integration:Http:RequestPath`
   - `Notifications:Integration:Http:TimeoutSeconds`
   - `Notifications:Integration:Http:InternalToken`
-    - Optional during the shared-host phase. If omitted, `HttpNotificationPublisher` falls back to `InternalApiAuth:Token` for calls to the local notification endpoint.
-    - Long term, when Booking and Notification are separated services, configure the source-app outbound token explicitly with `Notifications:Integration:Http:InternalToken`.
+    - Required for HTTP publishing. `InternalApiAuth:Token` remains receiver-side validation only and is not used as an outbound publisher fallback.
   - `Notifications:Integration:ServiceBus:FullyQualifiedNamespace`
   - `Notifications:Integration:ServiceBus:ConnectionString`
   - `Notifications:Integration:ServiceBus:TopicName`

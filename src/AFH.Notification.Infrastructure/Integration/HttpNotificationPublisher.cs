@@ -12,18 +12,15 @@ public sealed class HttpNotificationPublisher : INotificationPublisher
 {
     private readonly HttpClient _httpClient;
     private readonly HttpNotificationPublisherOptions _options;
-    private readonly InternalApiAuthTokenOptions _internalApiAuthOptions;
     private readonly ILogger<HttpNotificationPublisher> _logger;
 
     public HttpNotificationPublisher(
         HttpClient httpClient,
         IOptions<HttpNotificationPublisherOptions> options,
-        IOptions<InternalApiAuthTokenOptions>? internalApiAuthOptions = null,
         ILogger<HttpNotificationPublisher>? logger = null)
     {
         _httpClient = httpClient;
         _options = options.Value;
-        _internalApiAuthOptions = internalApiAuthOptions?.Value ?? new InternalApiAuthTokenOptions();
         _logger = logger ?? NullLogger<HttpNotificationPublisher>.Instance;
     }
 
@@ -74,18 +71,12 @@ public sealed class HttpNotificationPublisher : INotificationPublisher
         }
     }
 
-    // Transitional shared-host fallback: while Booking and Notification run in the
-    // same Function App, reuse inbound internal API auth unless source outbound
-    // notification auth is configured explicitly.
     private string ResolveInternalToken()
     {
         if (!string.IsNullOrWhiteSpace(_options.InternalToken))
             return _options.InternalToken.Trim();
 
-        if (!string.IsNullOrWhiteSpace(_internalApiAuthOptions.Token))
-            return _internalApiAuthOptions.Token.Trim();
-
         throw new InvalidOperationException(
-            "Notifications:Integration:Http:InternalToken or InternalApiAuth:Token is required for HTTP notification publishing.");
+            "Notifications:Integration:Http:InternalToken is required for HTTP notification publishing.");
     }
 }

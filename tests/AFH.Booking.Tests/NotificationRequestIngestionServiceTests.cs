@@ -82,6 +82,63 @@ public sealed class NotificationRequestIngestionServiceTests
     }
 
     [Fact]
+    public async Task AcceptAsync_RejectsMissingRequestBody()
+    {
+        var sut = CreateSut();
+
+        var ex = await Assert.ThrowsAsync<NotificationRequestValidationException>(() => sut.AcceptAsync(null!, CancellationToken.None));
+
+        Assert.Equal("Notification request body is required.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_RejectsMissingType()
+    {
+        var sut = CreateSut();
+        var request = CreateRequest() with { Type = null! };
+
+        var ex = await Assert.ThrowsAsync<NotificationRequestValidationException>(() => sut.AcceptAsync(request, CancellationToken.None));
+
+        Assert.Equal("Notification type is required.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_DefaultsMissingActor()
+    {
+        var sut = CreateSut();
+        _outboxStoreMock.Setup(x => x.CreateOrGetAsync(It.IsAny<NotificationOutboxItem>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((NotificationOutboxItem item, CancellationToken _) => new NotificationOutboxCreateResult(item, true));
+        _queuePublisherMock.Setup(x => x.PublishAsync(It.IsAny<NotificationQueueMessage>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotificationQueuePublishResult("queue-message"));
+
+        var result = await sut.AcceptAsync(CreateRequest() with { Actor = null! }, CancellationToken.None);
+
+        Assert.Equal("Accepted", result.Status);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_NormalizesMissingRecipientsToEmptyList()
+    {
+        var sut = CreateSut();
+        var request = CreateRequest() with { Recipients = null! };
+
+        var ex = await Assert.ThrowsAsync<NotificationRequestValidationException>(() => sut.AcceptAsync(request, CancellationToken.None));
+
+        Assert.Equal("At least one recipient is required.", ex.Message);
+    }
+
+    [Fact]
+    public async Task AcceptAsync_NormalizesMissingDataToEmptyDictionary()
+    {
+        var sut = CreateSut();
+        var request = CreateRequest() with { Data = null! };
+
+        var ex = await Assert.ThrowsAsync<NotificationRequestValidationException>(() => sut.AcceptAsync(request, CancellationToken.None));
+
+        Assert.Contains("TemplateKey and TemplateVersion", ex.Message);
+    }
+
+    [Fact]
     public async Task AcceptAsync_SerializesInternalOutboxPayload_ButInternalQueueHasOutboxIdOnly()
     {
         var sut = CreateSut();

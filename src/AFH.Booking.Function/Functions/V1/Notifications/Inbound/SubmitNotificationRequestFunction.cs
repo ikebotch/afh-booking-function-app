@@ -23,21 +23,22 @@ public sealed class SubmitNotificationRequestFunction
         HttpRequestData req,
         CancellationToken ct)
     {
-        NotificationRequested? request;
+        SubmitNotificationRequestDto? inboundRequest;
         try
         {
-            request = await req.ReadJsonAsync<NotificationRequested>(ct);
+            inboundRequest = await req.ReadJsonAsync<SubmitNotificationRequestDto>(ct);
         }
         catch (JsonException)
         {
-            return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body must be valid NotificationRequested JSON.", ct, "Validation");
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body must be valid notification request JSON.", ct, "Validation");
         }
 
-        if (request is null)
-            return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, "Validation");
+        if (inboundRequest is null)
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, "Notification request body is required.", ct, "Validation");
 
         try
         {
+            var request = inboundRequest.ToNotificationRequested();
             var result = await _ingestionService.AcceptAsync(request, ct);
             var response = req.CreateResponse(HttpStatusCode.Accepted);
             await response.WriteAsJsonAsync(new NotificationRequestAcceptedResponse(

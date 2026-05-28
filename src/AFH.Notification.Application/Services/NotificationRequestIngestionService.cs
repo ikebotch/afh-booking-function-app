@@ -30,19 +30,29 @@ public sealed class NotificationRequestIngestionService : INotificationRequestIn
             result.CreatedAny);
     }
 
-    private static NotificationRequested Normalize(NotificationRequested request)
+    private static NotificationRequested Normalize(NotificationRequested? request)
     {
+        if (request is null)
+            throw new NotificationRequestValidationException("Notification request body is required.");
+
+        if (request.Type is null)
+            throw new NotificationRequestValidationException("Notification type is required.");
+
         var correlationId = string.IsNullOrWhiteSpace(request.CorrelationId)
             ? Guid.NewGuid().ToString("N")
             : request.CorrelationId.Trim();
+
+        var sourceApplication = request.Type.SourceApplication?.Trim() ?? string.Empty;
+        var actor = request.Actor ?? new NotificationActor("System", sourceApplication, null, null, null);
 
         return request with
         {
             CorrelationId = correlationId,
             Type = new NotificationType(
-                request.Type.SourceApplication?.Trim() ?? string.Empty,
+                sourceApplication,
                 request.Type.Name?.Trim() ?? string.Empty),
-            Recipients = request.Recipients ?? [],
+            Actor = actor,
+            Recipients = request.Recipients?.Where(recipient => recipient is not null).ToArray() ?? [],
             Data = request.Data ?? new Dictionary<string, string>()
         };
     }

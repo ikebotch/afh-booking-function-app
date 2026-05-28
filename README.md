@@ -53,7 +53,7 @@
 - Applications publish notification intent. Booking lifecycle owns when notification intent is created.
 - Booking owns notification policy/routing decisions for Booking events.
 - Notification bounded context owns execution, templates, queueing, rendered-message audit, delivery audit, and bounceback processing.
-- Email is the first channel supported; SMS and Push are future channels.
+- Email and SMS are supported delivery channels; Push remains a future channel.
 - Notification templates are stored in `NotificationTemplates` through EF migrations for `NotificationDbContext`; embedded `.txt` templates are retained as a one-release fallback.
 - Bouncebacks are provider feedback handled explicitly by Notification Infrastructure.
 - Contact-centre copy is a Booking recipient policy row, not a column on `NotificationOutbox` or `NotificationDispatches`.
@@ -87,7 +87,7 @@
   - `POST /api/v1/notifications/requests/{id}/mark-failed`
   - Broad request/dispatch list responses must not expose rendered body content. Full rendered subject/body is available only from the specific message-log endpoint and must remain admin/internal only.
 - Internal Notification dispatch:
-  - After ingestion, `NotificationRequested` -> `NotificationOutbox` -> Azure Queue message containing only `outboxId` -> `SendNotificationQueueTrigger` -> `NotificationService` -> `NotificationTemplates` -> `GraphEmailDeliveryGateway` -> `NotificationDispatches` -> `NotificationMessageLogs`.
+  - After ingestion, `NotificationRequested` -> `NotificationOutbox` -> Azure Queue message containing only `outboxId` -> `SendNotificationQueueTrigger` -> `NotificationService` -> `NotificationTemplates` -> Email/SMS delivery gateway -> `NotificationDispatches` -> `NotificationMessageLogs`.
   - Final service split target: Booking resolves policy/recipients/template/channel, publishes `NotificationRequested`, and stops; Notification consumes that request, creates `NotificationOutbox`, and uses the internal OutboxId queue.
   - `NotificationOutbox` is Notification-owned. The Azure Queue `outboxId` message is internal to the Notification service, not the Booking-to-Notification boundary.
 - Retained compatibility path:
@@ -108,6 +108,10 @@
   - If Azure enqueue succeeds but marking the outbox row `Queued` fails, the publisher throws and the row remains `Pending`; operations should repair/requeue those rows until a dedicated requeue function is added.
 - Queued email delivery sends via Microsoft Graph when `Notifications:Email:ProviderName=Graph` and valid Graph settings are configured.
 - `Notifications:Email:ProviderName=Composed` keeps the non-production composed behavior and returns `NonProductionComposed`.
+- Queued SMS delivery sends through Azure Communication Services or Twilio when `Notifications:Sms:Enabled=true` and the matching provider settings are configured.
+- `Notifications:Sms:ProviderName=Composed` keeps non-production composed behavior and does not send real SMS.
+- SMS templates are DB-backed `NotificationTemplates` rows with `Channel=Sms`, `BodyTemplate` required, no subject required, and `ContentType=text/plain`.
+- SMS rendered bodies are stored only in SQL `NotificationMessageLogs.Body`; application logs must include metadata/length only.
 - Production deployment requires Key Vault/App Settings for Graph credentials and mailbox permissions for SendMail.
 - Contact-centre copies require `Notifications:Email:ContactCentreEmailAddress`.
 - Bounceback auditing persists `EmailBounceEvents` and correlates with the unified `NotificationDispatches` delivery-attempt audit table. `NotificationOutbox` remains job-level; `NotificationDispatches` remains recipient/channel/provider attempt-level.
@@ -154,8 +158,22 @@
 - Delivery/provider options remain under nested Notification infrastructure settings:
   - `Notifications:Email:Enabled`
   - `Notifications:Email:ProviderName`
+  - `Notifications:Email:ProviderName` allowed values are `Composed` and `Graph`; `SendGrid` is an email-only future option if introduced later under `Notifications:Email:SendGrid:*`.
   - `Notifications:Email:ContactCentreEmailAddress`
   - `Notifications:Email:Graph:*`
+  - `Notifications:Sms:Enabled`
+  - `Notifications:Sms:ProviderName`
+  - `Notifications:Sms:ProviderName` allowed values are `Composed`, `AzureCommunicationServices`, and `Twilio`.
+  - `Notifications:Sms:DefaultSender`
+  - `Notifications:Sms:AzureCommunicationServices:ConnectionString`
+  - `Notifications:Sms:AzureCommunicationServices:Endpoint`
+  - `Notifications:Sms:AzureCommunicationServices:UseManagedIdentity`
+  - `Notifications:Sms:AzureCommunicationServices:FromPhoneNumber`
+  - `Notifications:Sms:AzureCommunicationServices:DeliveryReportEnabled`
+  - `Notifications:Sms:Twilio:AccountSid`
+  - `Notifications:Sms:Twilio:AuthToken`
+  - `Notifications:Sms:Twilio:FromPhoneNumber`
+  - `Notifications:Sms:Twilio:MessagingServiceSid`
 - Azure Functions-safe app settings use double underscores, for example `Notifications__Integration__Transport`, `Notifications__Integration__Http__BaseUrl`, `Notifications__Inbound__ServiceBus__Enabled`, and `Notifications__Queue__QueueName`.
 - Keep `Notifications:ClientPortalBaseUrl` configured until Booking self-service link generation moves to a dedicated options section.
 
@@ -176,6 +194,17 @@
 - Microsoft Graph `sendMail` returns `202 Accepted` without a provider message id. The service stores an internal provider correlation id as `ProviderMessageId` for tracing successful sends.
 - Because the Graph `ProviderMessageId` is internal rather than a Graph-generated message id, queued Graph dispatch rows are ready for bounceback correlation by stored provider correlation id, but production provider metadata should be verified end-to-end before relying on Graph bouncebacks operationally.
 - Legacy direct Booking email sending has been removed from active runtime paths; approval/audit/bounceback compatibility remains through `NotificationDispatches`.
+
+## SMS Delivery
+- Configure queued notification SMS delivery with:
+  - `Notifications:Sms:Enabled=true`
+  - `Notifications:Sms:ProviderName=AzureCommunicationServices` or `Twilio`
+  - ACS: `Notifications:Sms:AzureCommunicationServices:ConnectionString`, `FromPhoneNumber`, and optional `DeliveryReportEnabled`
+  - Twilio: `Notifications:Sms:Twilio:AccountSid`, `AuthToken`, and either `FromPhoneNumber` or `MessagingServiceSid`
+- SMS recipients must have an E.164 mobile number where possible, for example `+447700900000`.
+- If SMS is disabled, SMS attempts are recorded as configured off and do not block enabled Email delivery.
+- SMS delivery reports/callbacks are not implemented in Sprint 7. Keep `EmailBounceEvents` email-focused; future provider feedback should use a generalized provider-event model rather than forcing SMS into email bounce tables.
+- ACS connection-string SMS sending is implemented. ACS managed identity settings are present for future deployment hardening, but managed identity sending remains a follow-up.
 
 ## Notification Queue Settings
 - Hybrid notification dispatch requires:

@@ -181,6 +181,24 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
     public Task MarkFailedAsync(Guid id, string lastError, CancellationToken ct)
         => MarkFailedAsync(id, lastError, DateTime.UtcNow, ct);
 
+    public async Task MarkFailedFromAdminAsync(Guid id, string lastError, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var affected = await _dbContext.NotificationOutbox
+            .Where(x => x.Id == id && x.Status != NotificationDispatchStatus.Sent.ToString())
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, NotificationDispatchStatus.Failed.ToString())
+                .SetProperty(x => x.LastError, lastError)
+                .SetProperty(x => x.NextAttemptUtc, (DateTime?)null)
+                .SetProperty(x => x.LockedUntilUtc, (DateTime?)null)
+                .SetProperty(x => x.UpdatedUtc, now), ct);
+
+        if (affected == 0)
+        {
+            throw new InvalidOperationException($"Notification outbox item '{id}' was not found or cannot be marked failed.");
+        }
+    }
+
     public async Task MarkDeadLetteredAsync(Guid id, string lastError, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
@@ -203,6 +221,32 @@ public sealed class NotificationOutboxStore : INotificationOutboxStore
         if (affected == 0)
         {
             throw new InvalidOperationException($"Notification outbox item '{id}' was not found or is not in Processing/Failed status.");
+        }
+    }
+
+    public async Task MarkRequeuedAsync(Guid id, string queueMessageId, CancellationToken ct)
+    {
+        var now = DateTime.UtcNow;
+        var validStatuses = new[]
+        {
+            NotificationDispatchStatus.Failed.ToString(),
+            NotificationDispatchStatus.DeadLettered.ToString()
+        };
+
+        var affected = await _dbContext.NotificationOutbox
+            .Where(x => x.Id == id && validStatuses.Contains(x.Status))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(x => x.Status, NotificationDispatchStatus.Queued.ToString())
+                .SetProperty(x => x.QueueMessageId, queueMessageId)
+                .SetProperty(x => x.LastError, (string?)null)
+                .SetProperty(x => x.NextAttemptUtc, (DateTime?)null)
+                .SetProperty(x => x.LockedUntilUtc, (DateTime?)null)
+                .SetProperty(x => x.ProcessedUtc, (DateTime?)null)
+                .SetProperty(x => x.UpdatedUtc, now), ct);
+
+        if (affected == 0)
+        {
+            throw new InvalidOperationException($"Notification outbox item '{id}' was not found or is not Failed/DeadLettered.");
         }
     }
 

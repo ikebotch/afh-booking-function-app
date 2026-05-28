@@ -34,16 +34,16 @@ public sealed class ServiceBusNotificationPublisher : INotificationPublisher, IA
 
     public async Task PublishAsync(NotificationRequested notification, CancellationToken ct)
     {
-        var body = BinaryData.FromString(JsonSerializer.Serialize(notification, SerializerOptions));
-        var message = new ServiceBusMessage(body)
+        await _sender.SendMessageAsync(CreateServiceBusMessage(notification), ct);
+    }
+
+    public static ServiceBusMessage CreateServiceBusMessage(NotificationRequested notification)
+        => new(BinaryData.FromString(JsonSerializer.Serialize(notification, SerializerOptions)))
         {
             ContentType = "application/json",
             CorrelationId = notification.CorrelationId,
             MessageId = BuildMessageId(notification)
         };
-
-        await _sender.SendMessageAsync(message, ct);
-    }
 
     public async ValueTask DisposeAsync()
     {

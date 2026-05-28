@@ -28,6 +28,9 @@ public sealed class HttpNotificationPublisher : INotificationPublisher
         if (!string.IsNullOrWhiteSpace(notification.CorrelationId))
             request.Headers.TryAddWithoutValidation("x-correlation-id", notification.CorrelationId);
 
+        if (notification.Data.TryGetValue("IdempotencyKey", out var idempotencyKey) && !string.IsNullOrWhiteSpace(idempotencyKey))
+            request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey.Trim());
+
         if (!string.IsNullOrWhiteSpace(_options.InternalToken))
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _options.InternalToken.Trim());
 

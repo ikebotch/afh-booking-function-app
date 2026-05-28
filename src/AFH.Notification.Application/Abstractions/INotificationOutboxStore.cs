@@ -11,5 +11,7 @@ public interface INotificationOutboxStore
     Task MarkSentAsync(Guid id, CancellationToken ct);
     Task MarkFailedAsync(Guid id, string lastError, DateTime nextAttemptUtc, CancellationToken ct);
     Task MarkFailedAsync(Guid id, string lastError, CancellationToken ct);
+    Task MarkFailedFromAdminAsync(Guid id, string lastError, CancellationToken ct);
     Task MarkDeadLetteredAsync(Guid id, string lastError, CancellationToken ct);
+    Task MarkRequeuedAsync(Guid id, string queueMessageId, CancellationToken ct);
 }

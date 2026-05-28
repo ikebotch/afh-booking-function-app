@@ -45,6 +45,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationAuditStore, NotificationAuditStore>();
         services.AddScoped<INotificationDeliveryAuditStore, NotificationDeliveryAuditStore>();
         services.AddScoped<INotificationTemplateStore, NotificationTemplateStore>();
+        services.AddScoped<INotificationTemplateAdminStore, NotificationTemplateAdminStore>();
+        services.AddScoped<INotificationStatusService, NotificationStatusService>();
         AddEmailDeliveryGateway(services, configuration);
         services.AddScoped<IContactCentreRoutingResolver, ContactCentreRoutingResolver>();
 
@@ -62,26 +64,29 @@ public static class ServiceCollectionExtensions
         var options = configuration.GetSection(NotificationIntegrationOptions.SectionName).Get<NotificationIntegrationOptions>()
             ?? new NotificationIntegrationOptions();
 
-        if (string.Equals(options.Transport, "ServiceBus", StringComparison.OrdinalIgnoreCase))
+        switch (options.Transport?.Trim().ToUpperInvariant())
         {
-            services.AddScoped<INotificationPublisher, ServiceBusNotificationPublisher>();
-            return;
+            case "SERVICEBUS":
+                services.AddScoped<INotificationPublisher, ServiceBusNotificationPublisher>();
+                return;
+            case "INPROCESS":
+                services.AddScoped<INotificationPublisher, InProcessNotificationPublisher>();
+                return;
+            case null:
+            case "":
+            case "HTTP":
+                services.AddHttpClient<INotificationPublisher, HttpNotificationPublisher>((sp, http) =>
+                {
+                    var httpOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<HttpNotificationPublisherOptions>>().Value;
+                    if (!string.IsNullOrWhiteSpace(httpOptions.BaseUrl))
+                        http.BaseAddress = new Uri(httpOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
+                    http.Timeout = TimeSpan.FromSeconds(httpOptions.TimeoutSeconds <= 0 ? 30 : httpOptions.TimeoutSeconds);
+                });
+                return;
+            default:
+                throw new InvalidOperationException($"{NotificationIntegrationOptions.SectionName}:Transport must be Http, ServiceBus, or InProcess.");
         }
-
-        if (string.Equals(options.Transport, "InProcess", StringComparison.OrdinalIgnoreCase))
-        {
-            services.AddScoped<INotificationPublisher, InProcessNotificationPublisher>();
-            return;
-        }
-
-        services.AddHttpClient<INotificationPublisher, HttpNotificationPublisher>((sp, http) =>
-        {
-            var httpOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<HttpNotificationPublisherOptions>>().Value;
-            if (!string.IsNullOrWhiteSpace(httpOptions.BaseUrl))
-                http.BaseAddress = new Uri(httpOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
-
-            http.Timeout = TimeSpan.FromSeconds(httpOptions.TimeoutSeconds <= 0 ? 30 : httpOptions.TimeoutSeconds);
-        });
     }
 
     private static void AddEmailDeliveryGateway(IServiceCollection services, IConfiguration configuration)

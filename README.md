@@ -69,6 +69,23 @@
   - Service Bus path: source app -> `ServiceBusNotificationPublisher` -> `notification-requests` topic/queue -> Notification Service Bus consumer -> `NotificationRequestIngestionService`.
   - HTTP is the current/default near-term transport. Service Bus is available for asynchronous decoupling and multi-source integration.
   - Both inbound transports call the same shared ingestion service; neither sends email synchronously.
+- Notification admin/status endpoints are hosted in the shared Function app with Function-level authorization during the transition:
+  - `GET /api/v1/notifications/templates`
+  - `GET /api/v1/notifications/templates/{id}`
+  - `GET /api/v1/notifications/templates/by-key/{templateKey}/versions/{templateVersion}/channels/{channel}`
+  - `POST /api/v1/notifications/templates`
+  - `PUT /api/v1/notifications/templates/{id}`
+  - `PATCH /api/v1/notifications/templates/{id}/activate`
+  - `PATCH /api/v1/notifications/templates/{id}/deactivate`
+  - `POST /api/v1/notifications/templates/preview`
+  - `GET /api/v1/notifications/requests`
+  - `GET /api/v1/notifications/requests/{id}`
+  - `GET /api/v1/notifications/dispatches/{id}`
+  - `GET /api/v1/notifications/message-logs/{id}`
+  - `POST /api/v1/notifications/requests/{id}/requeue`
+  - `POST /api/v1/notifications/requests/{id}/dead-letter`
+  - `POST /api/v1/notifications/requests/{id}/mark-failed`
+  - Broad request/dispatch list responses must not expose rendered body content. Full rendered subject/body is available only from the specific message-log endpoint and must remain admin/internal only.
 - Internal Notification dispatch:
   - After ingestion, `NotificationRequested` -> `NotificationOutbox` -> Azure Queue message containing only `outboxId` -> `SendNotificationQueueTrigger` -> `NotificationService` -> `NotificationTemplates` -> `GraphEmailDeliveryGateway` -> `NotificationDispatches` -> `NotificationMessageLogs`.
   - Final service split target: Booking resolves policy/recipients/template/channel, publishes `NotificationRequested`, and stops; Notification consumes that request, creates `NotificationOutbox`, and uses the internal OutboxId queue.
@@ -166,6 +183,8 @@
   - `Notifications__Queue__ConnectionString=<Azure Storage Account connection string>`
 
 ## Notification Transition Follow-Ups
+- Move Notification functions from the shared `AFH.Booking.Function` host into a future `AFH.Notification.Function` deployment after infra is ready.
+- Keep source apps on HTTP or Service Bus at the logical boundary before the split; remove the transitional `InProcess` publisher/hosting option after the split.
 - Verify Graph/provider bounceback metadata against queued delivery audit in production-like integration testing.
 - Decide whether the manual `Bookings_SendNotification` endpoint should remain internal/admin-only or be retired after cutover.
 - Monitor the removed direct sender replacement in production cutover and keep rollback guidance in release notes.

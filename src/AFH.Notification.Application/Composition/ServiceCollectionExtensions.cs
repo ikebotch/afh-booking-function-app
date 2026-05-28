@@ -15,6 +15,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<NotificationOutboxService>();
         services.AddScoped<INotificationPublisher>(sp => sp.GetRequiredService<NotificationOutboxService>());
         services.AddScoped<INotificationRequestIngestionService, NotificationRequestIngestionService>();
+        services.AddScoped<INotificationTemplateAdminService, NotificationTemplateAdminService>();
+        services.AddScoped<INotificationTemplatePreviewService, NotificationTemplatePreviewService>();
+        services.AddScoped<INotificationAdminOperationService, NotificationAdminOperationService>();
         services.AddScoped<NotificationOutboxDispatcher>();
 
         services.AddScoped<INotificationIdempotencyKeyGenerator, NotificationIdempotencyKeyGenerator>();

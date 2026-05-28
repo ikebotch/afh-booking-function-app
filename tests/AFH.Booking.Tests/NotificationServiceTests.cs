@@ -288,6 +288,94 @@ public sealed class NotificationServiceTests
         Assert.Null(dispatch.MessageBody);
     }
 
+    [Fact]
+    public async Task PublishAsync_EmailAndSmsEnabled_CreateSeparateDeliveryAttempts()
+    {
+        var deliveryAudit = new StubNotificationDeliveryAuditStore();
+        var emailDelivery = new StubNotificationDeliveryGateway(NotificationChannel.Email, "Graph", "email-provider-1");
+        var smsDelivery = new StubNotificationDeliveryGateway(NotificationChannel.Sms, "Twilio", "sms-provider-1");
+        var service = new NotificationService(
+            new StubNotificationAuditStore(),
+            deliveryAudit,
+            CreateRecipientResolver(),
+            CreateTemplateRendererWithDbTemplates(),
+            [emailDelivery, smsDelivery],
+            NullLogger<NotificationService>.Instance);
+
+        await service.PublishAsync(CreateEmailAndSmsRequest(), CancellationToken.None);
+
+        Assert.Single(emailDelivery.Requests);
+        Assert.Single(smsDelivery.Requests);
+        Assert.Equal("jane@example.test", emailDelivery.Requests[0].Recipient.Email);
+        Assert.Equal("+447700900000", smsDelivery.Requests[0].Recipient.MobileNumber);
+        Assert.Equal("SMS body booking-1", smsDelivery.Requests[0].TextBody);
+
+        var emailDispatch = Assert.Single(deliveryAudit.Records, x => x.Channel == "Email");
+        var smsDispatch = Assert.Single(deliveryAudit.Records, x => x.Channel == "Sms");
+        Assert.Equal("Graph", emailDispatch.ProviderName);
+        Assert.Equal("Twilio", smsDispatch.ProviderName);
+        Assert.Equal("sms-provider-1", smsDispatch.ProviderMessageId);
+        Assert.Equal("+447700900000", smsDispatch.RecipientMobile);
+        Assert.Null(smsDispatch.RecipientEmail);
+        Assert.Equal("SMS body booking-1", smsDispatch.MessageLog?.Body);
+        Assert.Null(smsDispatch.MessageLog?.Subject);
+    }
+
+    [Fact]
+    public async Task PublishAsync_DuplicateMobileChannel_SendsSmsOnce()
+    {
+        var smsDelivery = new StubNotificationDeliveryGateway(NotificationChannel.Sms, "Twilio", "sms-provider-1");
+        var service = new NotificationService(
+            new StubNotificationAuditStore(),
+            new StubNotificationDeliveryAuditStore(),
+            CreateRecipientResolver(),
+            CreateTemplateRendererWithDbTemplates(),
+            [smsDelivery],
+            NullLogger<NotificationService>.Instance);
+
+        var request = CreateEmailAndSmsRequest() with
+        {
+            Recipients =
+            [
+                new NotificationRecipient("Client", "Jane Client", null, "+447700900000", null, [NotificationChannel.Sms]),
+                new NotificationRecipient("Client", "Jane Client duplicate", null, "+447700900000", null, [NotificationChannel.Sms])
+            ]
+        };
+
+        await service.PublishAsync(request, CancellationToken.None);
+
+        Assert.Single(smsDelivery.Requests);
+    }
+
+    [Fact]
+    public async Task PublishAsync_MissingMobile_SkipsSmsRecipientChannelOnly()
+    {
+        var deliveryAudit = new StubNotificationDeliveryAuditStore();
+        var emailDelivery = new StubNotificationDeliveryGateway(NotificationChannel.Email, "Graph", "email-provider-1");
+        var smsDelivery = new StubNotificationDeliveryGateway(NotificationChannel.Sms, "Twilio", "sms-provider-1");
+        var service = new NotificationService(
+            new StubNotificationAuditStore(),
+            deliveryAudit,
+            CreateRecipientResolver(),
+            CreateTemplateRendererWithDbTemplates(),
+            [emailDelivery, smsDelivery],
+            NullLogger<NotificationService>.Instance);
+
+        var request = CreateEmailAndSmsRequest() with
+        {
+            Recipients =
+            [
+                new NotificationRecipient("Client", "Jane Client", "jane@example.test", null, null, [NotificationChannel.Email, NotificationChannel.Sms])
+            ]
+        };
+
+        await service.PublishAsync(request, CancellationToken.None);
+
+        Assert.Single(emailDelivery.Requests);
+        Assert.Single(smsDelivery.Requests);
+        Assert.Equal("Skipped", Assert.Single(deliveryAudit.Records, x => x.Channel == "Sms").Status);
+    }
+
     private static string ComputeSha256(string value)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
@@ -316,7 +404,10 @@ public sealed class NotificationServiceTests
         }
     }
 
-    private sealed class StubNotificationDeliveryGateway(NotificationChannel channel) : INotificationDeliveryGateway
+    private sealed class StubNotificationDeliveryGateway(
+        NotificationChannel channel,
+        string providerName = "Composed",
+        string providerMessageId = "provider-1") : INotificationDeliveryGateway
     {
         public List<NotificationDeliveryRequest> Requests { get; } = [];
 
@@ -326,7 +417,10 @@ public sealed class NotificationServiceTests
         public Task<NotificationDeliveryResult> SendAsync(NotificationDeliveryRequest request, CancellationToken ct)
         {
             Requests.Add(request);
-            return Task.FromResult(new NotificationDeliveryResult("Composed", "provider-1", "Composed"));
+            if (channel == NotificationChannel.Sms && string.IsNullOrWhiteSpace(request.Recipient.MobileNumber))
+                return Task.FromResult(new NotificationDeliveryResult("Skipped", null, providerName));
+
+            return Task.FromResult(new NotificationDeliveryResult("Sent", providerMessageId, providerName));
         }
     }
 
@@ -344,4 +438,60 @@ public sealed class NotificationServiceTests
 
     private static NotificationTemplateRenderer CreateTemplateRenderer()
         => new([new BookingNotificationTemplatePolicy()]);
+
+    private static NotificationTemplateRenderer CreateTemplateRendererWithDbTemplates()
+        => new(
+            [new BookingNotificationTemplatePolicy()],
+            new StubTemplateStore(
+            [
+                new NotificationTemplateDefinition(
+                    "booking-confirmed",
+                    "v1",
+                    NotificationChannel.Email,
+                    "Email confirmed",
+                    null,
+                    "Email subject {{bookingId}}",
+                    "Email body {{bookingId}}",
+                    "text/plain",
+                    true),
+                new NotificationTemplateDefinition(
+                    "booking-confirmed",
+                    "v1",
+                    NotificationChannel.Sms,
+                    "SMS confirmed",
+                    null,
+                    null,
+                    "SMS body {{bookingId}}",
+                    "text/plain",
+                    true)
+            ]));
+
+    private static NotificationRequested CreateEmailAndSmsRequest()
+        => new(
+            BookingNotificationTypes.BookingConfirmed,
+            "booking-1",
+            new NotificationActor(LifecycleActors.System, "Booking", null, null, null),
+            [
+                new NotificationRecipient("Client", "Jane Client", "jane@example.test", null, null, [NotificationChannel.Email]),
+                new NotificationRecipient("Client", "Jane Client", null, "+447700900000", null, [NotificationChannel.Sms])
+            ],
+            new Dictionary<string, string>
+            {
+                ["TemplateKey"] = "booking-confirmed",
+                ["TemplateVersion"] = "v1",
+                ["bookingId"] = "booking-1"
+            });
+
+    private sealed class StubTemplateStore(IReadOnlyCollection<NotificationTemplateDefinition> templates) : INotificationTemplateStore
+    {
+        public Task<NotificationTemplateDefinition?> GetAsync(
+            string templateKey,
+            string templateVersion,
+            NotificationChannel channel,
+            CancellationToken ct)
+            => Task.FromResult(templates.SingleOrDefault(template =>
+                template.TemplateKey == templateKey &&
+                template.TemplateVersion == templateVersion &&
+                template.Channel == channel));
+    }
 }

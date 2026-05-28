@@ -301,7 +301,7 @@ Manage your booking:
     {
         var renderer = new NotificationTemplateRenderer(
             [new BookingNotificationTemplatePolicy()],
-            new StubTemplateStore(null));
+            new StubTemplateStore((NotificationTemplateDefinition?)null));
 
         var rendered = await renderer.RenderAsync(CreateExplicitTemplateRequest("booking-confirmed", "v1"), CancellationToken.None);
 
@@ -315,7 +315,7 @@ Manage your booking:
     {
         var renderer = new NotificationTemplateRenderer(
             [new BookingNotificationTemplatePolicy()],
-            new StubTemplateStore(null));
+            new StubTemplateStore((NotificationTemplateDefinition?)null));
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             renderer.RenderAsync(CreateExplicitTemplateRequest("missing-template", "v9"), CancellationToken.None));
@@ -346,6 +346,51 @@ Manage your booking:
         var content = Assert.Single(rendered.ChannelContent);
         Assert.Equal(NotificationChannel.Sms, content.Channel);
         Assert.Equal("SMS body booking-1", content.TextBody);
+    }
+
+    [Fact]
+    public async Task RenderAsync_ExplicitTemplate_RendersEmailAndSmsContent()
+    {
+        var renderer = new NotificationTemplateRenderer(
+            [new BookingNotificationTemplatePolicy()],
+            new StubTemplateStore(
+            [
+                new NotificationTemplateDefinition(
+                    "booking-confirmed",
+                    "v1",
+                    NotificationChannel.Email,
+                    "DB confirmed Email",
+                    null,
+                    "Email subject {{bookingId}}",
+                    "Email body {{bookingId}}",
+                    "text/plain",
+                    true),
+                new NotificationTemplateDefinition(
+                    "booking-confirmed",
+                    "v1",
+                    NotificationChannel.Sms,
+                    "DB confirmed SMS",
+                    null,
+                    null,
+                    "SMS body {{bookingId}}",
+                    "text/plain",
+                    true)
+            ]));
+
+        var rendered = await renderer.RenderAsync(
+            CreateExplicitTemplateRequest("booking-confirmed", "v1") with
+            {
+                Recipients =
+                [
+                    new NotificationRecipient("Client", "Jane Client", "jane@example.com", null, null, [NotificationChannel.Email]),
+                    new NotificationRecipient("Client", "Jane Client", null, "+447700900000", null, [NotificationChannel.Sms])
+                ]
+            },
+            CancellationToken.None);
+
+        Assert.Equal(2, rendered.ChannelContent.Count);
+        Assert.Contains(rendered.ChannelContent, x => x.Channel == NotificationChannel.Email && x.Subject == "Email subject booking-1" && x.TextBody == "Email body booking-1");
+        Assert.Contains(rendered.ChannelContent, x => x.Channel == NotificationChannel.Sms && x.Subject is null && x.TextBody == "SMS body booking-1");
     }
 
     private static BookingSelfServiceLinks CreateLinks()
@@ -398,11 +443,16 @@ Manage your booking:
 
     private sealed class StubTemplateStore : INotificationTemplateStore
     {
-        private readonly NotificationTemplateDefinition? _template;
+        private readonly IReadOnlyCollection<NotificationTemplateDefinition> _templates;
 
         public StubTemplateStore(NotificationTemplateDefinition? template)
         {
-            _template = template;
+            _templates = template is null ? [] : [template];
+        }
+
+        public StubTemplateStore(IReadOnlyCollection<NotificationTemplateDefinition> templates)
+        {
+            _templates = templates;
         }
 
         public Task<NotificationTemplateDefinition?> GetAsync(
@@ -411,12 +461,10 @@ Manage your booking:
             NotificationChannel channel,
             CancellationToken ct)
             => Task.FromResult(
-                _template is not null &&
-                _template.TemplateKey == templateKey &&
-                _template.TemplateVersion == templateVersion &&
-                _template.Channel == channel
-                    ? _template
-                    : null);
+                _templates.SingleOrDefault(template =>
+                    template.TemplateKey == templateKey &&
+                    template.TemplateVersion == templateVersion &&
+                    template.Channel == channel));
     }
 
     private static BookingTransaction CreateTransaction(DateTime now, bool isRemote) =>

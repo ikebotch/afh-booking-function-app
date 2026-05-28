@@ -160,8 +160,7 @@ public sealed class EmailNotificationDeliveryGatewayTests
         services.AddNotificationInfrastructure(configuration);
         using var provider = services.BuildServiceProvider();
 
-        var gateway = Assert.Single(provider.GetServices<AFH.Notification.Application.Abstractions.INotificationDeliveryGateway>());
-        Assert.IsType<GraphEmailDeliveryGateway>(gateway);
+        Assert.Contains(provider.GetServices<AFH.Notification.Application.Abstractions.INotificationDeliveryGateway>(), gateway => gateway is GraphEmailDeliveryGateway);
     }
 
     [Fact]

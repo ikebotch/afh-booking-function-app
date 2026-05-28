@@ -138,6 +138,75 @@ public sealed class NotificationDeliveryAuditStoreTests
         Assert.Null(dispatch.MessageBody);
     }
 
+    [Fact]
+    public async Task RecordAttemptAsync_SmsWritesMobileProviderMetadataAndRenderedBodyLog()
+    {
+        await using var db = CreateDbContext();
+        var store = new NotificationDeliveryAuditStore(db);
+        var dispatchId = Guid.NewGuid();
+        const string body = "SMS rendered body.";
+
+        await store.RecordAttemptAsync(new NotificationDeliveryAuditRecord(
+            Id: dispatchId.ToString("N"),
+            DispatchUid: dispatchId,
+            NotificationOutboxId: Guid.NewGuid(),
+            SourceApplication: "Booking",
+            SourceReferenceType: "Booking",
+            SourceReferenceId: "booking-1",
+            NotificationType: "BookingConfirmed",
+            Channel: "Sms",
+            RecipientType: "Client",
+            RecipientEmail: null,
+            RecipientMobile: "+447700900000",
+            ProviderName: "Twilio",
+            Status: "Sent",
+            ProviderMessageId: "SM123",
+            FailureDetails: null,
+            CorrelationId: "correlation-1",
+            TemplateKey: "booking-confirmed",
+            TemplateVersion: "v1",
+            CreatedUtc: new DateTime(2026, 5, 28, 9, 0, 0, DateTimeKind.Utc),
+            UpdatedUtc: new DateTime(2026, 5, 28, 9, 0, 1, DateTimeKind.Utc),
+            MessageLog: new NotificationMessageLogRecord(
+                Guid.NewGuid(),
+                dispatchId,
+                NotificationOutboxId: null,
+                "Booking",
+                "BookingConfirmed",
+                "correlation-1",
+                "Client",
+                RecipientEmail: null,
+                "+447700900000",
+                "Sms",
+                "booking-confirmed",
+                "v1",
+                TemplateContentId: null,
+                Subject: null,
+                body,
+                "text/plain",
+                """{"bookingId":"booking-1"}""",
+                BodyHash: null,
+                new DateTime(2026, 5, 28, 9, 0, 0, DateTimeKind.Utc))),
+            CancellationToken.None);
+
+        var dispatch = await db.NotificationDispatches.SingleAsync();
+        var log = await db.NotificationMessageLogs.SingleAsync();
+
+        Assert.Equal("Sms", dispatch.Channel);
+        Assert.Null(dispatch.RecipientEmail);
+        Assert.Equal("+447700900000", dispatch.RecipientMobile);
+        Assert.Equal("Twilio", dispatch.ProviderName);
+        Assert.Equal("SM123", dispatch.ProviderMessageId);
+        Assert.Null(dispatch.MessageBody);
+        Assert.Null(dispatch.MessageSubject);
+
+        Assert.Equal("Sms", log.Channel);
+        Assert.Null(log.Subject);
+        Assert.Equal(body, log.Body);
+        Assert.Equal("+447700900000", log.RecipientMobile);
+        Assert.Equal(ComputeSha256(body), log.BodyHash);
+    }
+
     private static string ComputeSha256(string value)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));

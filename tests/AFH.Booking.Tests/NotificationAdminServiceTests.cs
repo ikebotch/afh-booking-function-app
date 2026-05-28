@@ -35,6 +35,46 @@ public sealed class NotificationAdminServiceTests
     }
 
     [Fact]
+    public async Task TemplateAdmin_CreateAsync_SmsAllowsMissingSubject()
+    {
+        var store = new Mock<INotificationTemplateAdminStore>();
+        var created = CreateTemplate(channel: NotificationChannel.Sms, subject: null);
+        store.Setup(x => x.CreateAsync(It.IsAny<NotificationTemplateUpsert>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NotificationTemplateAdminItem(
+                Guid.NewGuid(),
+                created.TemplateKey,
+                created.TemplateVersion,
+                NotificationChannel.Sms,
+                created.Name,
+                created.Description,
+                null,
+                created.BodyTemplate,
+                created.ContentType,
+                true,
+                DateTime.UtcNow,
+                DateTime.UtcNow));
+        var sut = new NotificationTemplateAdminService(store.Object);
+
+        await sut.CreateAsync(created, CancellationToken.None);
+
+        store.Verify(x => x.CreateAsync(It.Is<NotificationTemplateUpsert>(template =>
+            template.Channel == NotificationChannel.Sms &&
+            template.SubjectTemplate == null &&
+            template.ContentType == "text/plain"), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TemplateAdmin_CreateAsync_SmsRequiresTextPlain()
+    {
+        var sut = new NotificationTemplateAdminService(Mock.Of<INotificationTemplateAdminStore>());
+
+        var ex = await Assert.ThrowsAsync<NotificationRequestValidationException>(() =>
+            sut.CreateAsync(CreateTemplate(channel: NotificationChannel.Sms, subject: null, contentType: "text/html"), CancellationToken.None));
+
+        Assert.Contains("text/plain", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task TemplatePreview_Override_DoesNotCreateOutboxOrSend()
     {
         var store = new Mock<INotificationTemplateStore>();
@@ -174,16 +214,19 @@ public sealed class NotificationAdminServiceTests
         outboxStore.Verify(x => x.MarkFailedFromAdminAsync(It.IsAny<Guid>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
-    private static NotificationTemplateUpsert CreateTemplate(string subject = "Subject")
+    private static NotificationTemplateUpsert CreateTemplate(
+        string? subject = "Subject",
+        NotificationChannel channel = NotificationChannel.Email,
+        string contentType = "text/plain")
         => new(
             "booking-confirmed",
             "v1",
-            NotificationChannel.Email,
+            channel,
             "Booking confirmed",
             null,
             subject,
             "Body",
-            "text/plain",
+            contentType,
             true,
             "test");
 }

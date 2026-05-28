@@ -39,9 +39,10 @@ public sealed class BookingNotificationTemplateTests
         Assert.Contains("View: https://client.example/bookings/booking-1?token=token", template.TextBody);
         Assert.Contains("Cancel: https://client.example/bookings/booking-1/cancel?token=token", template.TextBody);
         Assert.Contains("Reschedule: https://client.example/bookings/booking-1/reschedule?token=token", template.TextBody);
-        Assert.Contains("View Booking", template.HtmlBody);
-        Assert.Contains("Reschedule", template.HtmlBody);
-        Assert.Contains("Cancel", template.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1?token=token\"", template.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/reschedule?token=token\"", template.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/cancel?token=token\"", template.HtmlBody);
+        Assert.DoesNotContain("<a href=", template.TextBody, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -62,9 +63,10 @@ public sealed class BookingNotificationTemplateTests
         Assert.Contains("View booking: https://client.example/bookings/booking-1?token=token", template.TextBody);
         Assert.Contains("Cancel booking: https://client.example/bookings/booking-1/cancel?token=token", template.TextBody);
         Assert.Contains("Reschedule booking: https://client.example/bookings/booking-1/reschedule?token=token", template.TextBody);
-        Assert.Contains("View booking", template.HtmlBody);
-        Assert.Contains("Cancel booking", template.HtmlBody);
-        Assert.Contains("Reschedule booking", template.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1?token=token\"", template.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/cancel?token=token\"", template.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/reschedule?token=token\"", template.HtmlBody);
+        Assert.DoesNotContain("<a href=", template.TextBody, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("View booking: https://client.example/bookings/booking-1?token=token", template.CalendarDescription);
     }
 
@@ -91,31 +93,22 @@ public sealed class BookingNotificationTemplateTests
         Assert.Contains("View booking: https://client.example/bookings/booking-1?token=token", template.TextBody);
         Assert.Contains("Cancel booking: https://client.example/bookings/booking-1/cancel?token=token", template.TextBody);
         Assert.Contains("Reschedule booking: https://client.example/bookings/booking-1/reschedule?token=token", template.TextBody);
-        Assert.Contains("View booking", template.HtmlBody);
-        Assert.Contains("Cancel booking", template.HtmlBody);
-        Assert.Contains("Reschedule booking", template.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1?token=token\"", template.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/cancel?token=token\"", template.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/reschedule?token=token\"", template.HtmlBody);
+        Assert.DoesNotContain("<a href=", template.TextBody, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("View booking: https://client.example/bookings/booking-1?token=token", template.CalendarDescription);
         Assert.DoesNotContain("<html", template.CalendarDescription, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task RenderAsync_BookingConfirmedVersionedTemplate_MatchesExistingConfirmedTextOutput()
+    public async Task RenderAsync_BookingConfirmedVersionedTemplate_RendersEmailLinksAsHtml()
     {
         var now = new DateTime(2026, 03, 26, 10, 0, 0, DateTimeKind.Utc);
         var transaction = CreateTransaction(now, isRemote: true);
         var slot = CreateSlot("slot-1", transaction.Id, now.AddHours(2), now.AddHours(3));
         var hold = BookingHold.Create(slot.Id, slot.AdviserId, TimeSpan.FromMinutes(10), now);
-        var windows = new HoldWindows(slot.StartUtc, slot.EndUtc, 0, 0, false);
         var links = CreateLinks();
-
-        var existing = ConfirmedBookingTemplate.BuildConfirmedTemplate(
-            slot,
-            transaction,
-            hold,
-            windows,
-            joinUrl: "https://meeting.example/join",
-            location: null,
-            selfServiceLinks: links);
 
         var renderer = CreateRenderer();
         var rendered = await renderer.RenderAsync(
@@ -133,20 +126,22 @@ public sealed class BookingNotificationTemplateTests
                     ["when"] = "2026-03-26 12:00 (Europe/London) \u2192 2026-03-26 13:00 (Europe/London)",
                     ["whereLine"] = "Join link: https://meeting.example/join",
                     ["travelLine"] = "Travel: N/A (remote meeting)",
-                    ["manageBookingLinks"] =
-$@"
-Manage your booking:
-- View booking: {links.ViewBookingUrl}
-- Cancel booking: {links.CancelBookingUrl}
-- Reschedule booking: {links.RescheduleBookingUrl}"
+                    ["manageBookingLinks"] = BuildHoldManageLinks(links),
+                    ["viewBookingUrl"] = links.ViewBookingUrl,
+                    ["cancelBookingUrl"] = links.CancelBookingUrl,
+                    ["rescheduleBookingUrl"] = links.RescheduleBookingUrl
                 }),
             CancellationToken.None);
 
         var content = Assert.Single(rendered.ChannelContent);
         Assert.Equal(NotificationChannel.Email, content.Channel);
-        Assert.Equal(existing.Subject, content.Subject);
-        Assert.Equal(existing.TextBody, content.TextBody);
-        Assert.Null(content.HtmlBody);
+        Assert.Equal("AFH Booking: Booking Confirmed", content.Subject);
+        Assert.Equal("text/html", content.ContentType);
+        Assert.NotNull(content.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1?token=token\">View booking</a>", content.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/cancel?token=token\">Cancel booking</a>", content.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/reschedule?token=token\">Reschedule booking</a>", content.HtmlBody);
+        Assert.Contains("token=token", content.HtmlBody);
     }
 
     [Fact]
@@ -308,6 +303,11 @@ Manage your booking:
         var content = Assert.Single(rendered.ChannelContent);
         Assert.Equal("AFH Booking: Booking Confirmed", content.Subject);
         Assert.Contains("Booking ID: booking-1", content.TextBody);
+        Assert.Equal("text/html", content.ContentType);
+        Assert.NotNull(content.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1?token=token\">View booking</a>", content.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/cancel?token=token\">Cancel booking</a>", content.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/reschedule?token=token\">Reschedule booking</a>", content.HtmlBody);
     }
 
     [Fact]
@@ -346,6 +346,8 @@ Manage your booking:
         var content = Assert.Single(rendered.ChannelContent);
         Assert.Equal(NotificationChannel.Sms, content.Channel);
         Assert.Equal("SMS body booking-1", content.TextBody);
+        Assert.Null(content.HtmlBody);
+        Assert.DoesNotContain("<a href=", content.TextBody, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -438,7 +440,10 @@ Manage your booking:
                 ["when"] = "Thu 26 Mar 2026",
                 ["whereLine"] = "",
                 ["travelLine"] = "",
-                ["manageBookingLinks"] = ""
+                ["manageBookingLinks"] = "",
+                ["viewBookingUrl"] = "https://client.example/bookings/booking-1?token=token",
+                ["cancelBookingUrl"] = "https://client.example/bookings/booking-1/cancel?token=token",
+                ["rescheduleBookingUrl"] = "https://client.example/bookings/booking-1/reschedule?token=token"
             });
 
     private sealed class StubTemplateStore : INotificationTemplateStore

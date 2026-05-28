@@ -33,22 +33,31 @@ public sealed class NotificationTemplateModelConfiguration : IEntityTypeConfigur
                 "Booking confirmed",
                 "AFH Booking: Booking Confirmed",
                 """
-                Hello,
+                <p>Hello,</p>
 
-                Your booking is now confirmed.
+                <p>Your booking is now confirmed.</p>
 
-                Transaction reference: {{transactionRef}}
-                Booking ID: {{bookingId}}
-                Adviser: {{adviserName}}
-                Meeting type: {{meetingType}}
-                When: {{when}}
+                <p>
+                Transaction reference: {{transactionRef}}<br>
+                Booking ID: {{bookingId}}<br>
+                Adviser: {{adviserName}}<br>
+                Meeting type: {{meetingType}}<br>
+                When: {{when}}<br>
                 {{whereLine}}
+                </p>
 
-                {{travelLine}}
-                {{manageBookingLinks}}
+                <p>{{travelLine}}</p>
 
-                This is an automated AFH booking notification.
-                """),
+                <p>Manage your booking:</p>
+                <ul>
+                <li><a href="{{viewBookingUrl}}">View booking</a></li>
+                <li><a href="{{cancelBookingUrl}}">Cancel booking</a></li>
+                <li><a href="{{rescheduleBookingUrl}}">Reschedule booking</a></li>
+                </ul>
+
+                <p>This is an automated AFH booking notification.</p>
+                """,
+                "text/html"),
             Template(
                 "10000000-0000-0000-0000-000000000002",
                 "booking-rescheduled",
@@ -115,7 +124,8 @@ public sealed class NotificationTemplateModelConfiguration : IEntityTypeConfigur
         string templateKey,
         string name,
         string subject,
-        string body)
+        string body,
+        string contentType = "text/plain")
         => new()
         {
             Id = Guid.Parse(id),
@@ -126,7 +136,7 @@ public sealed class NotificationTemplateModelConfiguration : IEntityTypeConfigur
             Description = null,
             SubjectTemplate = subject,
             BodyTemplate = body,
-            ContentType = "text/plain",
+            ContentType = contentType,
             IsActive = true,
             CreatedBy = "System",
             UpdatedBy = "System",

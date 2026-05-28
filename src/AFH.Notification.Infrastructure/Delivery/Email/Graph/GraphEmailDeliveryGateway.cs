@@ -86,8 +86,8 @@ public sealed class GraphEmailSender : IGraphEmailSender
                 Subject = request.Subject ?? string.Empty,
                 Body = new ItemBody
                 {
-                    ContentType = BodyType.Text,
-                    Content = request.TextBody
+                    ContentType = string.IsNullOrWhiteSpace(request.HtmlBody) ? BodyType.Text : BodyType.Html,
+                    Content = string.IsNullOrWhiteSpace(request.HtmlBody) ? request.TextBody : request.HtmlBody
                 },
                 ToRecipients =
                 [

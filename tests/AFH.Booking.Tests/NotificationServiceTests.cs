@@ -47,6 +47,9 @@ public sealed class NotificationServiceTests
                     ["whereLine"] = "Join link: https://meeting.example/join",
                     ["travelLine"] = "Travel: N/A (remote meeting)",
                     ["manageBookingLinks"] = string.Empty,
+                    ["viewBookingUrl"] = "https://client.example/bookings/booking-1?token=token",
+                    ["cancelBookingUrl"] = "https://client.example/bookings/booking-1/cancel?token=token",
+                    ["rescheduleBookingUrl"] = "https://client.example/bookings/booking-1/reschedule?token=token",
                     ["TemplateKey"] = "booking-confirmed",
                     ["TemplateVersion"] = "v1"
                 }),
@@ -58,6 +61,10 @@ public sealed class NotificationServiceTests
         Assert.Equal("jane@example.test", request.Recipient.Email);
         Assert.Equal("AFH Booking: Booking Confirmed", request.Subject);
         Assert.Contains("Your booking is now confirmed.", request.TextBody);
+        Assert.NotNull(request.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1?token=token\">View booking</a>", request.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/cancel?token=token\">Cancel booking</a>", request.HtmlBody);
+        Assert.Contains("<a href=\"https://client.example/bookings/booking-1/reschedule?token=token\">Reschedule booking</a>", request.HtmlBody);
         Assert.Equal("BookingConfirmed", request.ProviderMetadata?["notificationType"]);
         Assert.Equal(LifecycleActors.Client, request.ProviderMetadata?["actorType"]);
         Assert.Equal("Booking", request.ProviderMetadata?["actorSourceApplication"]);
@@ -81,7 +88,7 @@ public sealed class NotificationServiceTests
         Assert.Equal(request.TextBody, messageLog.Body);
         Assert.Equal("booking-confirmed", messageLog.TemplateKey);
         Assert.Equal("v1", messageLog.TemplateVersion);
-        Assert.Equal("text/plain", messageLog.ContentType);
+        Assert.Equal("text/html", messageLog.ContentType);
         Assert.Equal(ComputeSha256(request.TextBody), messageLog.BodyHash);
     }
 

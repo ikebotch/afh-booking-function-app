@@ -457,9 +457,9 @@ namespace AFH.Notification.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("10000000-0000-0000-0000-000000000001"),
-                            BodyTemplate = "Hello,\n\nYour booking is now confirmed.\n\nTransaction reference: {{transactionRef}}\nBooking ID: {{bookingId}}\nAdviser: {{adviserName}}\nMeeting type: {{meetingType}}\nWhen: {{when}}\n{{whereLine}}\n\n{{travelLine}}\n{{manageBookingLinks}}\n\nThis is an automated AFH booking notification.",
+                            BodyTemplate = "<p>Hello,</p>\n\n<p>Your booking is now confirmed.</p>\n\n<p>\nTransaction reference: {{transactionRef}}<br>\nBooking ID: {{bookingId}}<br>\nAdviser: {{adviserName}}<br>\nMeeting type: {{meetingType}}<br>\nWhen: {{when}}<br>\n{{whereLine}}\n</p>\n\n<p>{{travelLine}}</p>\n\n<p>Manage your booking:</p>\n<ul>\n<li><a href=\"{{viewBookingUrl}}\">View booking</a></li>\n<li><a href=\"{{cancelBookingUrl}}\">Cancel booking</a></li>\n<li><a href=\"{{rescheduleBookingUrl}}\">Reschedule booking</a></li>\n</ul>\n\n<p>This is an automated AFH booking notification.</p>",
                             Channel = "Email",
-                            ContentType = "text/plain",
+                            ContentType = "text/html",
                             CreatedBy = "System",
                             CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
                             IsActive = true,

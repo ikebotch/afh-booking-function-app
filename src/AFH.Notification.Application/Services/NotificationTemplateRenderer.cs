@@ -28,12 +28,18 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
 
         return new NotificationTemplateRenderResult(
             parsed
-                .Select(template => new NotificationChannelContent(
-                    template.Channel,
-                    string.IsNullOrWhiteSpace(template.Subject) ? null : ReplaceTokens(template.Subject, notification.Data),
-                    HtmlBody: null,
-                    ReplaceTokens(template.Body, notification.Data),
-                    template.ContentType))
+                .Select(template =>
+                {
+                    var body = ReplaceTokens(template.Body, notification.Data);
+                    var isHtml = string.Equals(template.ContentType, "text/html", StringComparison.OrdinalIgnoreCase);
+
+                    return new NotificationChannelContent(
+                        template.Channel,
+                        string.IsNullOrWhiteSpace(template.Subject) ? null : ReplaceTokens(template.Subject, notification.Data),
+                        HtmlBody: isHtml ? body : null,
+                        body,
+                        template.ContentType);
+                })
                 .ToArray());
     }
 
@@ -156,7 +162,12 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
             ? parsedChannel
             : throw new InvalidOperationException("Notification template channel is required.");
 
-        return new TemplateParts(subject, channel, split[1].TrimEnd('\n'), "text/plain");
+        var contentType = metadata.TryGetValue("contentType", out var contentTypeValue) &&
+                          !string.IsNullOrWhiteSpace(contentTypeValue)
+            ? contentTypeValue
+            : "text/plain";
+
+        return new TemplateParts(subject, channel, split[1].TrimEnd('\n'), contentType);
     }
 
     private static string ReplaceTokens(string template, IReadOnlyDictionary<string, string> data)

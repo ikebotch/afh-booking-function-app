@@ -1,12 +1,11 @@
-using System.Text.Json;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
 using AFH.Notification.Contract.V1.Requests;
 using AFH.Notification.Infrastructure.Integration.Inbound;
 using Azure.Messaging.ServiceBus;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Extensions.Logging;
+using Microsoft.Azure.WebJobs;
 using Microsoft.Extensions.Options;
+using System.ComponentModel.DataAnnotations;
 
 namespace AFH.Booking.Function.Functions.V1.Notifications.Inbound;
 
@@ -27,15 +26,16 @@ public sealed class ReceiveNotificationRequestServiceBusFunction
         _logger = logger;
     }
 
-    [Function("Notifications_RequestServiceBusTopicV1")]
-    public async Task RunTopicAsync(
-        [ServiceBusTrigger("%Notifications:Inbound:ServiceBus:TopicName%", "%Notifications:Inbound:ServiceBus:SubscriptionName%", Connection = "Notifications:Inbound:ServiceBus:ConnectionString", AutoCompleteMessages = false)]
-        ServiceBusReceivedMessage message,
-        ServiceBusMessageActions messageActions,
-        FunctionContext context)
-    {
-        await RunCoreAsync(message, messageActions, context.CancellationToken);
-    }
+    //[Function("Notifications_RequestServiceBusTopicV1")]
+    //[Disable("Notifications:Inbound:ServiceBus:Disabled")]
+    //public async Task RunTopicAsync(
+    //    [ServiceBusTrigger("%Notifications:Inbound:ServiceBus:TopicName%", "%Notifications:Inbound:ServiceBus:SubscriptionName%", Connection = "Notifications:Inbound:ServiceBus:ConnectionString", AutoCompleteMessages = false)]
+    //    ServiceBusReceivedMessage message,
+    //    ServiceBusMessageActions messageActions,
+    //    FunctionContext context)
+    //{
+    //    await RunCoreAsync(message, messageActions, context.CancellationToken);
+    //}
 
     public async Task RunCoreAsync(
         ServiceBusReceivedMessage message,

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using AFH.Notification.Application.Models;
 using AFH.Notification.Contract.V1.Dtos;

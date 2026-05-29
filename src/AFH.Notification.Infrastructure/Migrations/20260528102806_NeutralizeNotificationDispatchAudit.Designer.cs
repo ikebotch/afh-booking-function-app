@@ -26,411 +26,411 @@ namespace AFH.Notification.Infrastructure.Migrations
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
             modelBuilder.Entity("AFH.Notification.Infrastructure.Persistence.Models.EmailBounceEventModel", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+            {
+                b.Property<string>("Id")
+                    .HasMaxLength(64)
+                    .HasColumnType("nvarchar(64)");
 
-                    b.Property<DateTime>("OccurredUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime>("OccurredUtc")
+                    .HasColumnType("datetime2");
 
-                    b.Property<string>("ProviderMessageId")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                b.Property<string>("ProviderMessageId")
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("ReasonCode")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
+                b.Property<string>("ReasonCode")
+                    .HasMaxLength(128)
+                    .HasColumnType("nvarchar(128)");
 
-                    b.Property<string>("ReasonDetail")
-                        .HasMaxLength(2048)
-                        .HasColumnType("nvarchar(2048)");
+                b.Property<string>("ReasonDetail")
+                    .HasMaxLength(2048)
+                    .HasColumnType("nvarchar(2048)");
 
-                    b.Property<DateTime>("ReceivedUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime>("ReceivedUtc")
+                    .HasColumnType("datetime2");
 
-                    b.Property<string>("RecipientEmail")
-                        .HasMaxLength(320)
-                        .HasColumnType("nvarchar(320)");
+                b.Property<string>("RecipientEmail")
+                    .HasMaxLength(320)
+                    .HasColumnType("nvarchar(320)");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("ProviderMessageId");
+                b.HasIndex("ProviderMessageId");
 
-                    b.HasIndex("ReceivedUtc");
+                b.HasIndex("ReceivedUtc");
 
-                    b.HasIndex("RecipientEmail");
+                b.HasIndex("RecipientEmail");
 
-                    b.ToTable("EmailBounceEvents", "dbo");
-                });
+                b.ToTable("EmailBounceEvents", "dbo");
+            });
 
             modelBuilder.Entity("AFH.Notification.Infrastructure.Persistence.Models.NotificationDispatchModel", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+            {
+                b.Property<string>("Id")
+                    .HasMaxLength(64)
+                    .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("BookingId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                b.Property<string>("BookingId")
+                    .HasMaxLength(64)
+                    .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("Channel")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                b.Property<string>("Channel")
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime?>("CompletedUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime?>("CompletedUtc")
+                    .HasColumnType("datetime2");
 
-                    b.Property<string>("CorrelationId")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
+                b.Property<string>("CorrelationId")
+                    .HasMaxLength(150)
+                    .HasColumnType("nvarchar(150)");
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime>("CreatedUtc")
+                    .HasColumnType("datetime2");
 
-                    b.Property<bool?>("EmailRequested")
-                        .HasColumnType("bit");
+                b.Property<bool?>("EmailRequested")
+                    .HasColumnType("bit");
 
-                    b.Property<string>("EmailStatus")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
+                b.Property<string>("EmailStatus")
+                    .HasMaxLength(32)
+                    .HasColumnType("nvarchar(32)");
 
-                    b.Property<string>("EventType")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                b.Property<string>("EventType")
+                    .HasMaxLength(64)
+                    .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("FailureDetails")
-                        .HasColumnType("nvarchar(max)");
+                b.Property<string>("FailureDetails")
+                    .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("LifecycleEventId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                b.Property<string>("LifecycleEventId")
+                    .HasMaxLength(64)
+                    .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("MessageBody")
-                        .HasColumnType("nvarchar(max)");
+                b.Property<string>("MessageBody")
+                    .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("MessageSubject")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                b.Property<string>("MessageSubject")
+                    .HasMaxLength(500)
+                    .HasColumnType("nvarchar(500)");
 
-                    b.Property<Guid?>("NotificationOutboxId")
-                        .HasColumnType("uniqueidentifier");
+                b.Property<Guid?>("NotificationOutboxId")
+                    .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("NotificationType")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
+                b.Property<string>("NotificationType")
+                    .HasMaxLength(150)
+                    .HasColumnType("nvarchar(150)");
 
-                    b.Property<string>("OutcomeCode")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                b.Property<string>("OutcomeCode")
+                    .HasMaxLength(64)
+                    .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("ProviderMessageId")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                b.Property<string>("ProviderMessageId")
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("ProviderName")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                b.Property<string>("ProviderName")
+                    .HasMaxLength(100)
+                    .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("RecipientEmail")
-                        .HasMaxLength(320)
-                        .HasColumnType("nvarchar(320)");
+                b.Property<string>("RecipientEmail")
+                    .HasMaxLength(320)
+                    .HasColumnType("nvarchar(320)");
 
-                    b.Property<string>("RecipientMobile")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                b.Property<string>("RecipientMobile")
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("RecipientPhone")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                b.Property<string>("RecipientPhone")
+                    .HasMaxLength(64)
+                    .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("RecipientType")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                b.Property<string>("RecipientType")
+                    .HasMaxLength(100)
+                    .HasColumnType("nvarchar(100)");
 
-                    b.Property<bool?>("SmsRequested")
-                        .HasColumnType("bit");
+                b.Property<bool?>("SmsRequested")
+                    .HasColumnType("bit");
 
-                    b.Property<string>("SmsStatus")
-                        .HasMaxLength(32)
-                        .HasColumnType("nvarchar(32)");
+                b.Property<string>("SmsStatus")
+                    .HasMaxLength(32)
+                    .HasColumnType("nvarchar(32)");
 
-                    b.Property<string>("SourceApplication")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                b.Property<string>("SourceApplication")
+                    .HasMaxLength(100)
+                    .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("SourceReferenceId")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
+                b.Property<string>("SourceReferenceId")
+                    .HasMaxLength(150)
+                    .HasColumnType("nvarchar(150)");
 
-                    b.Property<string>("SourceReferenceType")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                b.Property<string>("SourceReferenceType")
+                    .HasMaxLength(100)
+                    .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("Status")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                b.Property<string>("Status")
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("TemplateKey")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
+                b.Property<string>("TemplateKey")
+                    .HasMaxLength(150)
+                    .HasColumnType("nvarchar(150)");
 
-                    b.Property<string>("TemplateName")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                b.Property<string>("TemplateName")
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("TemplateVersion")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                b.Property<string>("TemplateVersion")
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("TransactionId")
-                        .HasMaxLength(64)
-                        .HasColumnType("nvarchar(64)");
+                b.Property<string>("TransactionId")
+                    .HasMaxLength(64)
+                    .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("TransactionRef")
-                        .HasMaxLength(128)
-                        .HasColumnType("nvarchar(128)");
+                b.Property<string>("TransactionRef")
+                    .HasMaxLength(128)
+                    .HasColumnType("nvarchar(128)");
 
-                    b.Property<DateTime?>("UpdatedUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime?>("UpdatedUtc")
+                    .HasColumnType("datetime2");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("BookingId");
+                b.HasIndex("BookingId");
 
-                    b.HasIndex("CreatedUtc");
+                b.HasIndex("CreatedUtc");
 
-                    b.HasIndex("LifecycleEventId");
+                b.HasIndex("LifecycleEventId");
 
-                    b.HasIndex("NotificationOutboxId");
+                b.HasIndex("NotificationOutboxId");
 
-                    b.HasIndex("ProviderMessageId");
+                b.HasIndex("ProviderMessageId");
 
-                    b.HasIndex("TransactionId");
+                b.HasIndex("TransactionId");
 
-                    b.HasIndex("NotificationType", "CreatedUtc");
+                b.HasIndex("NotificationType", "CreatedUtc");
 
-                    b.HasIndex("RecipientEmail", "CreatedUtc");
+                b.HasIndex("RecipientEmail", "CreatedUtc");
 
-                    b.HasIndex("Status", "CreatedUtc");
+                b.HasIndex("Status", "CreatedUtc");
 
-                    b.HasIndex("SourceApplication", "SourceReferenceType", "SourceReferenceId");
+                b.HasIndex("SourceApplication", "SourceReferenceType", "SourceReferenceId");
 
-                    b.ToTable("NotificationDispatches", "dbo");
-                });
+                b.ToTable("NotificationDispatches", "dbo");
+            });
 
             modelBuilder.Entity("AFH.Notification.Infrastructure.Persistence.Models.NotificationOutboxModel", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
 
-                    b.Property<int>("AttemptCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
+                b.Property<int>("AttemptCount")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("int")
+                    .HasDefaultValue(0);
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime>("CreatedUtc")
+                    .HasColumnType("datetime2");
 
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                b.Property<string>("IdempotencyKey")
+                    .IsRequired()
+                    .HasMaxLength(500)
+                    .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("LastError")
-                        .HasColumnType("nvarchar(max)");
+                b.Property<string>("LastError")
+                    .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("LockedUntilUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime?>("LockedUntilUtc")
+                    .HasColumnType("datetime2");
 
-                    b.Property<DateTime?>("NextAttemptUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime?>("NextAttemptUtc")
+                    .HasColumnType("datetime2");
 
-                    b.Property<string>("NotificationType")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
+                b.Property<string>("NotificationType")
+                    .IsRequired()
+                    .HasMaxLength(150)
+                    .HasColumnType("nvarchar(150)");
 
-                    b.Property<string>("PayloadJson")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                b.Property<string>("PayloadJson")
+                    .IsRequired()
+                    .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ProcessedUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime?>("ProcessedUtc")
+                    .HasColumnType("datetime2");
 
-                    b.Property<string>("QueueMessageId")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                b.Property<string>("QueueMessageId")
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("SourceApplication")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                b.Property<string>("SourceApplication")
+                    .IsRequired()
+                    .HasMaxLength(100)
+                    .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                b.Property<string>("Status")
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime>("UpdatedUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime>("UpdatedUtc")
+                    .HasColumnType("datetime2");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("IdempotencyKey")
-                        .IsUnique();
+                b.HasIndex("IdempotencyKey")
+                    .IsUnique();
 
-                    b.HasIndex("Status", "CreatedUtc");
+                b.HasIndex("Status", "CreatedUtc");
 
-                    b.HasIndex("Status", "LockedUntilUtc");
+                b.HasIndex("Status", "LockedUntilUtc");
 
-                    b.HasIndex("Status", "NextAttemptUtc");
+                b.HasIndex("Status", "NextAttemptUtc");
 
-                    b.ToTable("NotificationOutbox", "dbo");
-                });
+                b.ToTable("NotificationOutbox", "dbo");
+            });
 
             modelBuilder.Entity("AFH.Notification.Infrastructure.Persistence.Models.NotificationTemplateModel", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+            {
+                b.Property<Guid>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("BodyTemplate")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                b.Property<string>("BodyTemplate")
+                    .IsRequired()
+                    .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("Channel")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                b.Property<string>("Channel")
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("ContentType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                b.Property<string>("ContentType")
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("CreatedBy")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
+                b.Property<string>("CreatedBy")
+                    .HasMaxLength(150)
+                    .HasColumnType("nvarchar(150)");
 
-                    b.Property<DateTime>("CreatedUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime>("CreatedUtc")
+                    .HasColumnType("datetime2");
 
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                b.Property<string>("Description")
+                    .HasMaxLength(500)
+                    .HasColumnType("nvarchar(500)");
 
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
+                b.Property<bool>("IsActive")
+                    .HasColumnType("bit");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                b.Property<string>("Name")
+                    .IsRequired()
+                    .HasMaxLength(200)
+                    .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("SubjectTemplate")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
+                b.Property<string>("SubjectTemplate")
+                    .HasMaxLength(500)
+                    .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("TemplateKey")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
+                b.Property<string>("TemplateKey")
+                    .IsRequired()
+                    .HasMaxLength(150)
+                    .HasColumnType("nvarchar(150)");
 
-                    b.Property<string>("TemplateVersion")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                b.Property<string>("TemplateVersion")
+                    .IsRequired()
+                    .HasMaxLength(50)
+                    .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("UpdatedBy")
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
+                b.Property<string>("UpdatedBy")
+                    .HasMaxLength(150)
+                    .HasColumnType("nvarchar(150)");
 
-                    b.Property<DateTime>("UpdatedUtc")
-                        .HasColumnType("datetime2");
+                b.Property<DateTime>("UpdatedUtc")
+                    .HasColumnType("datetime2");
 
-                    b.HasKey("Id");
+                b.HasKey("Id");
 
-                    b.HasIndex("TemplateKey", "TemplateVersion", "Channel")
-                        .IsUnique();
+                b.HasIndex("TemplateKey", "TemplateVersion", "Channel")
+                    .IsUnique();
 
-                    b.ToTable("NotificationTemplates", "dbo");
+                b.ToTable("NotificationTemplates", "dbo");
 
-                    b.HasData(
-                        new
-                        {
-                            Id = new Guid("10000000-0000-0000-0000-000000000001"),
-                            BodyTemplate = "<p>Hello,</p>\n\n<p>Your booking is now confirmed.</p>\n\n<p>\nTransaction reference: {{transactionRef}}<br>\nBooking ID: {{bookingId}}<br>\nAdviser: {{adviserName}}<br>\nMeeting type: {{meetingType}}<br>\nWhen: {{when}}<br>\n{{whereLine}}\n</p>\n\n<p>{{travelLine}}</p>\n\n<p>Manage your booking:</p>\n<ul>\n<li><a href=\"{{viewBookingUrl}}\">View booking</a></li>\n<li><a href=\"{{cancelBookingUrl}}\">Cancel booking</a></li>\n<li><a href=\"{{rescheduleBookingUrl}}\">Reschedule booking</a></li>\n</ul>\n\n<p>This is an automated AFH booking notification.</p>",
-                            Channel = "Email",
-                            ContentType = "text/html",
-                            CreatedBy = "System",
-                            CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            Name = "Booking confirmed",
-                            SubjectTemplate = "AFH Booking: Booking Confirmed",
-                            TemplateKey = "booking-confirmed",
-                            TemplateVersion = "v1",
-                            UpdatedBy = "System",
-                            UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = new Guid("10000000-0000-0000-0000-000000000002"),
-                            BodyTemplate = "Hello {{greetingName}},\n\nYour booking has been updated: Appointment Rescheduled.\nWhen: {{whenLine}}\nAdviser: {{adviserName}}\nMeeting type: {{locationLine}}\n\n{{note}}\n{{manageBookingLinks}}\n\nThis is an automated AFH booking notification.",
-                            Channel = "Email",
-                            ContentType = "text/plain",
-                            CreatedBy = "System",
-                            CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            Name = "Booking rescheduled",
-                            SubjectTemplate = "AFH Booking: Appointment Rescheduled",
-                            TemplateKey = "booking-rescheduled",
-                            TemplateVersion = "v1",
-                            UpdatedBy = "System",
-                            UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = new Guid("10000000-0000-0000-0000-000000000003"),
-                            BodyTemplate = "Hello {{greetingName}},\n\nYour booking has been updated: Appointment Cancelled.\nWhen: {{whenLine}}\nAdviser: {{adviserName}}\nMeeting type: {{locationLine}}\n\n{{note}}\n{{manageBookingLinks}}\n\nThis is an automated AFH booking notification.",
-                            Channel = "Email",
-                            ContentType = "text/plain",
-                            CreatedBy = "System",
-                            CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            Name = "Booking cancelled",
-                            SubjectTemplate = "AFH Booking: Appointment Cancelled",
-                            TemplateKey = "booking-cancelled",
-                            TemplateVersion = "v1",
-                            UpdatedBy = "System",
-                            UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
-                        },
-                        new
-                        {
-                            Id = new Guid("10000000-0000-0000-0000-000000000004"),
-                            BodyTemplate = "Hello,\n\nWe have placed a temporary hold on your requested booking while it is being confirmed.\n\nTransaction reference: {{transactionRef}}\nHold ID: {{holdId}}\nAdviser: {{adviserName}}\nMeeting type: {{meetingType}}\nWhen: {{when}}\nHold expires: {{holdExpires}}\n\n{{travelLine}}\n{{companyLine}}\n{{manageBookingLinks}}\n\nThis is an automated AFH booking notification.",
-                            Channel = "Email",
-                            ContentType = "text/plain",
-                            CreatedBy = "System",
-                            CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            IsActive = true,
-                            Name = "Booking hold created",
-                            SubjectTemplate = "AFH Booking: Hold Created",
-                            TemplateKey = "booking-hold",
-                            TemplateVersion = "v1",
-                            UpdatedBy = "System",
-                            UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
-                        });
-                });
+                b.HasData(
+                    new
+                    {
+                        Id = new Guid("10000000-0000-0000-0000-000000000001"),
+                        BodyTemplate = "<p>Hello,</p>\n\n<p>Your booking is now confirmed.</p>\n\n<p>\nTransaction reference: {{transactionRef}}<br>\nBooking ID: {{bookingId}}<br>\nAdviser: {{adviserName}}<br>\nMeeting type: {{meetingType}}<br>\nWhen: {{when}}<br>\n{{whereLine}}\n</p>\n\n<p>{{travelLine}}</p>\n\n<p>Manage your booking:</p>\n<ul>\n<li><a href=\"{{viewBookingUrl}}\">View booking</a></li>\n<li><a href=\"{{cancelBookingUrl}}\">Cancel booking</a></li>\n<li><a href=\"{{rescheduleBookingUrl}}\">Reschedule booking</a></li>\n</ul>\n\n<p>This is an automated AFH booking notification.</p>",
+                        Channel = "Email",
+                        ContentType = "text/html",
+                        CreatedBy = "System",
+                        CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
+                        IsActive = true,
+                        Name = "Booking confirmed",
+                        SubjectTemplate = "AFH Booking: Booking Confirmed",
+                        TemplateKey = "booking-confirmed",
+                        TemplateVersion = "v1",
+                        UpdatedBy = "System",
+                        UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
+                    },
+                    new
+                    {
+                        Id = new Guid("10000000-0000-0000-0000-000000000002"),
+                        BodyTemplate = "Hello {{greetingName}},\n\nYour booking has been updated: Appointment Rescheduled.\nWhen: {{whenLine}}\nAdviser: {{adviserName}}\nMeeting type: {{locationLine}}\n\n{{note}}\n{{manageBookingLinks}}\n\nThis is an automated AFH booking notification.",
+                        Channel = "Email",
+                        ContentType = "text/plain",
+                        CreatedBy = "System",
+                        CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
+                        IsActive = true,
+                        Name = "Booking rescheduled",
+                        SubjectTemplate = "AFH Booking: Appointment Rescheduled",
+                        TemplateKey = "booking-rescheduled",
+                        TemplateVersion = "v1",
+                        UpdatedBy = "System",
+                        UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
+                    },
+                    new
+                    {
+                        Id = new Guid("10000000-0000-0000-0000-000000000003"),
+                        BodyTemplate = "Hello {{greetingName}},\n\nYour booking has been updated: Appointment Cancelled.\nWhen: {{whenLine}}\nAdviser: {{adviserName}}\nMeeting type: {{locationLine}}\n\n{{note}}\n{{manageBookingLinks}}\n\nThis is an automated AFH booking notification.",
+                        Channel = "Email",
+                        ContentType = "text/plain",
+                        CreatedBy = "System",
+                        CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
+                        IsActive = true,
+                        Name = "Booking cancelled",
+                        SubjectTemplate = "AFH Booking: Appointment Cancelled",
+                        TemplateKey = "booking-cancelled",
+                        TemplateVersion = "v1",
+                        UpdatedBy = "System",
+                        UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
+                    },
+                    new
+                    {
+                        Id = new Guid("10000000-0000-0000-0000-000000000004"),
+                        BodyTemplate = "Hello,\n\nWe have placed a temporary hold on your requested booking while it is being confirmed.\n\nTransaction reference: {{transactionRef}}\nHold ID: {{holdId}}\nAdviser: {{adviserName}}\nMeeting type: {{meetingType}}\nWhen: {{when}}\nHold expires: {{holdExpires}}\n\n{{travelLine}}\n{{companyLine}}\n{{manageBookingLinks}}\n\nThis is an automated AFH booking notification.",
+                        Channel = "Email",
+                        ContentType = "text/plain",
+                        CreatedBy = "System",
+                        CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
+                        IsActive = true,
+                        Name = "Booking hold created",
+                        SubjectTemplate = "AFH Booking: Hold Created",
+                        TemplateKey = "booking-hold",
+                        TemplateVersion = "v1",
+                        UpdatedBy = "System",
+                        UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
+                    });
+            });
 
             modelBuilder.Entity("AFH.Notification.Infrastructure.Persistence.Models.NotificationDispatchModel", b =>
-                {
-                    b.HasOne("AFH.Notification.Infrastructure.Persistence.Models.NotificationOutboxModel", null)
-                        .WithMany()
-                        .HasForeignKey("NotificationOutboxId")
-                        .HasConstraintName("FK_NotificationDispatches_NotificationOutbox_NotificationOutboxId");
-                });
+            {
+                b.HasOne("AFH.Notification.Infrastructure.Persistence.Models.NotificationOutboxModel", null)
+                    .WithMany()
+                    .HasForeignKey("NotificationOutboxId")
+                    .HasConstraintName("FK_NotificationDispatches_NotificationOutbox_NotificationOutboxId");
+            });
 #pragma warning restore 612, 618
         }
     }

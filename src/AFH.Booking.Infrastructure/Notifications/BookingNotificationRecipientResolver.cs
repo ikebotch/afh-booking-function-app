@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.Notifications;
+using AFH.Booking.Infrastructure.Options;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Extensions.Logging;

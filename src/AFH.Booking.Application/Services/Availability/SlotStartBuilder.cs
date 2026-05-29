@@ -5,7 +5,7 @@ namespace AFH.Booking.Application.Availability;
 
 public sealed class SlotStartBuilder : ISlotStartBuilder
 {
-    private const int SlotSearchStepMinutes = 5;
+    private const int SlotSearchStepMinutes = 30;
     private const int CandidateMultiplier = 6;
     private const int MaxCandidateTake = 500;
     private const int DefaultTake = 10;

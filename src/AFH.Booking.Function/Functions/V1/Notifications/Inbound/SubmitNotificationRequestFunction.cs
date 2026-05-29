@@ -1,9 +1,6 @@
 using AFH.Booking.Function.Http;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
-using AFH.Notification.Contract.V1.Requests;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Http;
 
 namespace AFH.Booking.Function.Functions.V1.Notifications.Inbound;
 

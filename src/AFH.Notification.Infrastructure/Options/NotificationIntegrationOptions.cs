@@ -1,4 +1,4 @@
-namespace AFH.Notification.Infrastructure.Integration;
+namespace AFH.Notification.Infrastructure.Options;
 
 public sealed class NotificationIntegrationOptions
 {

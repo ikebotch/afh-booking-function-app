@@ -1,17 +1,16 @@
 using AFH.Notification.Application.Abstractions;
-using AFH.Notification.Application.Services;
+using AFH.Notification.Contract.Abstractions;
+using AFH.Notification.Infrastructure.Bouncebacks;
 using AFH.Notification.Infrastructure.Delivery.Email;
 using AFH.Notification.Infrastructure.Delivery.Email.Graph;
 using AFH.Notification.Infrastructure.Delivery.Sms;
 using AFH.Notification.Infrastructure.Integration;
 using AFH.Notification.Infrastructure.Options;
-using AFH.Notification.Infrastructure.Bouncebacks;
 using AFH.Notification.Infrastructure.Persistence;
 using AFH.Notification.Infrastructure.Queue;
-using AFH.Notification.Contract.Abstractions;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.EntityFrameworkCore;
 
 namespace AFH.Notification.Infrastructure.Composition;
 
@@ -30,20 +29,15 @@ public static class ServiceCollectionExtensions
         services.Configure<PushDeliveryOptions>(configuration.GetSection(PushDeliveryOptions.SectionName));
         services.Configure<NotificationQueueOptions>(options => BindNotificationQueueOptions(configuration, options));
         services.Configure<NotificationIntegrationOptions>(configuration.GetSection(NotificationIntegrationOptions.SectionName));
-        services.Configure<HttpNotificationPublisherOptions>(options =>
-        {
-            configuration.GetSection(HttpNotificationPublisherOptions.SectionName).Bind(options);
-
-            if (string.IsNullOrWhiteSpace(options.InternalToken))
-                options.InternalToken = configuration["InternalApiAuth:Token"];
-        });
         services.Configure<ServiceBusNotificationPublisherOptions>(configuration.GetSection(ServiceBusNotificationPublisherOptions.SectionName));
+        services.Configure<HttpNotificationPublisherOptions>(configuration.GetSection(HttpNotificationPublisherOptions.SectionName));
+        services.Configure<InternalApiAuthOptions>(configuration.GetSection(InternalApiAuthOptions.SectionName));
 
-        var connectionString = configuration.GetConnectionString("BookingDb")
-            ?? configuration["Values:ConnectionStrings:BookingDb"]
-            ?? configuration["ConnectionStrings:BookingDb"]
-            ?? configuration["Values:BookingDb:ConnectionString"]
-            ?? throw new InvalidOperationException("BookingDb connection string is not configured.");
+
+        var connectionString = ResolveBookingDbConnectionString(configuration);
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException(
+                $"{NotificationDbOptions.SectionName}:ConnectionString is required (or ConnectionStrings:NotificationDb).");
 
         services.AddDbContext<NotificationDbContext>(options =>
             options.UseSqlServer(connectionString));
@@ -180,4 +174,17 @@ public static class ServiceCollectionExtensions
     {
         configuration.GetSection(NotificationQueueOptions.SectionName).Bind(options);
     }
+
+
+
+    internal static string? ResolveBookingDbConnectionString(IConfiguration config)
+    {
+        var options = config.GetSection(NotificationDbOptions.SectionName).Get<NotificationDbOptions>() ?? new NotificationDbOptions();
+        if (!string.IsNullOrWhiteSpace(options.ConnectionString))
+            return options.ConnectionString;
+        return config.GetConnectionString("BookingDb")
+            ?? config["Values:ConnectionStrings:BookingDb"]
+            ?? config["Values:BookingDb:ConnectionString"];
+    }
+
 }

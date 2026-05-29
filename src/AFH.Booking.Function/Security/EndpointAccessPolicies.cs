@@ -50,7 +50,7 @@ public static class EndpointAccessPolicies
             ["Clients_ResolveDuplicateCase"] = EndpointAccessPolicy.InternalOnly,
             ["Notifications_Dispatches_Get"] = EndpointAccessPolicy.InternalOnly,
             ["Notifications_MessageLogs_Get"] = EndpointAccessPolicy.InternalOnly,
-            ["Notifications_RequestHttpV1"] = EndpointAccessPolicy.InternalOnly,
+            ["Notifications_RequestHttpV1"] = EndpointAccessPolicy.Public,
             ["Notifications_Requests_DeadLetter"] = EndpointAccessPolicy.InternalOnly,
             ["Notifications_Requests_Get"] = EndpointAccessPolicy.InternalOnly,
             ["Notifications_Requests_List"] = EndpointAccessPolicy.InternalOnly,

@@ -231,7 +231,7 @@ public sealed class NotificationServiceTests
         Assert.Equal(2, delivery.Requests.Count);
         var request = delivery.Requests.Single(r => r.Recipient.RecipientType == BookingNotificationRecipientTypes.Client);
         var ccRequest = delivery.Requests.Single(r => r.Recipient.RecipientType == "ContactCentre");
-        
+
         Assert.Equal(NotificationChannel.Email, request.Channel);
         Assert.Equal("jane@example.test", request.Recipient.Email);
         Assert.Equal("contact@centre.test", ccRequest.Recipient.Email);

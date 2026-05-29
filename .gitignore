@@ -285,3 +285,4 @@ local.settings.json
 # Node projects (if frontend exists)
 node_moduleas/
 dist/
+/src/AFH.Notification.Infrastructure/Migrations/20260528102806_NeutralizeNotificationDispatchAudit.cs

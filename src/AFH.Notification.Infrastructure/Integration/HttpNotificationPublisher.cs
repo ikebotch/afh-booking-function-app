@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using AFH.Notification.Contract.Abstractions;
 using AFH.Notification.Contract.V1.Requests;
+using AFH.Notification.Infrastructure.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -12,15 +13,18 @@ public sealed class HttpNotificationPublisher : INotificationPublisher
 {
     private readonly HttpClient _httpClient;
     private readonly HttpNotificationPublisherOptions _options;
+    private readonly InternalApiAuthOptions _internalApiAuthOptions;
     private readonly ILogger<HttpNotificationPublisher> _logger;
 
     public HttpNotificationPublisher(
         HttpClient httpClient,
         IOptions<HttpNotificationPublisherOptions> options,
+        IOptions<InternalApiAuthOptions> internalApiAuthOptions,
         ILogger<HttpNotificationPublisher>? logger = null)
     {
         _httpClient = httpClient;
         _options = options.Value;
+        _internalApiAuthOptions = internalApiAuthOptions.Value;
         _logger = logger ?? NullLogger<HttpNotificationPublisher>.Instance;
     }
 
@@ -76,10 +80,10 @@ public sealed class HttpNotificationPublisher : INotificationPublisher
 
     private string ResolveInternalToken()
     {
-        if (!string.IsNullOrWhiteSpace(_options.InternalToken))
-            return _options.InternalToken.Trim();
+        if (!string.IsNullOrWhiteSpace(_internalApiAuthOptions.Token))
+            return _internalApiAuthOptions.Token.Trim();
 
         throw new InvalidOperationException(
-            "InternalApiAuth:Token is required for HTTP notification publishing unless Notifications:Integration:Http:InternalToken is configured.");
+            "InternalApiAuth:Token is required for HTTP notification publishing.");
     }
 }

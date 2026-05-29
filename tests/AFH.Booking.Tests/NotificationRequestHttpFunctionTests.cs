@@ -1,6 +1,3 @@
-using System.Text;
-using System.Text.Json;
-using System.Net;
 using AFH.Booking.Function.Functions.V1.Notifications.Inbound;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
@@ -8,6 +5,9 @@ using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Azure.Functions.Worker.Http;
 using Moq;
+using System.Net;
+using System.Text;
+using System.Text.Json;
 
 namespace AFH.Booking.Tests;
 

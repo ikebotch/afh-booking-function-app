@@ -41,9 +41,11 @@ public sealed class NotificationApiPublisher : IBookingNotificationPublisher
             request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey.Trim());
 
         _logger.LogInformation(
-            "Notification API publish started. NotificationType={NotificationType} RequestPath={RequestPath}",
+            "Notification API publish started. NotificationType={NotificationType} RequestPath={RequestPath} RecipientCount={RecipientCount} Recipients={Recipients}",
             notification.Type.Name,
-            _options.RequestPath);
+            _options.RequestPath,
+            notification.Recipients.Count,
+            string.Join(',', notification.Recipients.Select(x => $"{x.RecipientType}:{x.Email ?? x.MobileNumber ?? x.PushTarget ?? "no-target"}")));
 
         using var response = await _httpClient.SendAsync(request, ct);
         var responseBody = response.Content is null

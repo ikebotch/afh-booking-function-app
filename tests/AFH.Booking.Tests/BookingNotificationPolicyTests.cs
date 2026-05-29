@@ -223,6 +223,38 @@ public sealed class BookingNotificationPolicyTests
     }
 
     [Fact]
+    public async Task Resolver_RequestsOnlyEnabledOrganisationAssignmentRecipientTypes()
+    {
+        var assignments = new StubOrganisationAssignmentsClient(
+            new BookingOrganisationAssignment(
+                BookingNotificationRecipientTypes.ContactCentre,
+                "Contact Centre",
+                "assignment@example.com",
+                null,
+                [BookingNotificationChannel.Email]));
+        var policy = DefaultPolicy(BookingNotificationTypes.BookingConfirmed) with
+        {
+            Recipients =
+            [
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Client, true),
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Adviser, true),
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.ContactCentre, true),
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.OrgAdmin, false),
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Manager, false)
+            ]
+        };
+
+        await CreateRecipientResolver(adviserEmail: null, organisationAssignments: assignments).ResolveAsync(
+            policy,
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+            new Dictionary<string, string> { ["bookingId"] = "booking-1", ["adviserId"] = "adv-1" },
+            CancellationToken.None);
+
+        Assert.NotNull(assignments.LastSearch);
+        Assert.Equal([BookingNotificationRecipientTypes.ContactCentre], assignments.LastSearch!.AssignmentTypes);
+    }
+
+    [Fact]
     public async Task Resolver_MapsOrganisationAssignmentsIntoNotificationRecipients()
     {
         var recipients = await CreateRecipientResolver(
@@ -244,6 +276,34 @@ public sealed class BookingNotificationPolicyTests
         Assert.Equal("Contact Centre", assignment.DisplayName);
         Assert.Equal("assignment@example.com", assignment.Email);
         Assert.Equal([BookingNotificationChannel.Email], assignment.PreferredChannels);
+    }
+
+    [Fact]
+    public async Task Resolver_AppendsOrganisationAssignmentRecipient_WhenRequestedRecipientPlaceholderExists()
+    {
+        var recipients = await CreateRecipientResolver(
+                adviserEmail: "adviser@example.com",
+                organisationAssignments: new StubOrganisationAssignmentsClient(
+                    new BookingOrganisationAssignment(
+                        BookingNotificationRecipientTypes.ContactCentre,
+                        "Contact Centre",
+                        "assignment@example.com",
+                        null,
+                        [BookingNotificationChannel.Email])))
+            .ResolveAsync(
+                DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
+                [
+                    new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com"),
+                    new BookingNotificationRecipient(BookingNotificationRecipientTypes.ContactCentre, "Contact Centre", null)
+                ],
+                new Dictionary<string, string> { ["bookingId"] = "booking-1", ["adviserId"] = "adv-1" },
+                CancellationToken.None);
+
+        Assert.Equal(
+            [BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.ContactCentre],
+            recipients.Select(x => x.RecipientType).OrderBy(x => x, StringComparer.Ordinal).ToArray());
+        var contactCentre = Assert.Single(ContactCentreRecipients(recipients));
+        Assert.Equal("assignment@example.com", contactCentre.Email);
     }
 
     [Fact]

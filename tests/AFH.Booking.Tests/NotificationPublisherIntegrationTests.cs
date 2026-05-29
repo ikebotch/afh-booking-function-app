@@ -20,10 +20,12 @@ public sealed class NotificationPublisherIntegrationTests
     public async Task NotificationApiPublisher_PostsBookingNotificationRequest_WithFunctionCodeAndInternalToken()
     {
         HttpRequestMessage? captured = null;
+        string? capturedJson = null;
         var publisher = new NotificationApiPublisher(
             new HttpClient(new StubHttpMessageHandler(request =>
             {
                 captured = request;
+                capturedJson = request.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
                 return new HttpResponseMessage(HttpStatusCode.Accepted)
                 {
                     Content = new StringContent("{\"status\":\"Accepted\"}")
@@ -47,6 +49,19 @@ public sealed class NotificationPublisherIntegrationTests
         Assert.Equal("idem-123", captured.Headers.GetValues("Idempotency-Key").Single());
         Assert.Equal("Bearer", captured.Headers.Authorization?.Scheme);
         Assert.Equal("internal-token", captured.Headers.Authorization?.Parameter);
+
+        Assert.NotNull(capturedJson);
+        using var document = System.Text.Json.JsonDocument.Parse(capturedJson!);
+        var recipients = document.RootElement.GetProperty("recipients").EnumerateArray().ToArray();
+        Assert.Contains(recipients, x =>
+            x.GetProperty("recipientType").GetString() == BookingNotificationRecipientTypes.Client
+            && x.GetProperty("email").GetString() == "client@example.com");
+        Assert.Contains(recipients, x =>
+            x.GetProperty("recipientType").GetString() == BookingNotificationRecipientTypes.Adviser
+            && x.GetProperty("email").GetString() == "adviser@example.com");
+        Assert.Contains(recipients, x =>
+            x.GetProperty("recipientType").GetString() == BookingNotificationRecipientTypes.ContactCentre
+            && x.GetProperty("email").GetString() == "contactcentre@example.com");
     }
 
     [Theory]
@@ -117,7 +132,11 @@ public sealed class NotificationPublisherIntegrationTests
             new BookingNotificationType("Booking", "BookingConfirmed"),
             "corr-123",
             new BookingNotificationActor("System", "Booking", null, null, null),
-            [new BookingNotificationRecipient("Client", "Client", "client@example.com", null, null, [BookingNotificationChannel.Email])],
+            [
+                new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Client", "client@example.com", null, null, [BookingNotificationChannel.Email]),
+                new BookingNotificationRecipient(BookingNotificationRecipientTypes.Adviser, "Adviser", "adviser@example.com", null, null, [BookingNotificationChannel.Email]),
+                new BookingNotificationRecipient(BookingNotificationRecipientTypes.ContactCentre, "Contact Centre", "contactcentre@example.com", null, null, [BookingNotificationChannel.Email])
+            ],
             new Dictionary<string, string> { ["IdempotencyKey"] = "idem-123" });
 
     private static IConfiguration CreateConfig(params (string Key, string Value)[] overrides)

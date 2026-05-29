@@ -49,10 +49,16 @@ public sealed class BookingOrganisationAssignmentsClient : IBookingOrganisationA
         if (search.AssignmentTypes.Count == 0)
             return [];
 
+        var requestedAssignmentTypes = search.AssignmentTypes
+            .Select(x => x.Trim())
+            .Where(x => x.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         var query = new Dictionary<string, string?>
         {
             ["context"] = "Booking",
-            ["assignmentTypes"] = string.Join(',', search.AssignmentTypes.Select(x => x.Trim()).Where(x => x.Length > 0))
+            ["assignmentTypes"] = string.Join(',', requestedAssignmentTypes)
         };
 
         AddIfPresent(query, "adviserId", search.AdviserId);
@@ -67,6 +73,14 @@ public sealed class BookingOrganisationAssignmentsClient : IBookingOrganisationA
             request.Headers.TryAddWithoutValidation("x-functions-key", _options.FunctionKey.Trim());
 
         _authenticator.Apply(request, _options.InternalToken);
+
+        _logger.LogInformation(
+            "Location organisation assignments request started. AssignmentTypes={AssignmentTypes} AdviserId={AdviserId} Region={Region} OrganisationId={OrganisationId} ClientId={ClientId}",
+            string.Join(',', requestedAssignmentTypes),
+            search.AdviserId,
+            search.Region,
+            search.OrganisationId,
+            search.ClientId);
 
         using var response = await _http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)
@@ -84,12 +98,49 @@ public sealed class BookingOrganisationAssignmentsClient : IBookingOrganisationA
             return [];
         }
 
-        var envelope = await response.Content.ReadFromJsonAsync<OrganisationAssignmentsResponseDto>(JsonOptions, ct);
-        return envelope?.Assignments
+        var envelope = await ReadEnvelopedOrRawAsync(response, ct);
+        var returnedAssignments = envelope?.Assignments ?? [];
+        var assignments = envelope?.Assignments
             .Select(ToAssignment)
             .Where(x => x is not null)
             .Select(x => x!)
             .ToArray() ?? [];
+
+        _logger.LogInformation(
+            "Location organisation assignments response parsed. Status={Status} ReturnedAssignmentCount={ReturnedAssignmentCount} AssignmentCount={AssignmentCount} AssignmentTypes={AssignmentTypes}",
+            (int)response.StatusCode,
+            returnedAssignments.Count,
+            assignments.Length,
+            string.Join(',', assignments.Select(x => x.AssignmentType).Distinct(StringComparer.OrdinalIgnoreCase)));
+
+        return assignments;
+    }
+
+    private async Task<OrganisationAssignmentsResponseDto?> ReadEnvelopedOrRawAsync(
+        HttpResponseMessage response,
+        CancellationToken ct)
+    {
+        var json = await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(json))
+            return null;
+
+        try
+        {
+            var enveloped = JsonSerializer.Deserialize<ApiEnvelope<OrganisationAssignmentsResponseDto>>(json, JsonOptions);
+            if (enveloped?.Data is not null)
+                return enveloped.Data;
+
+            return JsonSerializer.Deserialize<OrganisationAssignmentsResponseDto>(json, JsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Location organisation assignments returned malformed JSON. Status={Status}",
+                (int)response.StatusCode);
+
+            return null;
+        }
     }
 
     private static BookingOrganisationAssignment? ToAssignment(OrganisationAssignmentDto dto)
@@ -135,6 +186,11 @@ public sealed class BookingOrganisationAssignmentsClient : IBookingOrganisationA
     private sealed class OrganisationAssignmentsResponseDto
     {
         public List<OrganisationAssignmentDto> Assignments { get; set; } = [];
+    }
+
+    private sealed class ApiEnvelope<T>
+    {
+        public T? Data { get; set; }
     }
 
     private sealed class OrganisationAssignmentDto

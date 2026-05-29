@@ -188,15 +188,18 @@ public class InternalOutboundAuthTests
                 Content = new StringContent(
                     """
                     {
-                      "assignments": [
-                        {
-                          "assignmentType": "Manager",
-                          "displayName": "Regional Manager",
-                          "email": "manager@example.com",
-                          "mobileNumber": null,
-                          "channels": ["Email"]
-                        }
-                      ]
+                      "success": true,
+                      "data": {
+                        "assignments": [
+                          {
+                            "assignmentType": "Manager",
+                            "displayName": "Regional Manager",
+                            "email": "manager@example.com",
+                            "mobileNumber": null,
+                            "channels": ["Email"]
+                          }
+                        ]
+                      }
                     }
                     """,
                     Encoding.UTF8,

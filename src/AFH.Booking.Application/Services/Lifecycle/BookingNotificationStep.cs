@@ -61,6 +61,14 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
                 notificationType.Name,
                 policy.Enabled);
 
+            _logger.LogInformation(
+                "Booking notification policy recipient types requested. NotificationType={NotificationType} RecipientTypes={RecipientTypes}",
+                notificationType.Name,
+                string.Join(',', policy.Recipients
+                    .Where(x => x.Enabled)
+                    .Select(x => x.RecipientType)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)));
+
             if (!policy.Enabled)
             {
                 _logger.LogInformation(
@@ -71,9 +79,12 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
 
             var resolvedRecipients = await _recipientResolver.ResolveAsync(policy, recipients, data, ct);
             _logger.LogInformation(
-                "Booking notification recipients resolved. NotificationType={NotificationType} RecipientCount={RecipientCount}",
+                "Booking notification recipients resolved. NotificationType={NotificationType} RecipientCount={RecipientCount} RecipientCountsByType={RecipientCountsByType}",
                 notificationType.Name,
-                resolvedRecipients.Count);
+                resolvedRecipients.Count,
+                string.Join(',', resolvedRecipients
+                    .GroupBy(x => x.RecipientType, StringComparer.OrdinalIgnoreCase)
+                    .Select(x => $"{x.Key}:{x.Count()}")));
 
             if (resolvedRecipients.Count == 0)
             {

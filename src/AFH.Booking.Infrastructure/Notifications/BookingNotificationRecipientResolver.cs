@@ -39,11 +39,20 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
         if (enabledChannels.Length == 0)
             return Array.Empty<BookingNotificationRecipient>();
 
-        var usedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var resolved = new List<BookingNotificationRecipient>();
-        var organisationAssignmentTypes = policy.Recipients
+        var requestedRecipientTypes = policy.Recipients
             .Where(x => x.Enabled)
             .Select(x => x.RecipientType)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        _logger.LogInformation(
+            "Booking notification recipient policy requested recipient types. NotificationType={NotificationType} RecipientTypes={RecipientTypes}",
+            policy.NotificationType,
+            string.Join(',', requestedRecipientTypes));
+
+        var usedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var resolved = new List<BookingNotificationRecipient>();
+        var organisationAssignmentTypes = requestedRecipientTypes
             .Where(IsOrganisationAssignmentType)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
@@ -88,6 +97,14 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
             }
         }
 
+        _logger.LogInformation(
+            "Booking notification recipients finalised. NotificationType={NotificationType} RecipientCount={RecipientCount} RecipientCountsByType={RecipientCountsByType}",
+            policy.NotificationType,
+            resolved.Count,
+            string.Join(',', resolved
+                .GroupBy(x => x.RecipientType, StringComparer.OrdinalIgnoreCase)
+                .Select(x => $"{x.Key}:{x.Count()}")));
+
         return resolved;
     }
 
@@ -101,6 +118,24 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
         var requested = requestedRecipients.FirstOrDefault(x =>
             string.Equals(x.RecipientType, recipientType, StringComparison.OrdinalIgnoreCase));
 
+        if (IsOrganisationAssignmentType(recipientType))
+        {
+            var assignmentRecipients = organisationAssignments
+                .Where(x => string.Equals(x.AssignmentType, recipientType, StringComparison.OrdinalIgnoreCase))
+                .Select(ToRecipient)
+                .ToArray();
+
+            _logger.LogInformation(
+                "Booking notification organisation assignment recipients mapped. RecipientType={RecipientType} RecipientCount={RecipientCount} Recipients={Recipients}",
+                recipientType,
+                assignmentRecipients.Length,
+                string.Join(',', assignmentRecipients.Select(x => $"{x.RecipientType}:{x.Email ?? x.MobileNumber ?? x.PushTarget ?? "no-target"}")));
+
+            return requested is null
+                ? assignmentRecipients
+                : [requested, .. assignmentRecipients];
+        }
+
         if (requested is not null)
             return [requested];
 
@@ -109,12 +144,6 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
             var adviser = await ResolveAdviserAsync(data, ct);
             return adviser is null ? [] : [adviser];
         }
-
-        if (IsOrganisationAssignmentType(recipientType))
-            return organisationAssignments
-                .Where(x => string.Equals(x.AssignmentType, recipientType, StringComparison.OrdinalIgnoreCase))
-                .Select(ToRecipient)
-                .ToArray();
 
         return [];
     }
@@ -125,6 +154,13 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
         string notificationType,
         CancellationToken ct)
     {
+        _logger.LogInformation(
+            "Booking notification organisation assignment lookup requested. NotificationType={NotificationType} BookingId={BookingId} CorrelationId={CorrelationId} AssignmentTypes={AssignmentTypes}",
+            notificationType,
+            GetDataValue(data, "bookingId"),
+            GetDataValue(data, "correlationId") ?? GetDataValue(data, "bookingId"),
+            string.Join(',', assignmentTypes));
+
         var assignments = await _organisationAssignments.GetAssignmentsAsync(
             new BookingOrganisationAssignmentSearch(
                 assignmentTypes,
@@ -133,6 +169,14 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
                 GetDataValue(data, "organisationId") ?? GetDataValue(data, "organizationId"),
                 GetDataValue(data, "clientId")),
             ct);
+
+        _logger.LogInformation(
+            "Booking notification organisation assignment lookup completed. NotificationType={NotificationType} BookingId={BookingId} CorrelationId={CorrelationId} AssignmentCount={AssignmentCount} AssignmentTypes={AssignmentTypes}",
+            notificationType,
+            GetDataValue(data, "bookingId"),
+            GetDataValue(data, "correlationId") ?? GetDataValue(data, "bookingId"),
+            assignments.Count,
+            string.Join(',', assignments.Select(x => x.AssignmentType).Distinct(StringComparer.OrdinalIgnoreCase)));
 
         var missing = assignmentTypes
             .Where(assignmentType => !assignments.Any(assignment => string.Equals(assignment.AssignmentType, assignmentType, StringComparison.OrdinalIgnoreCase)))
@@ -173,12 +217,14 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
     }
 
     private static BookingNotificationRecipient ToRecipient(BookingOrganisationAssignment assignment)
-        => new(
+    {
+        return new BookingNotificationRecipient(
             assignment.AssignmentType,
             assignment.DisplayName,
             assignment.Email,
             assignment.MobileNumber,
             PreferredChannels: assignment.Channels);
+    }
 
     private static bool IsOrganisationAssignmentType(string recipientType)
         => string.Equals(recipientType, BookingNotificationRecipientTypes.ContactCentre, StringComparison.OrdinalIgnoreCase)

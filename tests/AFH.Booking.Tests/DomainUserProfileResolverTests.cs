@@ -1,7 +1,5 @@
 using AFH.Booking.Domain.Auth;
-using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Auth;
-using Microsoft.Extensions.Options;
 using System.Security.Claims;
 
 namespace AFH.Booking.Tests;
@@ -9,19 +7,9 @@ namespace AFH.Booking.Tests;
 public sealed class DomainUserProfileResolverTests
 {
     [Fact]
-    public void Resolve_MapsConfiguredRoles_AndDerivedCapabilities()
+    public void Resolve_MapsDirectRoles_AndDerivedCapabilities()
     {
-        var resolver = new DomainUserProfileResolver(Options.Create(new DomainUserAuthOptions
-        {
-            RoleMappings =
-            [
-                new DomainRoleMappingOptions
-                {
-                    Role = DomainUserRoles.Manager,
-                    Groups = ["manager-group"]
-                }
-            ]
-        }));
+        var resolver = new DomainUserProfileResolver();
 
         var principal = new ClaimsPrincipal(new ClaimsIdentity(
         [
@@ -29,7 +17,7 @@ public sealed class DomainUserProfileResolverTests
             new Claim("preferred_username", "alex@afh.co.uk"),
             new Claim("name", "Alex Example"),
             new Claim("roles", DomainUserRoles.Adviser),
-            new Claim("groups", "manager-group")
+            new Claim("roles", DomainUserRoles.Manager)
         ], "Test"));
 
         var profile = resolver.Resolve(principal);
@@ -44,24 +32,9 @@ public sealed class DomainUserProfileResolverTests
     }
 
     [Fact]
-    public void Resolve_UsesEmailAndDomainMappings_WhenAppRoleIsNotPresent()
+    public void Resolve_DoesNotUseBookingConfigRoleMappings()
     {
-        var resolver = new DomainUserProfileResolver(Options.Create(new DomainUserAuthOptions
-        {
-            RoleMappings =
-            [
-                new DomainRoleMappingOptions
-                {
-                    Role = DomainUserRoles.Operations,
-                    Domains = ["afh.co.uk"]
-                },
-                new DomainRoleMappingOptions
-                {
-                    Role = DomainUserRoles.Admin,
-                    Emails = ["sam.admin@afh.co.uk"]
-                }
-            ]
-        }));
+        var resolver = new DomainUserProfileResolver();
 
         var principal = new ClaimsPrincipal(new ClaimsIdentity(
         [
@@ -72,8 +45,7 @@ public sealed class DomainUserProfileResolverTests
 
         var profile = resolver.Resolve(principal);
 
-        Assert.Contains(DomainUserRoles.Operations, profile.Roles);
-        Assert.Contains(DomainUserRoles.Admin, profile.Roles);
-        Assert.Contains(DomainUserCapabilities.BookingAdmin, profile.Capabilities);
+        Assert.Empty(profile.Roles);
+        Assert.Empty(profile.Capabilities);
     }
 }

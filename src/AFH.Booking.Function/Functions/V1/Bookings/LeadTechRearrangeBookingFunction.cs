@@ -19,7 +19,7 @@ public sealed class LeadTechRearrangeBookingFunction
 
     [Function("Bookings_LeadTechRearrange")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/leadtech/bookings/{bookingId}/rearrange")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/leadtech/bookings/{bookingId}/rearrange")]
         HttpRequestData req,
         string bookingId,
         CancellationToken ct)

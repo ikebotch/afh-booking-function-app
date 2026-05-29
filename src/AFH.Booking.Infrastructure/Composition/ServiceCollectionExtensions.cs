@@ -61,6 +61,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IInternalServiceAuthenticator, InternalBearerServiceAuthenticator>();
         services.AddSingleton<IEntraTokenValidator, EntraTokenValidator>();
         services.AddSingleton<ICurrentUserProfileResolver, DomainUserProfileResolver>();
+        services.AddScoped<ICurrentUserPermissionClient, CurrentUserPermissionClient>();
 
         var bookingDbConnectionString = ResolveBookingDbConnectionString(config);
 
@@ -174,6 +175,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBookingNotificationPolicyProvider, BookingNotificationPolicyProvider>();
         services.AddScoped<IBookingNotificationRecipientResolver, BookingNotificationRecipientResolver>();
         services.AddHttpClient<IBookingOrganisationAssignmentsClient, BookingOrganisationAssignmentsClient>((sp, http) =>
+        {
+            var options = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(options.BaseUrl))
+                http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddHttpClient<IAdviserUserContextClient, AdviserUserContextClient>((sp, http) =>
         {
             var options = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(options.BaseUrl))

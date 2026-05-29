@@ -10,6 +10,7 @@ using Microsoft.Azure.Functions.Worker.Middleware;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Security.Claims;
 
 namespace AFH.Booking.Function.Middleware;
 
@@ -32,55 +33,52 @@ public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        var policy = EndpointAccessPolicies.GetPolicy(context.FunctionDefinition.Name);
-        if (policy is not EndpointAccessPolicy.UserAuthenticated)
+        var requirement = EndpointAccessPolicies.GetRequirement(context.FunctionDefinition.Name);
+        if (requirement.Policy is not EndpointAccessPolicy.UserAuthenticated)
         {
             await next(context);
             return;
         }
 
-        if (!request.Headers.TryGetValues("Authorization", out var authHeaders))
-        {
-            await WriteFailureLogAsync(context, request, HttpStatusCode.Unauthorized, Errors.Unauthorized, "Missing Authorization header.");
-            context.GetInvocationResult().Value = await request.ProblemAsync(HttpStatusCode.Unauthorized, "Missing Authorization header.", CancellationToken.None, Errors.Unauthorized);
-            return;
-        }
-
-        var authHeader = authHeaders.FirstOrDefault()?.Trim() ?? string.Empty;
-        if (!authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            await WriteFailureLogAsync(context, request, HttpStatusCode.Unauthorized, Errors.Unauthorized, "Authorization header must use Bearer.");
-            context.GetInvocationResult().Value = await request.ProblemAsync(HttpStatusCode.Unauthorized, "Authorization header must use Bearer.", CancellationToken.None, Errors.Unauthorized);
-            return;
-        }
-
         var validator = context.InstanceServices.GetRequiredService<IEntraTokenValidator>();
-        var validation = await validator.ValidateAsync(authHeader["Bearer ".Length..].Trim(), CancellationToken.None);
+        var permissions = context.InstanceServices.GetRequiredService<ICurrentUserPermissionClient>();
+        var access = await DomainUserAccessAuthorizer.AuthorizeAsync(
+            request,
+            requirement,
+            validator,
+            permissions,
+            CancellationToken.None);
 
-        if (!validation.IsSuccess || validation.Principal is null)
+        if (!access.IsAllowed)
         {
-            var statusCode = string.Equals(validation.ErrorCode, "Forbidden", StringComparison.OrdinalIgnoreCase)
-                ? HttpStatusCode.Forbidden
-                : string.Equals(validation.ErrorCode, "ServerError", StringComparison.OrdinalIgnoreCase)
-                    ? HttpStatusCode.InternalServerError
-                    : HttpStatusCode.Unauthorized;
+            if (!string.IsNullOrWhiteSpace(access.RequiredPermission))
+            {
+                await WriteAuthorizationDecisionLogAsync(
+                    context,
+                    request,
+                    access.User?.Email ?? (access.Principal is null ? null : GetEmail(access.Principal)),
+                    access.User?.UserId ?? (access.Principal is null ? null : GetUserId(access.Principal)),
+                    access.RequiredPermission,
+                    authorised: false);
+            }
 
-            await WriteFailureLogAsync(
+            context.GetInvocationResult().Value = access.FailureResponse;
+            return;
+        }
+
+        context.SetDomainUserPrincipal(access.Principal!);
+
+        if (!string.IsNullOrWhiteSpace(access.RequiredPermission))
+        {
+            await WriteAuthorizationDecisionLogAsync(
                 context,
                 request,
-                statusCode,
-                validation.ErrorCode ?? Errors.Unauthorized,
-                validation.ErrorMessage ?? "Request failed.");
-
-            context.GetInvocationResult().Value = await request.ProblemAsync(
-                statusCode,
-                validation.ErrorMessage ?? "Request failed.",
-                CancellationToken.None,
-                validation.ErrorCode);
-            return;
+                access.User?.Email ?? GetEmail(access.Principal!),
+                access.User?.UserId ?? GetUserId(access.Principal!),
+                access.RequiredPermission,
+                authorised: true);
         }
 
-        context.SetDomainUserPrincipal(validation.Principal);
         await next(context);
     }
 
@@ -133,5 +131,92 @@ public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
                 correlationId);
             return Task.CompletedTask;
         }
+    }
+
+    private Task WriteAuthorizationDecisionLogAsync(
+        FunctionContext context,
+        HttpRequestData request,
+        string? email,
+        string? userId,
+        string requiredPermission,
+        bool authorised)
+    {
+        var correlationId = context.Items.TryGetValue(CorrelationIdMiddleware.ItemKey, out var value)
+            ? value?.ToString()
+            : null;
+
+        _logger.LogInformation(
+            "Booking domain-user authorization decision. Function={FunctionName} UserEmail={UserEmail} UserId={UserId} RequiredPermission={RequiredPermission} Authorised={Authorised}",
+            context.FunctionDefinition.Name,
+            email,
+            userId,
+            requiredPermission,
+            authorised);
+
+        try
+        {
+            var sink = context.InstanceServices.GetService<IApplicationLogSink>();
+            var loggingOptions = context.InstanceServices.GetService<IOptions<ApplicationLoggingOptions>>()?.Value;
+            if (sink is null || loggingOptions is null)
+                return Task.CompletedTask;
+
+            return sink.WriteAsync(new ApplicationLogEntry
+            {
+                OccurredUtc = DateTime.UtcNow,
+                Level = authorised ? "Information" : "Warning",
+                Category = "Authorization",
+                Operation = context.FunctionDefinition.Name,
+                CorrelationId = correlationId,
+                UserId = email ?? userId,
+                ContextId = context.InvocationId,
+                EventType = "DomainUserPermission",
+                Result = authorised ? "Success" : "Failure",
+                Message = authorised ? "Domain user permission granted." : "Domain user permission denied.",
+                PayloadJson = ApplicationLogPayloadHelper.Serialize(new
+                {
+                    FailureSource = nameof(DomainUserAuthMiddleware),
+                    Path = request.Url.AbsolutePath,
+                    Method = request.Method,
+                    UserEmail = email,
+                    UserId = userId,
+                    RequiredPermission = requiredPermission,
+                    Authorised = authorised,
+                    CorrelationId = correlationId
+                }, loggingOptions)
+            }, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to persist domain-user authorization decision log. Function={FunctionName} CorrelationId={CorrelationId}",
+                context.FunctionDefinition.Name,
+                correlationId);
+            return Task.CompletedTask;
+        }
+    }
+
+    private static string GetEmail(ClaimsPrincipal principal) =>
+        GetClaimValue(principal, ClaimTypes.Upn, "preferred_username", "upn", ClaimTypes.Email, "email")
+        ?? string.Empty;
+
+    private static string GetUserId(ClaimsPrincipal principal) =>
+        GetClaimValue(
+            principal,
+            "oid",
+            "http://schemas.microsoft.com/identity/claims/objectidentifier",
+            ClaimTypes.NameIdentifier)
+        ?? GetEmail(principal);
+
+    private static string? GetClaimValue(ClaimsPrincipal principal, params string[] claimTypes)
+    {
+        foreach (var claimType in claimTypes)
+        {
+            var claim = principal.FindFirst(claimType);
+            if (!string.IsNullOrWhiteSpace(claim?.Value))
+                return claim.Value;
+        }
+
+        return null;
     }
 }

@@ -1,4 +1,5 @@
 using AFH.Booking.Domain;
+using AFH.Booking.Domain.Auth;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Function.Functions.V1.Availability;
 using AFH.Booking.Function.Security;
@@ -40,9 +41,42 @@ public class TimeZoneAndRouteTests
     [InlineData("Config_GetMeetingTopics", EndpointAccessPolicy.Public)]
     [InlineData("Config_UpsertMeetingType", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Config_UpsertMeetingTopic", EndpointAccessPolicy.InternalOnly)]
+    [InlineData("Approvals_ListPending", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Approvals_Review", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Bookings_LeadTechCancel", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Bookings_LeadTechRearrange", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Bookings_LeadTechRearrangementOptions", EndpointAccessPolicy.UserAuthenticated)]
     public void EndpointAccessPolicies_ClassifiesFunctions(string functionName, EndpointAccessPolicy expected)
     {
         Assert.Equal(expected, EndpointAccessPolicies.GetPolicy(functionName));
+    }
+
+    [Theory]
+    [InlineData("Approvals_ListPending", BookingPermissionNames.ApprovalsRead)]
+    [InlineData("Approvals_Review", BookingPermissionNames.ApprovalsReview)]
+    [InlineData("Bookings_LeadTechCancel", BookingPermissionNames.CancelAsLeadTech)]
+    [InlineData("Bookings_LeadTechRearrange", BookingPermissionNames.RearrangeAsLeadTech)]
+    [InlineData("Bookings_LeadTechRearrangementOptions", BookingPermissionNames.RearrangementOptionsRead)]
+    public void EndpointAccessPolicies_SelectedAdminFunctionsRequireBookingPermissions(string functionName, string expectedPermission)
+    {
+        var requirement = EndpointAccessPolicies.GetRequirement(functionName);
+
+        Assert.Equal(EndpointAccessPolicy.UserAuthenticated, requirement.Policy);
+        Assert.Equal(expectedPermission, requirement.RequiredPermission);
+    }
+
+    [Theory]
+    [InlineData("Bookings_CreateApprovalRequest")]
+    [InlineData("Bookings_GetRearrangementOptions")]
+    [InlineData("Bookings_Rearrange")]
+    [InlineData("Bookings_RecordNoShow")]
+    [InlineData("Transactions_Availability_V2")]
+    public void EndpointAccessPolicies_ExistingServiceToServiceEndpointsRemainInternalOnly(string functionName)
+    {
+        var requirement = EndpointAccessPolicies.GetRequirement(functionName);
+
+        Assert.Equal(EndpointAccessPolicy.InternalOnly, requirement.Policy);
+        Assert.Null(requirement.RequiredPermission);
     }
 
     [Fact]

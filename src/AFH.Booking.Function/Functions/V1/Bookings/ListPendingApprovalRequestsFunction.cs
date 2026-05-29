@@ -17,7 +17,7 @@ public sealed class ListPendingApprovalRequestsFunction
 
     [Function("Approvals_ListPending")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/approval-requests/pending")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/approval-requests/pending")]
         HttpRequestData req,
         CancellationToken ct)
     {

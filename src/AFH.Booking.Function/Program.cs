@@ -52,6 +52,7 @@ static void ConfigureMiddlewarePipeline(IFunctionsWorkerApplicationBuilder app)
     app.UseMiddleware<OperationAuditMiddleware>();
     app.UseMiddleware<ExceptionHandlingMiddleware>();
     app.UseMiddleware<InternalApiAuthMiddleware>();
+    app.UseMiddleware<DomainUserAuthMiddleware>();
 }
 
 

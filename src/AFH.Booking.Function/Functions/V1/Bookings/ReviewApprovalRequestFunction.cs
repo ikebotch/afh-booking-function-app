@@ -19,7 +19,7 @@ public sealed class ReviewApprovalRequestFunction
 
     [Function("Approvals_Review")]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/approval-requests/{requestId}/review")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/approval-requests/{requestId}/review")]
         HttpRequestData req,
         string requestId,
         CancellationToken ct)

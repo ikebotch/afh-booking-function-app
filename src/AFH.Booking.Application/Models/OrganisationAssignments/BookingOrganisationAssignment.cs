@@ -1,9 +1,9 @@
 using AFH.Booking.Application.Models.Notifications;
 
-namespace AFH.Booking.Application.Models.BusinessContacts;
+namespace AFH.Booking.Application.Models.OrganisationAssignments;
 
-public sealed record BookingBusinessContact(
-    string ContactType,
+public sealed record BookingOrganisationAssignment(
+    string AssignmentType,
     string DisplayName,
     string? Email,
     string? MobileNumber,

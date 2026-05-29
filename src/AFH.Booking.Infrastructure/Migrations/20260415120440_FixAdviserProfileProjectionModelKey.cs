@@ -168,23 +168,6 @@ namespace AFH.Booking.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "EmailBounceEvents",
-                columns: table => new
-                {
-                    Id = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                    ProviderMessageId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                    RecipientEmail = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    ReasonCode = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                    ReasonDetail = table.Column<string>(type: "nvarchar(2048)", maxLength: 2048, nullable: true),
-                    OccurredUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    ReceivedUtc = table.Column<DateTime>(type: "datetime2", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_EmailBounceEvents", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "ErrorRecordEntity",
                 columns: table => new
                 {
@@ -287,35 +270,6 @@ namespace AFH.Booking.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Locations", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "NotificationDispatches",
-                columns: table => new
-                {
-                    Id = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                    BookingId = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                    TransactionId = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
-                    TransactionRef = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                    LifecycleEventId = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
-                    CorrelationId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                    EventType = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                    SmsRequested = table.Column<bool>(type: "bit", nullable: false),
-                    EmailRequested = table.Column<bool>(type: "bit", nullable: false),
-                    SmsStatus = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    EmailStatus = table.Column<string>(type: "nvarchar(32)", maxLength: 32, nullable: false),
-                    OutcomeCode = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: false),
-                    FailureDetails = table.Column<string>(type: "nvarchar(2048)", maxLength: 2048, nullable: true),
-                    RecipientPhone = table.Column<string>(type: "nvarchar(64)", maxLength: 64, nullable: true),
-                    RecipientEmail = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
-                    ProviderMessageId = table.Column<string>(type: "nvarchar(128)", maxLength: 128, nullable: true),
-                    MessageBody = table.Column<string>(type: "nvarchar(4000)", maxLength: 4000, nullable: true),
-                    CreatedUtc = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedUtc = table.Column<DateTime>(type: "datetime2", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_NotificationDispatches", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -540,21 +494,6 @@ namespace AFH.Booking.Infrastructure.Migrations
                 columns: new[] { "Status", "RaisedUtc" });
 
             migrationBuilder.CreateIndex(
-                name: "IX_EmailBounceEvents_ProviderMessageId",
-                table: "EmailBounceEvents",
-                column: "ProviderMessageId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_EmailBounceEvents_ReceivedUtc",
-                table: "EmailBounceEvents",
-                column: "ReceivedUtc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_EmailBounceEvents_RecipientEmail",
-                table: "EmailBounceEvents",
-                column: "RecipientEmail");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_ErrorRecordEntity_Code",
                 table: "ErrorRecordEntity",
                 column: "Code");
@@ -616,31 +555,6 @@ namespace AFH.Booking.Infrastructure.Migrations
                 column: "DisplayName");
 
             migrationBuilder.CreateIndex(
-                name: "IX_NotificationDispatches_BookingId",
-                table: "NotificationDispatches",
-                column: "BookingId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_NotificationDispatches_CreatedUtc",
-                table: "NotificationDispatches",
-                column: "CreatedUtc");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_NotificationDispatches_LifecycleEventId",
-                table: "NotificationDispatches",
-                column: "LifecycleEventId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_NotificationDispatches_ProviderMessageId",
-                table: "NotificationDispatches",
-                column: "ProviderMessageId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_NotificationDispatches_TransactionId",
-                table: "NotificationDispatches",
-                column: "TransactionId");
-
-            migrationBuilder.CreateIndex(
                 name: "IX_OperationalIssues_AdviserId_Code_DetectedUtc",
                 table: "OperationalIssues",
                 columns: new[] { "AdviserId", "Code", "DetectedUtc" });
@@ -676,9 +590,6 @@ namespace AFH.Booking.Infrastructure.Migrations
                 name: "DuplicateClientCases");
 
             migrationBuilder.DropTable(
-                name: "EmailBounceEvents");
-
-            migrationBuilder.DropTable(
                 name: "ErrorRecordEntity");
 
             migrationBuilder.DropTable(
@@ -692,9 +603,6 @@ namespace AFH.Booking.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "Locations");
-
-            migrationBuilder.DropTable(
-                name: "NotificationDispatches");
 
             migrationBuilder.DropTable(
                 name: "OperationalIssues");

@@ -2,7 +2,7 @@ using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.AdviserProjection;
-using AFH.Booking.Application.Models.BusinessContacts;
+using AFH.Booking.Application.Models.OrganisationAssignments;
 using AFH.Booking.Application.Models.Lifecycle.Constants;
 using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Application.Services.Lifecycle;
@@ -191,17 +191,17 @@ public sealed class BookingNotificationPolicyTests
     }
 
     [Fact]
-    public async Task Resolver_CallsBusinessContactsEndpointWithNeutralRoles()
+    public async Task Resolver_CallsOrganisationAssignmentsEndpointWithNeutralRoles()
     {
-        var contacts = new StubBusinessContactsClient(
-            new BookingBusinessContact(
+        var assignments = new StubOrganisationAssignmentsClient(
+            new BookingOrganisationAssignment(
                 BookingNotificationRecipientTypes.ContactCentre,
                 "Contact Centre",
-                "contact@example.com",
+                "assignment@example.com",
                 null,
                 [BookingNotificationChannel.Email]));
 
-        await CreateRecipientResolver(adviserEmail: null, businessContacts: contacts).ResolveAsync(
+        await CreateRecipientResolver(adviserEmail: null, organisationAssignments: assignments).ResolveAsync(
             DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
             [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
             new Dictionary<string, string>
@@ -214,24 +214,24 @@ public sealed class BookingNotificationPolicyTests
             },
             CancellationToken.None);
 
-        Assert.NotNull(contacts.LastSearch);
-        Assert.Equal([BookingNotificationRecipientTypes.ContactCentre], contacts.LastSearch!.ContactTypes);
-        Assert.Equal("adv-1", contacts.LastSearch.AdviserId);
-        Assert.Equal("South", contacts.LastSearch.Region);
-        Assert.Equal("org-1", contacts.LastSearch.OrganisationId);
-        Assert.Equal("client-1", contacts.LastSearch.ClientId);
+        Assert.NotNull(assignments.LastSearch);
+        Assert.Equal([BookingNotificationRecipientTypes.ContactCentre], assignments.LastSearch!.AssignmentTypes);
+        Assert.Equal("adv-1", assignments.LastSearch.AdviserId);
+        Assert.Equal("South", assignments.LastSearch.Region);
+        Assert.Equal("org-1", assignments.LastSearch.OrganisationId);
+        Assert.Equal("client-1", assignments.LastSearch.ClientId);
     }
 
     [Fact]
-    public async Task Resolver_MapsBusinessContactsIntoNotificationRecipients()
+    public async Task Resolver_MapsOrganisationAssignmentsIntoNotificationRecipients()
     {
         var recipients = await CreateRecipientResolver(
                 adviserEmail: null,
-                businessContacts: new StubBusinessContactsClient(
-                    new BookingBusinessContact(
+                organisationAssignments: new StubOrganisationAssignmentsClient(
+                    new BookingOrganisationAssignment(
                         BookingNotificationRecipientTypes.ContactCentre,
                         "Contact Centre",
-                        "contact@example.com",
+                        "assignment@example.com",
                         null,
                         [BookingNotificationChannel.Email])))
             .ResolveAsync(
@@ -240,18 +240,18 @@ public sealed class BookingNotificationPolicyTests
                 new Dictionary<string, string> { ["bookingId"] = "booking-1", ["adviserId"] = "adv-1" },
                 CancellationToken.None);
 
-        var contact = Assert.Single(ContactCentreRecipients(recipients));
-        Assert.Equal("Contact Centre", contact.DisplayName);
-        Assert.Equal("contact@example.com", contact.Email);
-        Assert.Equal([BookingNotificationChannel.Email], contact.PreferredChannels);
+        var assignment = Assert.Single(ContactCentreRecipients(recipients));
+        Assert.Equal("Contact Centre", assignment.DisplayName);
+        Assert.Equal("assignment@example.com", assignment.Email);
+        Assert.Equal([BookingNotificationChannel.Email], assignment.PreferredChannels);
     }
 
     [Fact]
-    public async Task Resolver_MissingBusinessContactRole_SkipsOnlyMissingRole()
+    public async Task Resolver_MissingOrganisationAssignmentRole_SkipsOnlyMissingRole()
     {
         var recipients = await CreateRecipientResolver(
                 adviserEmail: "adviser@example.com",
-                businessContacts: new StubBusinessContactsClient())
+                organisationAssignments: new StubOrganisationAssignmentsClient())
             .ResolveAsync(
                 DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
                 [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
@@ -292,7 +292,7 @@ public sealed class BookingNotificationPolicyTests
         var step = new BookingNotificationStep(
             publisher,
             new StubPolicyProvider(policy),
-            CreateRecipientResolver(adviserEmail: null, businessContacts: new StubBusinessContactsClient()),
+            CreateRecipientResolver(adviserEmail: null, organisationAssignments: new StubOrganisationAssignmentsClient()),
             NullLogger<BookingNotificationStep>.Instance);
 
         var result = await step.ExecuteAsync(
@@ -330,7 +330,7 @@ public sealed class BookingNotificationPolicyTests
 
     private static BookingNotificationRecipientResolver CreateRecipientResolver(
         string? adviserEmail,
-        StubBusinessContactsClient? businessContacts = null)
+        StubOrganisationAssignmentsClient? organisationAssignments = null)
     {
         var advisers = new Mock<IAdviserProfileProjectionRepository>();
         advisers.Setup(x => x.GetAsync("adv-1", It.IsAny<CancellationToken>()))
@@ -340,11 +340,11 @@ public sealed class BookingNotificationPolicyTests
 
         return new BookingNotificationRecipientResolver(
             advisers.Object,
-            businessContacts ?? new StubBusinessContactsClient(
-                new BookingBusinessContact(
+            organisationAssignments ?? new StubOrganisationAssignmentsClient(
+                new BookingOrganisationAssignment(
                     BookingNotificationRecipientTypes.ContactCentre,
                     "Contact Centre",
-                    "contact@example.com",
+                    "assignment@example.com",
                     null,
                     [BookingNotificationChannel.Email])),
             NullLogger<BookingNotificationRecipientResolver>.Instance);
@@ -378,17 +378,17 @@ public sealed class BookingNotificationPolicyTests
         }
     }
 
-    private sealed class StubBusinessContactsClient(params BookingBusinessContact[] contacts) : IBookingBusinessContactsClient
+    private sealed class StubOrganisationAssignmentsClient(params BookingOrganisationAssignment[] assignments) : IBookingOrganisationAssignmentsClient
     {
-        public BookingBusinessContactSearch? LastSearch { get; private set; }
+        public BookingOrganisationAssignmentSearch? LastSearch { get; private set; }
 
-        public Task<IReadOnlyList<BookingBusinessContact>> GetContactsAsync(
-            BookingBusinessContactSearch search,
+        public Task<IReadOnlyList<BookingOrganisationAssignment>> GetAssignmentsAsync(
+            BookingOrganisationAssignmentSearch search,
             CancellationToken ct)
         {
             LastSearch = search;
-            return Task.FromResult<IReadOnlyList<BookingBusinessContact>>(contacts
-                .Where(contact => search.ContactTypes.Contains(contact.ContactType, StringComparer.OrdinalIgnoreCase))
+            return Task.FromResult<IReadOnlyList<BookingOrganisationAssignment>>(assignments
+                .Where(assignment => search.AssignmentTypes.Contains(assignment.AssignmentType, StringComparer.OrdinalIgnoreCase))
                 .ToArray());
         }
     }

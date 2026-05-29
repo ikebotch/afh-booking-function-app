@@ -1,7 +1,7 @@
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Abstractions.Persistence;
-using AFH.Booking.Application.Models.BusinessContacts;
+using AFH.Booking.Application.Models.OrganisationAssignments;
 using AFH.Booking.Application.Models.Notifications;
 using Microsoft.Extensions.Logging;
 
@@ -10,16 +10,16 @@ namespace AFH.Booking.Infrastructure.Notifications;
 public sealed class BookingNotificationRecipientResolver : IBookingNotificationRecipientResolver
 {
     private readonly IAdviserProfileProjectionRepository _advisers;
-    private readonly IBookingBusinessContactsClient _businessContacts;
+    private readonly IBookingOrganisationAssignmentsClient _organisationAssignments;
     private readonly ILogger<BookingNotificationRecipientResolver> _logger;
 
     public BookingNotificationRecipientResolver(
         IAdviserProfileProjectionRepository advisers,
-        IBookingBusinessContactsClient businessContacts,
+        IBookingOrganisationAssignmentsClient organisationAssignments,
         ILogger<BookingNotificationRecipientResolver> logger)
     {
         _advisers = advisers;
-        _businessContacts = businessContacts;
+        _organisationAssignments = organisationAssignments;
         _logger = logger;
     }
 
@@ -41,19 +41,19 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
 
         var usedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var resolved = new List<BookingNotificationRecipient>();
-        var businessContactTypes = policy.Recipients
+        var organisationAssignmentTypes = policy.Recipients
             .Where(x => x.Enabled)
             .Select(x => x.RecipientType)
-            .Where(IsBusinessContactType)
+            .Where(IsOrganisationAssignmentType)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        var businessContacts = businessContactTypes.Length == 0
+        var organisationAssignments = organisationAssignmentTypes.Length == 0
             ? []
-            : await ResolveBusinessContactsAsync(businessContactTypes, data, policy.NotificationType, ct);
+            : await ResolveOrganisationAssignmentsAsync(organisationAssignmentTypes, data, policy.NotificationType, ct);
 
         foreach (var recipientPolicy in policy.Recipients.Where(x => x.Enabled))
         {
-            var candidates = await ResolveRecipientsAsync(recipientPolicy.RecipientType, requestedRecipients, data, businessContacts, ct);
+            var candidates = await ResolveRecipientsAsync(recipientPolicy.RecipientType, requestedRecipients, data, organisationAssignments, ct);
             if (candidates.Count == 0)
             {
                 _logger.LogWarning(
@@ -95,7 +95,7 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
         string recipientType,
         IReadOnlyList<BookingNotificationRecipient> requestedRecipients,
         IReadOnlyDictionary<string, string> data,
-        IReadOnlyList<BookingBusinessContact> businessContacts,
+        IReadOnlyList<BookingOrganisationAssignment> organisationAssignments,
         CancellationToken ct)
     {
         var requested = requestedRecipients.FirstOrDefault(x =>
@@ -110,45 +110,45 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
             return adviser is null ? [] : [adviser];
         }
 
-        if (IsBusinessContactType(recipientType))
-            return businessContacts
-                .Where(x => string.Equals(x.ContactType, recipientType, StringComparison.OrdinalIgnoreCase))
+        if (IsOrganisationAssignmentType(recipientType))
+            return organisationAssignments
+                .Where(x => string.Equals(x.AssignmentType, recipientType, StringComparison.OrdinalIgnoreCase))
                 .Select(ToRecipient)
                 .ToArray();
 
         return [];
     }
 
-    private async Task<IReadOnlyList<BookingBusinessContact>> ResolveBusinessContactsAsync(
-        IReadOnlyList<string> contactTypes,
+    private async Task<IReadOnlyList<BookingOrganisationAssignment>> ResolveOrganisationAssignmentsAsync(
+        IReadOnlyList<string> assignmentTypes,
         IReadOnlyDictionary<string, string> data,
         string notificationType,
         CancellationToken ct)
     {
-        var contacts = await _businessContacts.GetContactsAsync(
-            new BookingBusinessContactSearch(
-                contactTypes,
+        var assignments = await _organisationAssignments.GetAssignmentsAsync(
+            new BookingOrganisationAssignmentSearch(
+                assignmentTypes,
                 GetDataValue(data, "adviserId"),
                 GetDataValue(data, "region"),
                 GetDataValue(data, "organisationId") ?? GetDataValue(data, "organizationId"),
                 GetDataValue(data, "clientId")),
             ct);
 
-        var missing = contactTypes
-            .Where(contactType => !contacts.Any(contact => string.Equals(contact.ContactType, contactType, StringComparison.OrdinalIgnoreCase)))
+        var missing = assignmentTypes
+            .Where(assignmentType => !assignments.Any(assignment => string.Equals(assignment.AssignmentType, assignmentType, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
         if (missing.Length > 0)
         {
             _logger.LogWarning(
-                "Business contact roles could not be resolved for booking notification. NotificationType={NotificationType} BookingId={BookingId} CorrelationId={CorrelationId} MissingContactRoles={MissingContactRoles}",
+                "Organisation assignment roles could not be resolved for booking notification. NotificationType={NotificationType} BookingId={BookingId} CorrelationId={CorrelationId} MissingAssignmentRoles={MissingAssignmentRoles}",
                 notificationType,
                 GetDataValue(data, "bookingId"),
                 GetDataValue(data, "correlationId") ?? GetDataValue(data, "bookingId"),
                 string.Join(',', missing));
         }
 
-        return contacts;
+        return assignments;
     }
 
     private async Task<BookingNotificationRecipient?> ResolveAdviserAsync(
@@ -172,15 +172,15 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
             null);
     }
 
-    private static BookingNotificationRecipient ToRecipient(BookingBusinessContact contact)
+    private static BookingNotificationRecipient ToRecipient(BookingOrganisationAssignment assignment)
         => new(
-            contact.ContactType,
-            contact.DisplayName,
-            contact.Email,
-            contact.MobileNumber,
-            PreferredChannels: contact.Channels);
+            assignment.AssignmentType,
+            assignment.DisplayName,
+            assignment.Email,
+            assignment.MobileNumber,
+            PreferredChannels: assignment.Channels);
 
-    private static bool IsBusinessContactType(string recipientType)
+    private static bool IsOrganisationAssignmentType(string recipientType)
         => string.Equals(recipientType, BookingNotificationRecipientTypes.ContactCentre, StringComparison.OrdinalIgnoreCase)
            || string.Equals(recipientType, BookingNotificationRecipientTypes.OrgAdmin, StringComparison.OrdinalIgnoreCase)
            || string.Equals(recipientType, BookingNotificationRecipientTypes.Manager, StringComparison.OrdinalIgnoreCase)

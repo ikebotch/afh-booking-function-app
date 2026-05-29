@@ -113,7 +113,7 @@
 - SMS templates are DB-backed `NotificationTemplates` rows with `Channel=Sms`, `BodyTemplate` required, no subject required, and `ContentType=text/plain`.
 - SMS rendered bodies are stored only in SQL `NotificationMessageLogs.Body`; application logs must include metadata/length only.
 - Production deployment requires Key Vault/App Settings for Graph credentials and mailbox permissions for SendMail.
-- Contact-centre copies require `Notifications:Email:ContactCentreEmailAddress`.
+- Contact-centre recipients are resolved by Booking through DB-backed organisation assignments.
 - Bounceback auditing persists `EmailBounceEvents` and correlates with the unified `NotificationDispatches` delivery-attempt audit table. `NotificationOutbox` remains job-level; `NotificationDispatches` remains recipient/channel/provider attempt-level.
 - Rendered message audit is stored in `NotificationMessageLogs`, not `NotificationDispatches`.
   - `NotificationMessageLogs` is Notification-owned SQL data and is allowed to contain sensitive rendered notification content because SQL is the approved sensitive store for this flow.
@@ -163,7 +163,6 @@
   - `Notifications:Email:Enabled`
   - `Notifications:Email:ProviderName`
   - `Notifications:Email:ProviderName` allowed values are `Composed` and `Graph`; `SendGrid` is an email-only future option if introduced later under `Notifications:Email:SendGrid:*`.
-  - `Notifications:Email:ContactCentreEmailAddress`
   - `Notifications:Email:Graph:*`
   - `Notifications:Sms:Enabled`
   - `Notifications:Sms:ProviderName`

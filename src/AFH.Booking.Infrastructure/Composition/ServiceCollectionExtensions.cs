@@ -173,7 +173,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILifecycleStepRepository, LifecycleStepRepository>();
         services.AddScoped<IBookingNotificationPolicyProvider, BookingNotificationPolicyProvider>();
         services.AddScoped<IBookingNotificationRecipientResolver, BookingNotificationRecipientResolver>();
-        services.AddHttpClient<IBookingBusinessContactsClient, BookingBusinessContactsClient>((sp, http) =>
+        services.AddHttpClient<IBookingOrganisationAssignmentsClient, BookingOrganisationAssignmentsClient>((sp, http) =>
         {
             var options = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(options.BaseUrl))

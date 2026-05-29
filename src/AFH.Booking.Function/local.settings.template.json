@@ -74,7 +74,6 @@
     "Notifications:Sms:Twilio:MessagingServiceSid": "",
     "Notifications:Email:Enabled": "true",
     "Notifications:Email:ProviderName": "Composed",
-    "Notifications:Email:ContactCentreEmailAddress": "contact-centre@example.com",
     "Notifications:Email:Graph:UseManagedIdentity": "true",
     "Notifications:Email:Graph:TenantId": "<tenant-id>",
     "Notifications:Email:Graph:ClientId": "<client-id-or-managed-identity-client-id>",

@@ -1,5 +1,5 @@
 using AFH.Booking.Application.Abstractions.Clients;
-using AFH.Booking.Application.Models.BusinessContacts;
+using AFH.Booking.Application.Models.OrganisationAssignments;
 using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Auth;
@@ -12,7 +12,7 @@ using System.Text.Json.Serialization;
 
 namespace AFH.Booking.Infrastructure.Clients;
 
-public sealed class BookingBusinessContactsClient : IBookingBusinessContactsClient
+public sealed class BookingOrganisationAssignmentsClient : IBookingOrganisationAssignmentsClient
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -25,13 +25,13 @@ public sealed class BookingBusinessContactsClient : IBookingBusinessContactsClie
     private readonly HttpClient _http;
     private readonly LocationServiceOptions _options;
     private readonly IInternalServiceAuthenticator _authenticator;
-    private readonly ILogger<BookingBusinessContactsClient> _logger;
+    private readonly ILogger<BookingOrganisationAssignmentsClient> _logger;
 
-    public BookingBusinessContactsClient(
+    public BookingOrganisationAssignmentsClient(
         HttpClient http,
         IOptions<LocationServiceOptions> options,
         IInternalServiceAuthenticator authenticator,
-        ILogger<BookingBusinessContactsClient> logger)
+        ILogger<BookingOrganisationAssignmentsClient> logger)
     {
         _http = http;
         _options = options.Value;
@@ -39,20 +39,20 @@ public sealed class BookingBusinessContactsClient : IBookingBusinessContactsClie
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<BookingBusinessContact>> GetContactsAsync(
-        BookingBusinessContactSearch search,
+    public async Task<IReadOnlyList<BookingOrganisationAssignment>> GetAssignmentsAsync(
+        BookingOrganisationAssignmentSearch search,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(_options.BaseUrl))
             throw new InvalidOperationException($"{LocationServiceOptions.SectionName}:BaseUrl is required.");
 
-        if (search.ContactTypes.Count == 0)
+        if (search.AssignmentTypes.Count == 0)
             return [];
 
         var query = new Dictionary<string, string?>
         {
             ["context"] = "Booking",
-            ["roles"] = string.Join(',', search.ContactTypes.Select(x => x.Trim()).Where(x => x.Length > 0))
+            ["assignmentTypes"] = string.Join(',', search.AssignmentTypes.Select(x => x.Trim()).Where(x => x.Length > 0))
         };
 
         AddIfPresent(query, "adviserId", search.AdviserId);
@@ -60,7 +60,7 @@ public sealed class BookingBusinessContactsClient : IBookingBusinessContactsClie
         AddIfPresent(query, "organisationId", search.OrganisationId);
         AddIfPresent(query, "clientId", search.ClientId);
 
-        var path = AddQueryString("/api/v1/admin/business-contacts", query);
+        var path = AddQueryString("/api/v1/admin/organisation-assignments", query);
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
 
         if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
@@ -73,28 +73,28 @@ public sealed class BookingBusinessContactsClient : IBookingBusinessContactsClie
         {
             var body = await response.Content.ReadAsStringAsync(ct);
             _logger.LogWarning(
-                "Location business contacts request failed. Status={Status} FailureCategory={FailureCategory} Body={Body}",
+                "Location organisation assignments request failed. Status={Status} FailureCategory={FailureCategory} Body={Body}",
                 (int)response.StatusCode,
                 DownstreamFailureClassifier.Classify(response.StatusCode),
                 body);
 
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-                throw new InvalidOperationException("Location service rejected the business contacts request (check internal bearer configuration).");
+                throw new InvalidOperationException("Location service rejected the organisation assignments request (check internal bearer configuration).");
 
             return [];
         }
 
-        var envelope = await response.Content.ReadFromJsonAsync<BusinessContactsResponseDto>(JsonOptions, ct);
-        return envelope?.Contacts
-            .Select(ToContact)
+        var envelope = await response.Content.ReadFromJsonAsync<OrganisationAssignmentsResponseDto>(JsonOptions, ct);
+        return envelope?.Assignments
+            .Select(ToAssignment)
             .Where(x => x is not null)
             .Select(x => x!)
             .ToArray() ?? [];
     }
 
-    private static BookingBusinessContact? ToContact(BusinessContactDto dto)
+    private static BookingOrganisationAssignment? ToAssignment(OrganisationAssignmentDto dto)
     {
-        if (string.IsNullOrWhiteSpace(dto.ContactType))
+        if (string.IsNullOrWhiteSpace(dto.AssignmentType))
             return null;
 
         var channels = dto.Channels
@@ -103,9 +103,9 @@ public sealed class BookingBusinessContactsClient : IBookingBusinessContactsClie
             .Distinct()
             .ToArray();
 
-        return new BookingBusinessContact(
-            dto.ContactType.Trim(),
-            string.IsNullOrWhiteSpace(dto.DisplayName) ? dto.ContactType.Trim() : dto.DisplayName.Trim(),
+        return new BookingOrganisationAssignment(
+            dto.AssignmentType.Trim(),
+            string.IsNullOrWhiteSpace(dto.DisplayName) ? dto.AssignmentType.Trim() : dto.DisplayName.Trim(),
             string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim(),
             string.IsNullOrWhiteSpace(dto.MobileNumber) ? null : dto.MobileNumber.Trim(),
             channels);
@@ -132,14 +132,14 @@ public sealed class BookingBusinessContactsClient : IBookingBusinessContactsClie
         return values.Length == 0 ? path : $"{path}?{string.Join('&', values)}";
     }
 
-    private sealed class BusinessContactsResponseDto
+    private sealed class OrganisationAssignmentsResponseDto
     {
-        public List<BusinessContactDto> Contacts { get; set; } = [];
+        public List<OrganisationAssignmentDto> Assignments { get; set; } = [];
     }
 
-    private sealed class BusinessContactDto
+    private sealed class OrganisationAssignmentDto
     {
-        public string ContactType { get; set; } = string.Empty;
+        public string AssignmentType { get; set; } = string.Empty;
         public string DisplayName { get; set; } = string.Empty;
         public string? Email { get; set; }
         public string? MobileNumber { get; set; }

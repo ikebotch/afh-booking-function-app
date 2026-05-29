@@ -1,5 +1,5 @@
 using AFH.Booking.Application.Abstractions.Clients;
-using AFH.Booking.Application.Models.BusinessContacts;
+using AFH.Booking.Application.Models.OrganisationAssignments;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Client;
 using AFH.Booking.Domain.Location.Travel;
@@ -177,7 +177,7 @@ public class InternalOutboundAuthTests
     }
 
     [Fact]
-    public async Task BookingBusinessContactsClient_UsesNeutralLocationEndpointAndInternalAuth()
+    public async Task BookingOrganisationAssignmentsClient_UsesNeutralLocationEndpointAndInternalAuth()
     {
         HttpRequestMessage? captured = null;
         var handler = new StubHandler(request =>
@@ -188,9 +188,9 @@ public class InternalOutboundAuthTests
                 Content = new StringContent(
                     """
                     {
-                      "contacts": [
+                      "assignments": [
                         {
-                          "contactType": "Manager",
+                          "assignmentType": "Manager",
                           "displayName": "Regional Manager",
                           "email": "manager@example.com",
                           "mobileNumber": null,
@@ -204,7 +204,7 @@ public class InternalOutboundAuthTests
             };
         });
 
-        var sut = new BookingBusinessContactsClient(
+        var sut = new BookingOrganisationAssignmentsClient(
             new HttpClient(handler) { BaseAddress = new Uri("https://location.example") },
             Options.Create(new LocationServiceOptions
             {
@@ -213,10 +213,10 @@ public class InternalOutboundAuthTests
                 InternalToken = "location-token"
             }),
             new InternalBearerServiceAuthenticator(),
-            NullLogger<BookingBusinessContactsClient>.Instance);
+            NullLogger<BookingOrganisationAssignmentsClient>.Instance);
 
-        var contacts = await sut.GetContactsAsync(
-            new BookingBusinessContactSearch(
+        var assignments = await sut.GetAssignmentsAsync(
+            new BookingOrganisationAssignmentSearch(
                 ["Manager", "ContactCentre"],
                 AdviserId: "adv-1",
                 Region: "South",
@@ -224,13 +224,13 @@ public class InternalOutboundAuthTests
                 ClientId: "client-1"),
             CancellationToken.None);
 
-        var contact = Assert.Single(contacts);
-        Assert.Equal("Manager", contact.ContactType);
-        Assert.Equal("manager@example.com", contact.Email);
+        var assignment = Assert.Single(assignments);
+        Assert.Equal("Manager", assignment.AssignmentType);
+        Assert.Equal("manager@example.com", assignment.Email);
         Assert.NotNull(captured);
-        Assert.Equal("/api/v1/admin/business-contacts", captured!.RequestUri!.AbsolutePath);
+        Assert.Equal("/api/v1/admin/organisation-assignments", captured!.RequestUri!.AbsolutePath);
         Assert.Contains("context=Booking", captured.RequestUri.Query);
-        Assert.Contains("roles=Manager%2CContactCentre", captured.RequestUri.Query);
+        Assert.Contains("assignmentTypes=Manager%2CContactCentre", captured.RequestUri.Query);
         Assert.Contains("adviserId=adv-1", captured.RequestUri.Query);
         Assert.Contains("region=South", captured.RequestUri.Query);
         Assert.Contains("organisationId=org-1", captured.RequestUri.Query);

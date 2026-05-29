@@ -2,7 +2,6 @@ using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Application.Services.Notifications;
 using AFH.Booking.Infrastructure.Persistence;
-using AFH.Notification.Contract.V1.Dtos;
 using Microsoft.EntityFrameworkCore;
 
 namespace AFH.Booking.Infrastructure.Notifications;
@@ -18,7 +17,7 @@ public sealed class BookingNotificationPolicyProvider : IBookingNotificationPoli
 
     public async Task<BookingNotificationPolicy> GetAsync(
         string sourceApplication,
-        NotificationType notificationType,
+        BookingNotificationType notificationType,
         CancellationToken ct)
     {
         var source = string.IsNullOrWhiteSpace(sourceApplication)
@@ -50,7 +49,7 @@ public sealed class BookingNotificationPolicyProvider : IBookingNotificationPoli
         IReadOnlyCollection<Persistence.Models.BookingNotificationRuleChannelModel> rows)
     {
         var channels = rows
-            .Select(row => Enum.TryParse<NotificationChannel>(row.Channel, ignoreCase: true, out var channel)
+            .Select(row => Enum.TryParse<BookingNotificationChannel>(row.Channel, ignoreCase: true, out var channel)
                 ? new BookingNotificationChannelPolicy(channel, row.Enabled, row.TemplateKey, row.TemplateVersion)
                 : null)
             .Where(x => x is not null)

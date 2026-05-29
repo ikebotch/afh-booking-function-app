@@ -197,7 +197,7 @@ public sealed class SmsNotificationDeliveryGatewayTests
             ["ConnectionStrings:BookingDb"] = "Server=localhost;Database=AFH.Booking;Trusted_Connection=True;TrustServerCertificate=True",
             ["Notifications:Queue:QueueName"] = "notifications-send",
             ["Notifications:Queue:ConnectionString"] = "UseDevelopmentStorage=true",
-            ["Notifications:Integration:Transport"] = "Http"
+            ["Notifications:Integration:Transport"] = "InProcess"
         };
 
         foreach (var (key, value) in overrides)

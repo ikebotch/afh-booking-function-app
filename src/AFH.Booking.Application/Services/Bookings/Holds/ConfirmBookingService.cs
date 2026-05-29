@@ -11,9 +11,6 @@ using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Options;
-using AFH.Notification.Contract.Abstractions;
-using AFH.Notification.Contract.V1.Dtos;
-using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Extensions.Options;
 
 namespace AFH.Booking.Application.Holds;
@@ -447,11 +444,11 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         };
     }
 
-    private static IReadOnlyList<NotificationRecipient> BuildBookingConfirmedRecipients(
+    private static IReadOnlyList<BookingNotificationRecipient> BuildBookingConfirmedRecipients(
         Domain.Client.ClientDirectoryItem? client)
     {
         if (client is null)
-            return Array.Empty<NotificationRecipient>();
+            return Array.Empty<BookingNotificationRecipient>();
 
         var displayName = $"{client.FirstName} {client.LastName}".Trim();
         if (string.IsNullOrWhiteSpace(displayName))
@@ -459,7 +456,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
 
         return
         [
-            new NotificationRecipient(
+            new BookingNotificationRecipient(
                 BookingNotificationRecipientTypes.Client,
                 displayName,
                 client.Email,

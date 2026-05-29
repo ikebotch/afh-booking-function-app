@@ -113,7 +113,7 @@ public sealed class BookingNotificationTemplateTests
         var renderer = CreateRenderer();
         var rendered = await renderer.RenderAsync(
             new NotificationRequested(
-                BookingNotificationTypes.BookingConfirmed,
+                new NotificationType("Booking", "BookingConfirmed"),
                 hold.Id,
                 new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
                 [],
@@ -164,7 +164,7 @@ public sealed class BookingNotificationTemplateTests
         var renderer = CreateRenderer();
         var rendered = await renderer.RenderAsync(
             new NotificationRequested(
-                BookingNotificationTypes.BookingRescheduled,
+                new NotificationType("Booking", "BookingRescheduled"),
                 "booking-1",
                 new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
                 [],
@@ -206,7 +206,7 @@ public sealed class BookingNotificationTemplateTests
         var renderer = CreateRenderer();
         var rendered = await renderer.RenderAsync(
             new NotificationRequested(
-                BookingNotificationTypes.BookingCancelled,
+                new NotificationType("Booking", "BookingCancelled"),
                 "booking-1",
                 new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
                 [],
@@ -243,7 +243,7 @@ public sealed class BookingNotificationTemplateTests
         var renderer = CreateRenderer();
         var rendered = await renderer.RenderAsync(
             new NotificationRequested(
-                BookingNotificationTypes.BookingHoldCreated,
+                new NotificationType("Booking", "BookingHoldCreated"),
                 hold.Id,
                 new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
                 [],
@@ -425,7 +425,7 @@ Manage your booking:
         string templateVersion,
         NotificationChannel channel = NotificationChannel.Email)
         => new(
-            BookingNotificationTypes.BookingConfirmed,
+            new NotificationType("Booking", "BookingConfirmed"),
             "booking-1",
             new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
             [new NotificationRecipient("Client", "Jane Client", channel == NotificationChannel.Email ? "jane@example.com" : null, channel == NotificationChannel.Sms ? "+447700900000" : null, null, [channel])],

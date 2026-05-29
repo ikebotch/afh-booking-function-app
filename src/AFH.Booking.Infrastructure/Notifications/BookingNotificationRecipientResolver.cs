@@ -2,8 +2,6 @@ using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Infrastructure.Options;
-using AFH.Notification.Contract.V1.Dtos;
-using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -25,24 +23,24 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<NotificationRecipient>> ResolveAsync(
+    public async Task<IReadOnlyList<BookingNotificationRecipient>> ResolveAsync(
         BookingNotificationPolicy policy,
-        IReadOnlyList<NotificationRecipient> requestedRecipients,
+        IReadOnlyList<BookingNotificationRecipient> requestedRecipients,
         IReadOnlyDictionary<string, string> data,
         CancellationToken ct)
     {
         var enabledChannels = policy.Channels
             .Where(x => x.Enabled)
             .Select(x => x.Channel)
-            .Where(x => x != NotificationChannel.Unknown)
+            .Where(x => x != BookingNotificationChannel.Unknown)
             .Distinct()
             .ToArray();
 
         if (enabledChannels.Length == 0)
-            return Array.Empty<NotificationRecipient>();
+            return Array.Empty<BookingNotificationRecipient>();
 
         var usedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var resolved = new List<NotificationRecipient>();
+        var resolved = new List<BookingNotificationRecipient>();
 
         foreach (var recipientPolicy in policy.Recipients.Where(x => x.Enabled))
         {
@@ -79,9 +77,9 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
         return resolved;
     }
 
-    private async Task<IReadOnlyList<NotificationRecipient>> ResolveRecipientsAsync(
+    private async Task<IReadOnlyList<BookingNotificationRecipient>> ResolveRecipientsAsync(
         string recipientType,
-        IReadOnlyList<NotificationRecipient> requestedRecipients,
+        IReadOnlyList<BookingNotificationRecipient> requestedRecipients,
         IReadOnlyDictionary<string, string> data,
         CancellationToken ct)
     {
@@ -103,7 +101,7 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
         return [];
     }
 
-    private async Task<NotificationRecipient?> ResolveAdviserAsync(
+    private async Task<BookingNotificationRecipient?> ResolveAdviserAsync(
         IReadOnlyDictionary<string, string> data,
         CancellationToken ct)
     {
@@ -115,7 +113,7 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
         if (string.IsNullOrWhiteSpace(email) || !email.Contains('@', StringComparison.Ordinal))
             return null;
 
-        return new NotificationRecipient(
+        return new BookingNotificationRecipient(
             BookingNotificationRecipientTypes.Adviser,
             string.IsNullOrWhiteSpace(adviser?.DisplayName)
                 ? (data.TryGetValue("adviserName", out var adviserName) ? adviserName : null)
@@ -124,14 +122,14 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
             null);
     }
 
-    private IReadOnlyList<NotificationRecipient> ResolveContactCentre()
+    private IReadOnlyList<BookingNotificationRecipient> ResolveContactCentre()
     {
         var configured = !string.IsNullOrWhiteSpace(_emailOptions.AdminBccRecipients)
             ? _emailOptions.AdminBccRecipients
             : _emailOptions.ContactCentreEmailAddress;
 
         return SplitEmailAddresses(configured)
-            .Select(email => new NotificationRecipient(
+            .Select(email => new BookingNotificationRecipient(
                 BookingNotificationRecipientTypes.ContactCentre,
                 "Contact Centre",
                 email,
@@ -148,21 +146,21 @@ public sealed class BookingNotificationRecipientResolver : IBookingNotificationR
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-    private static bool HasTarget(NotificationRecipient recipient, NotificationChannel channel)
+    private static bool HasTarget(BookingNotificationRecipient recipient, BookingNotificationChannel channel)
         => channel switch
         {
-            NotificationChannel.Email => !string.IsNullOrWhiteSpace(recipient.Email),
-            NotificationChannel.Sms => !string.IsNullOrWhiteSpace(recipient.MobileNumber),
-            NotificationChannel.Push => !string.IsNullOrWhiteSpace(recipient.PushTarget),
+            BookingNotificationChannel.Email => !string.IsNullOrWhiteSpace(recipient.Email),
+            BookingNotificationChannel.Sms => !string.IsNullOrWhiteSpace(recipient.MobileNumber),
+            BookingNotificationChannel.Push => !string.IsNullOrWhiteSpace(recipient.PushTarget),
             _ => false
         };
 
-    private static string GetTargetKey(NotificationRecipient recipient, NotificationChannel channel)
+    private static string GetTargetKey(BookingNotificationRecipient recipient, BookingNotificationChannel channel)
         => channel switch
         {
-            NotificationChannel.Email => $"{channel}:{recipient.Email?.Trim()}",
-            NotificationChannel.Sms => $"{channel}:{recipient.MobileNumber?.Trim()}",
-            NotificationChannel.Push => $"{channel}:{recipient.PushTarget?.Trim()}",
+            BookingNotificationChannel.Email => $"{channel}:{recipient.Email?.Trim()}",
+            BookingNotificationChannel.Sms => $"{channel}:{recipient.MobileNumber?.Trim()}",
+            BookingNotificationChannel.Push => $"{channel}:{recipient.PushTarget?.Trim()}",
             _ => $"{channel}:"
         };
 }

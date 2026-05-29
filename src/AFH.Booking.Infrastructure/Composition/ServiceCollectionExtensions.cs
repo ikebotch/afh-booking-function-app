@@ -18,6 +18,7 @@ using AFH.Booking.Infrastructure.Location;
 using AFH.Booking.Infrastructure.Logging;
 using AFH.Booking.Infrastructure.Meetings;
 using AFH.Booking.Infrastructure.Notifications;
+using AFH.Booking.Infrastructure.Notifications.Options;
 using AFH.Booking.Infrastructure.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
@@ -56,6 +57,7 @@ public static class ServiceCollectionExtensions
         services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
         services.AddOptions<NotificationEmailOptions>()
             .Bind(config.GetSection(NotificationEmailOptions.SectionName));
+        services.Configure<NotificationApiPublisherOptions>(config.GetSection(NotificationApiPublisherOptions.SectionName));
         services.Configure<AvailabilityRulesOptions>(config.GetSection(AvailabilityRulesOptions.SectionName));
         services.Configure<ApplicationLoggingOptions>(config.GetSection(ApplicationLoggingOptions.SectionName));
         services.Configure<FinalRouteTimeGuardOptions>(config.GetSection(FinalRouteTimeGuardOptions.SectionName));
@@ -172,15 +174,21 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMeetingTopicRepository, MeetingTopicRepository>();
         services.AddScoped<IMeetingTypeRepository, MeetingTypeRepository>();
         services.AddScoped<ILifecycleStepRepository, LifecycleStepRepository>();
-        services.AddScoped<INotificationDispatchRepository, NotificationDispatchRepository>();
         services.AddScoped<IBookingNotificationPolicyProvider, BookingNotificationPolicyProvider>();
         services.AddScoped<IBookingNotificationRecipientResolver, BookingNotificationRecipientResolver>();
+        services.AddHttpClient<IBookingNotificationPublisher, NotificationApiPublisher>((sp, http) =>
+        {
+            var options = sp.GetRequiredService<IOptions<NotificationApiPublisherOptions>>().Value;
+            if (string.IsNullOrWhiteSpace(options.BaseUrl))
+                throw new InvalidOperationException($"{NotificationApiPublisherOptions.SectionName}:BaseUrl is required for booking notification HTTP publishing.");
+
+            http.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds <= 0 ? 30 : options.TimeoutSeconds);
+        });
         services.AddScoped<IOperationalIssueRepository, OperationalIssueRepository>();
         services.AddScoped<IBookingChangeAccessService, HmacBookingChangeAccessService>();
         services.AddScoped<IApprovalRoutingService, ConfigurationApprovalRoutingService>();
         services.AddScoped<IApprovalNotificationService, ApprovalNotificationService>();
         services.AddScoped<IApprovalWorkflowStore, DbApprovalWorkflowStore>();
-        services.AddScoped<IEmailBounceService, EmailBounceService>();
         services.AddHttpClient<IAdviserProjectionSyncService, AdviserProjectionSyncService>((sp, http) =>
         {
             var options = sp.GetRequiredService<IOptions<AdviserDirectoryOptions>>().Value;

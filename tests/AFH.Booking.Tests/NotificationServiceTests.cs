@@ -28,7 +28,7 @@ public sealed class NotificationServiceTests
 
         await service.PublishAsync(
             new NotificationRequested(
-                BookingNotificationTypes.BookingConfirmed,
+                new NotificationType("Booking", "BookingConfirmed"),
                 "booking-1",
                 new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
                 [
@@ -108,7 +108,7 @@ public sealed class NotificationServiceTests
 
         await service.PublishAsync(
             new NotificationRequested(
-                BookingNotificationTypes.BookingRescheduled,
+                new NotificationType("Booking", "BookingRescheduled"),
                 "booking-2",
                 new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
                 [
@@ -154,7 +154,7 @@ public sealed class NotificationServiceTests
 
         await service.PublishAsync(
             new NotificationRequested(
-                BookingNotificationTypes.BookingCancelled,
+                new NotificationType("Booking", "BookingCancelled"),
                 "booking-3",
                 new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
                 [
@@ -200,7 +200,7 @@ public sealed class NotificationServiceTests
 
         await service.PublishAsync(
             new NotificationRequested(
-                BookingNotificationTypes.BookingHoldCreated,
+                new NotificationType("Booking", "BookingHoldCreated"),
                 "hold-1",
                 new NotificationActor(LifecycleActors.System, "Booking", null, null, null),
                 [
@@ -261,7 +261,7 @@ public sealed class NotificationServiceTests
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.PublishAsync(
             new NotificationRequested(
-                BookingNotificationTypes.BookingConfirmed,
+                new NotificationType("Booking", "BookingConfirmed"),
                 "booking-1",
                 new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
                 [new NotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "jane@example.test")],
@@ -475,7 +475,7 @@ public sealed class NotificationServiceTests
 
     private static NotificationRequested CreateEmailAndSmsRequest()
         => new(
-            BookingNotificationTypes.BookingConfirmed,
+            new NotificationType("Booking", "BookingConfirmed"),
             "booking-1",
             new NotificationActor(LifecycleActors.System, "Booking", null, null, null),
             [

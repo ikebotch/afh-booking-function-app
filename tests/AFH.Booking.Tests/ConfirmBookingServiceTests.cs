@@ -1,7 +1,4 @@
 using AFH.Booking.Application.EmailTemplates;
-using AFH.Notification.Contract.Abstractions;
-using AFH.Notification.Contract.V1.Dtos;
-using AFH.Notification.Contract.V1.Requests;
 
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Governance;
@@ -285,7 +282,7 @@ public class ConfirmBookingServiceTests
         Assert.Equal("client-token-1", notificationStep.LastData?["viewBookingUrl"].Split("token=", StringSplitOptions.None)[1]);
         Assert.Equal("lifecycle-event-1", notificationStep.LastData?["eventId"]);
         Assert.Equal(slot.Id, notificationStep.LastData?["slotId"]);
-        var recipient = Assert.Single(notificationStep.LastRecipients ?? Array.Empty<NotificationRecipient>());
+        var recipient = Assert.Single(notificationStep.LastRecipients ?? Array.Empty<BookingNotificationRecipient>());
         Assert.Equal(BookingNotificationRecipientTypes.Client, recipient.RecipientType);
         Assert.Equal("jane.client@example.test", recipient.Email);
         Assert.Equal("+447700900123", recipient.MobileNumber);
@@ -806,14 +803,14 @@ public class ConfirmBookingServiceTests
         public string? LastNotificationEventType { get; private set; }
         public string? LastCorrelationId { get; private set; }
         public string? LastActorType { get; private set; }
-        public IReadOnlyList<NotificationRecipient>? LastRecipients { get; private set; }
+        public IReadOnlyList<BookingNotificationRecipient>? LastRecipients { get; private set; }
         public IReadOnlyDictionary<string, string>? LastData { get; private set; }
 
         public Task<(string Status, string? ErrorCode, string? ErrorDetails)> ExecuteAsync(
             string lifecycleEventType,
             string correlationId,
             string actorType,
-            IReadOnlyList<NotificationRecipient> recipients,
+            IReadOnlyList<BookingNotificationRecipient> recipients,
             IReadOnlyDictionary<string, string> data,
             CancellationToken ct)
         {

@@ -2,22 +2,19 @@ using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Models.Lifecycle.Constants;
 using AFH.Booking.Application.Models.Notifications;
-using AFH.Notification.Contract.Abstractions;
-using AFH.Notification.Contract.V1.Dtos;
-using AFH.Notification.Contract.V1.Requests;
 using Microsoft.Extensions.Logging;
 
 namespace AFH.Booking.Application.Services.Lifecycle;
 
 public sealed class BookingNotificationStep : IBookingNotificationStep
 {
-    private readonly INotificationPublisher _publisher;
+    private readonly IBookingNotificationPublisher _publisher;
     private readonly IBookingNotificationPolicyProvider _policyProvider;
     private readonly IBookingNotificationRecipientResolver _recipientResolver;
     private readonly ILogger<BookingNotificationStep> _logger;
 
     public BookingNotificationStep(
-        INotificationPublisher publisher,
+        IBookingNotificationPublisher publisher,
         IBookingNotificationPolicyProvider policyProvider,
         IBookingNotificationRecipientResolver recipientResolver,
         ILogger<BookingNotificationStep> logger)
@@ -32,7 +29,7 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
         string lifecycleEventType,
         string correlationId,
         string actorType,
-        IReadOnlyList<NotificationRecipient> recipients,
+        IReadOnlyList<BookingNotificationRecipient> recipients,
         IReadOnlyDictionary<string, string> data,
         CancellationToken ct)
     {
@@ -92,10 +89,10 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
                 _publisher.GetType().Name);
 
             await _publisher.PublishAsync(
-                new NotificationRequested(
+                new BookingNotificationRequest(
                     notificationType,
                     correlationId,
-                    new NotificationActor(actorType, "Booking", null, null, null),
+                    new BookingNotificationActor(actorType, "Booking", null, null, null),
                     resolvedRecipients,
                     BuildPolicyData(data, policy)),
                 ct);
@@ -118,7 +115,7 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
         }
     }
 
-    private static NotificationType? MapEventType(string lifecycleEventType) => lifecycleEventType switch
+    private static BookingNotificationType? MapEventType(string lifecycleEventType) => lifecycleEventType switch
     {
         LifecycleEventTypes.Booked => BookingNotificationTypes.BookingConfirmed,
         LifecycleEventTypes.Cancelled => BookingNotificationTypes.BookingCancelled,

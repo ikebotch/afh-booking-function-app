@@ -99,7 +99,7 @@ public sealed class NotificationRecipientResolverTests
         string actorType,
         IReadOnlyList<NotificationRecipient> recipients)
         => new NotificationRequested(
-            BookingNotificationTypes.BookingConfirmed,
+            new NotificationType("Booking", "BookingConfirmed"),
             "booking-1",
             new NotificationActor(actorType, "Booking", "actor-1", "Actor One", "actor@example.test"),
             recipients,

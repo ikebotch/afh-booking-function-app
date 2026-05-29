@@ -1,4 +1,6 @@
 using AFH.Booking.Application.Composition;
+using AFH.Booking.Application.Abstractions.Approvals;
+using AFH.Booking.Function.Composition;
 using AFH.Booking.Function.Configuration;
 using AFH.Booking.Function.Middleware;
 using AFH.Booking.Infrastructure.Composition;
@@ -34,6 +36,7 @@ var host = new HostBuilder()
         services.AddBookingInfrastructure(ctx.Configuration);
         services.AddNotificationApplication();
         services.AddNotificationInfrastructure(ctx.Configuration);
+        services.AddScoped<IEmailBounceService, NotificationEmailBounceService>();
         services.AddHttpClient();
 
         AddValidatedSecurityOptions(services, ctx.Configuration);

@@ -1,13 +1,12 @@
 using AFH.Booking.Application.Models.Notifications;
-using AFH.Notification.Contract.V1.Dtos;
 
 namespace AFH.Booking.Application.Abstractions.Notifications;
 
 public interface IBookingNotificationRecipientResolver
 {
-    Task<IReadOnlyList<NotificationRecipient>> ResolveAsync(
+    Task<IReadOnlyList<BookingNotificationRecipient>> ResolveAsync(
         BookingNotificationPolicy policy,
-        IReadOnlyList<NotificationRecipient> requestedRecipients,
+        IReadOnlyList<BookingNotificationRecipient> requestedRecipients,
         IReadOnlyDictionary<string, string> data,
         CancellationToken ct);
 }

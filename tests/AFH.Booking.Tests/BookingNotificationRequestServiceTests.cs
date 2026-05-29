@@ -6,8 +6,6 @@ using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Application.Services.Notifications;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Client;
-using AFH.Notification.Contract.V1.Dtos;
-using AFH.Notification.Contract.V1.Requests;
 using Moq;
 using System.Net;
 
@@ -35,12 +33,12 @@ public sealed class BookingNotificationRequestServiceTests
         Assert.Equal("Queued", result.Value?.EmailStatus);
         Assert.Equal("corr-1", result.Value?.DispatchId);
         Assert.NotNull(notificationStep.Request);
-        Assert.Equal(expectedNotificationType, notificationStep.NotificationType?.Name);
+        Assert.Equal(expectedNotificationType, notificationStep.BookingNotificationType?.Name);
         Assert.Equal("corr-1", notificationStep.Request!.CorrelationId);
         Assert.Equal(LifecycleActors.System, notificationStep.Request.ActorType);
         var recipient = Assert.Single(notificationStep.Request.Recipients);
         Assert.Equal(BookingNotificationRecipientTypes.Client, recipient.RecipientType);
-        Assert.Equal(NotificationChannel.Email, Assert.Single(recipient.PreferredChannels ?? []));
+        Assert.Equal(BookingNotificationChannel.Email, Assert.Single(recipient.PreferredChannels ?? []));
         Assert.Equal("jane.client@example.test", recipient.Email);
     }
 
@@ -172,7 +170,7 @@ public sealed class BookingNotificationRequestServiceTests
     private sealed class CapturingBookingNotificationStep : IBookingNotificationStep
     {
         public CapturedRequest? Request { get; private set; }
-        public NotificationType? NotificationType => Request?.LifecycleEventType switch
+        public BookingNotificationType? BookingNotificationType => Request?.LifecycleEventType switch
         {
             LifecycleEventTypes.Booked => BookingNotificationTypes.BookingConfirmed,
             LifecycleEventTypes.Rearranged => BookingNotificationTypes.BookingRescheduled,
@@ -185,7 +183,7 @@ public sealed class BookingNotificationRequestServiceTests
             string lifecycleEventType,
             string correlationId,
             string actorType,
-            IReadOnlyList<NotificationRecipient> recipients,
+            IReadOnlyList<BookingNotificationRecipient> recipients,
             IReadOnlyDictionary<string, string> data,
             CancellationToken ct)
         {
@@ -198,6 +196,6 @@ public sealed class BookingNotificationRequestServiceTests
         string LifecycleEventType,
         string CorrelationId,
         string ActorType,
-        IReadOnlyList<NotificationRecipient> Recipients,
+        IReadOnlyList<BookingNotificationRecipient> Recipients,
         IReadOnlyDictionary<string, string> Data);
 }

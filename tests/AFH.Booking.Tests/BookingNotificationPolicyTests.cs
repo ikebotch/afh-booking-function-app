@@ -8,10 +8,6 @@ using AFH.Booking.Infrastructure.Notifications;
 using AFH.Booking.Infrastructure.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
-using AFH.Notification.Contract.Abstractions;
-using AFH.Notification.Contract.V1.Dtos;
-using AFH.Notification.Contract.V1.Requests;
-using AFH.Notification.Infrastructure.Options;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -31,7 +27,7 @@ public sealed class BookingNotificationPolicyTests
         var policy = await provider.GetAsync("Booking", BookingNotificationTypes.BookingConfirmed, CancellationToken.None);
 
         Assert.True(policy.Enabled);
-        Assert.Contains(policy.Channels, x => x.Channel == NotificationChannel.Email && x.Enabled && x.TemplateKey == "booking-confirmed" && x.TemplateVersion == "v1");
+        Assert.Contains(policy.Channels, x => x.Channel == BookingNotificationChannel.Email && x.Enabled && x.TemplateKey == "booking-confirmed" && x.TemplateVersion == "v1");
         Assert.Contains(policy.Recipients, x => x.RecipientType == BookingNotificationRecipientTypes.Client && x.Enabled);
     }
 
@@ -60,10 +56,10 @@ public sealed class BookingNotificationPolicyTests
 
         var policy = await provider.GetAsync("Booking", BookingNotificationTypes.BookingConfirmed, CancellationToken.None);
 
-        Assert.Equal("v2", policy.GetChannel(NotificationChannel.Email)?.TemplateVersion);
-        Assert.Equal("v1", policy.GetChannel(NotificationChannel.Sms)?.TemplateVersion);
-        Assert.Equal("booking-confirmed", policy.GetChannel(NotificationChannel.Email)?.TemplateKey);
-        Assert.Equal("booking-confirmed-sms", policy.GetChannel(NotificationChannel.Sms)?.TemplateKey);
+        Assert.Equal("v2", policy.GetChannel(BookingNotificationChannel.Email)?.TemplateVersion);
+        Assert.Equal("v1", policy.GetChannel(BookingNotificationChannel.Sms)?.TemplateVersion);
+        Assert.Equal("booking-confirmed", policy.GetChannel(BookingNotificationChannel.Email)?.TemplateKey);
+        Assert.Equal("booking-confirmed-sms", policy.GetChannel(BookingNotificationChannel.Sms)?.TemplateKey);
     }
 
     [Fact]
@@ -120,7 +116,7 @@ public sealed class BookingNotificationPolicyTests
             LifecycleEventTypes.Booked,
             "booking-1",
             LifecycleActors.Client,
-            [new NotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
             new Dictionary<string, string> { ["bookingId"] = "booking-1", ["adviserId"] = "adv-1", ["adviserName"] = "Ada Adviser" },
             CancellationToken.None);
 
@@ -137,7 +133,7 @@ public sealed class BookingNotificationPolicyTests
         var publisher = new CapturingPublisher();
         var policy = DefaultPolicy(BookingNotificationTypes.BookingConfirmed) with
         {
-            Channels = [new BookingNotificationChannelPolicy(NotificationChannel.Email, false, "booking-confirmed", "v1")]
+            Channels = [new BookingNotificationChannelPolicy(BookingNotificationChannel.Email, false, "booking-confirmed", "v1")]
         };
         var step = new BookingNotificationStep(
             publisher,
@@ -149,7 +145,7 @@ public sealed class BookingNotificationPolicyTests
             LifecycleEventTypes.Booked,
             "booking-1",
             LifecycleActors.Client,
-            [new NotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
             new Dictionary<string, string> { ["bookingId"] = "booking-1", ["adviserId"] = "adv-1" },
             CancellationToken.None);
 
@@ -172,7 +168,7 @@ public sealed class BookingNotificationPolicyTests
 
         var recipients = await CreateRecipientResolver(adviserEmail: "adviser@example.com").ResolveAsync(
             policy,
-            [new NotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
             new Dictionary<string, string> { ["adviserId"] = "adv-1" },
             CancellationToken.None);
 
@@ -185,7 +181,7 @@ public sealed class BookingNotificationPolicyTests
     {
         var recipients = await CreateRecipientResolver(adviserEmail: null).ResolveAsync(
             DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
-            [new NotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
             new Dictionary<string, string> { ["adviserId"] = "adv-1" },
             CancellationToken.None);
 
@@ -199,12 +195,12 @@ public sealed class BookingNotificationPolicyTests
     {
         var recipients = await CreateRecipientResolver(adviserEmail: "shared@example.com").ResolveAsync(
             DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
-            [new NotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "shared@example.com")],
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "shared@example.com")],
             new Dictionary<string, string> { ["adviserId"] = "adv-1" },
             CancellationToken.None);
 
         var emailTargets = recipients
-            .Where(x => x.PreferredChannels?.Contains(NotificationChannel.Email) == true)
+            .Where(x => x.PreferredChannels?.Contains(BookingNotificationChannel.Email) == true)
             .Select(x => x.Email)
             .Where(x => x is not null)
             .ToArray();
@@ -301,12 +297,12 @@ public sealed class BookingNotificationPolicyTests
         return new BookingDbContext(options);
     }
 
-    private static BookingNotificationPolicy DefaultPolicy(NotificationType type)
+    private static BookingNotificationPolicy DefaultPolicy(BookingNotificationType type)
         => new(
             "Booking",
             type.Name,
             true,
-            [new BookingNotificationChannelPolicy(NotificationChannel.Email, true, "booking-confirmed", "v1")],
+            [new BookingNotificationChannelPolicy(BookingNotificationChannel.Email, true, "booking-confirmed", "v1")],
             [
                 new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Client, true),
                 new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Adviser, true),
@@ -334,7 +330,7 @@ public sealed class BookingNotificationPolicyTests
             NullLogger<BookingNotificationRecipientResolver>.Instance);
     }
 
-    private static async Task<IReadOnlyList<NotificationRecipient>> ResolveWithContactCentreOptions(
+    private static async Task<IReadOnlyList<BookingNotificationRecipient>> ResolveWithContactCentreOptions(
         string? contactCentreEmailAddress,
         string? adminBccRecipients)
     {
@@ -344,17 +340,17 @@ public sealed class BookingNotificationPolicyTests
                 adminBccRecipients)
             .ResolveAsync(
                 DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
-                [new NotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+                [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
                 new Dictionary<string, string> { ["adviserId"] = "adv-1" },
                 CancellationToken.None);
     }
 
-    private static NotificationRecipient[] ContactCentreRecipients(IReadOnlyList<NotificationRecipient> recipients)
+    private static BookingNotificationRecipient[] ContactCentreRecipients(IReadOnlyList<BookingNotificationRecipient> recipients)
         => recipients
             .Where(x => x.RecipientType == BookingNotificationRecipientTypes.ContactCentre)
             .ToArray();
 
-    private static string[] ContactCentreEmails(IReadOnlyList<NotificationRecipient> recipients)
+    private static string[] ContactCentreEmails(IReadOnlyList<BookingNotificationRecipient> recipients)
         => ContactCentreRecipients(recipients)
             .Select(x => x.Email)
             .OfType<string>()
@@ -362,15 +358,15 @@ public sealed class BookingNotificationPolicyTests
 
     private sealed class StubPolicyProvider(BookingNotificationPolicy policy) : IBookingNotificationPolicyProvider
     {
-        public Task<BookingNotificationPolicy> GetAsync(string sourceApplication, NotificationType notificationType, CancellationToken ct)
+        public Task<BookingNotificationPolicy> GetAsync(string sourceApplication, BookingNotificationType notificationType, CancellationToken ct)
             => Task.FromResult(policy);
     }
 
-    private sealed class CapturingPublisher : INotificationPublisher
+    private sealed class CapturingPublisher : IBookingNotificationPublisher
     {
-        public NotificationRequested? Request { get; private set; }
+        public BookingNotificationRequest? Request { get; private set; }
 
-        public Task PublishAsync(NotificationRequested notification, CancellationToken ct)
+        public Task PublishAsync(BookingNotificationRequest notification, CancellationToken ct)
         {
             Request = notification;
             return Task.CompletedTask;

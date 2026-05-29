@@ -3,8 +3,6 @@ using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Models.Lifecycle.Constants;
 using AFH.Booking.Application.Models.Notifications;
-using AFH.Notification.Contract.V1.Dtos;
-using AFH.Notification.Contract.V1.Requests;
 
 namespace AFH.Booking.Application.Services.Notifications;
 
@@ -82,14 +80,14 @@ public sealed class BookingNotificationRequestService : IBookingNotificationRequ
             publishCorrelationId,
             LifecycleActors.System,
             BuildRecipients(client),
-            BuildData(mapping.Value.NotificationType, hold, slot, transaction),
+            BuildData(mapping.Value.BookingNotificationType, hold, slot, transaction),
             ct);
 
         return Result<NotificationDispatchResponse>.Ok(new NotificationDispatchResponse
         {
             DispatchId = publishCorrelationId,
             BookingId = hold.Id,
-            EventType = mapping.Value.NotificationType.Name,
+            EventType = mapping.Value.BookingNotificationType.Name,
             SmsRequested = false,
             EmailRequested = true,
             SmsStatus = "Skipped",
@@ -112,10 +110,10 @@ public sealed class BookingNotificationRequestService : IBookingNotificationRequ
         };
     }
 
-    private static IReadOnlyList<NotificationRecipient> BuildRecipients(Domain.Client.ClientDirectoryItem? client)
+    private static IReadOnlyList<BookingNotificationRecipient> BuildRecipients(Domain.Client.ClientDirectoryItem? client)
     {
         if (client is null)
-            return Array.Empty<NotificationRecipient>();
+            return Array.Empty<BookingNotificationRecipient>();
 
         var displayName = $"{client.FirstName} {client.LastName}".Trim();
         if (string.IsNullOrWhiteSpace(displayName))
@@ -123,18 +121,18 @@ public sealed class BookingNotificationRequestService : IBookingNotificationRequ
 
         return
         [
-            new NotificationRecipient(
+            new BookingNotificationRecipient(
                 BookingNotificationRecipientTypes.Client,
                 displayName,
                 client.Email,
                 client.Phone,
                 null,
-                [NotificationChannel.Email])
+                [BookingNotificationChannel.Email])
         ];
     }
 
     private static IReadOnlyDictionary<string, string> BuildData(
-        NotificationType type,
+        BookingNotificationType type,
         BookingHold hold,
         BookingSlot slot,
         BookingTransaction transaction)
@@ -193,5 +191,5 @@ public sealed class BookingNotificationRequestService : IBookingNotificationRequ
 
     private readonly record struct ManualNotificationMapping(
         string LifecycleEventType,
-        NotificationType NotificationType);
+        BookingNotificationType BookingNotificationType);
 }

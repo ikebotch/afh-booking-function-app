@@ -8,7 +8,6 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\AFH.Booking.Domain\AFH.Booking.Domain.csproj" />
-		<ProjectReference Include="..\AFH.Notification.Contract\AFH.Notification.Contract.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

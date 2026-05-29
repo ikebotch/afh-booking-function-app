@@ -1,4 +1,4 @@
-using AFH.Notification.Contract.V1.Dtos;
+using AFH.Booking.Application.Models.Notifications;
 
 namespace AFH.Booking.Application.Abstractions.Lifecycle;
 
@@ -8,7 +8,7 @@ public interface IBookingNotificationStep
         string lifecycleEventType,
         string correlationId,
         string actorType,
-        IReadOnlyList<NotificationRecipient> recipients,
+        IReadOnlyList<BookingNotificationRecipient> recipients,
         IReadOnlyDictionary<string, string> data,
         CancellationToken ct);
 }

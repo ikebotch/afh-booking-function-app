@@ -1,5 +1,3 @@
-using AFH.Notification.Contract.V1.Dtos;
-
 namespace AFH.Booking.Application.Models.Notifications;
 
 public sealed record BookingNotificationPolicy(
@@ -9,12 +7,12 @@ public sealed record BookingNotificationPolicy(
     IReadOnlyList<BookingNotificationChannelPolicy> Channels,
     IReadOnlyList<BookingNotificationRecipientPolicy> Recipients)
 {
-    public BookingNotificationChannelPolicy? GetChannel(NotificationChannel channel)
+    public BookingNotificationChannelPolicy? GetChannel(BookingNotificationChannel channel)
         => Channels.FirstOrDefault(x => x.Channel == channel);
 }
 
 public sealed record BookingNotificationChannelPolicy(
-    NotificationChannel Channel,
+    BookingNotificationChannel Channel,
     bool Enabled,
     string TemplateKey,
     string TemplateVersion);

@@ -1,20 +1,16 @@
 using AFH.Booking.Application.Abstractions.Approvals;
-using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.Approvals;
+using Microsoft.Extensions.Logging;
 
 namespace AFH.Booking.Infrastructure.Approvals;
 
 public sealed class ApprovalNotificationService : IApprovalNotificationService
 {
-    private readonly INotificationDispatchRepository _dispatches;
-    private readonly IUnitOfWork _uow;
+    private readonly ILogger<ApprovalNotificationService> _logger;
 
-    public ApprovalNotificationService(
-        INotificationDispatchRepository dispatches,
-        IUnitOfWork uow)
+    public ApprovalNotificationService(ILogger<ApprovalNotificationService> logger)
     {
-        _dispatches = dispatches;
-        _uow = uow;
+        _logger = logger;
     }
 
     public async Task RecordRequestSubmittedAsync(
@@ -68,27 +64,15 @@ public sealed class ApprovalNotificationService : IApprovalNotificationService
         string body,
         CancellationToken ct)
     {
-        await _dispatches.AddAsync(new NotificationDispatchRecord(
-            Id: Guid.NewGuid().ToString("N"),
-            BookingId: bookingId,
-            TransactionId: transactionId,
-            TransactionRef: transactionRef,
-            EventType: eventType,
-            SmsRequested: false,
-            EmailRequested: true,
-            SmsStatus: "Skipped",
-            EmailStatus: "Recorded",
-            OutcomeCode: "Recorded",
-            FailureDetails: null,
-            RecipientPhone: null,
-            RecipientEmail: recipient,
-            ProviderMessageId: null,
-            MessageBody: body.Length > 3900 ? body[..3900] : body,
-            LifecycleEventId: null,
-            CorrelationId: null,
-            CreatedUtc: DateTime.UtcNow,
-            UpdatedUtc: DateTime.UtcNow), ct);
+        _logger.LogInformation(
+            "Approval notification event recorded. BookingId={BookingId} TransactionId={TransactionId} TransactionRef={TransactionRef} EventType={EventType} Recipient={Recipient} Body={Body}",
+            bookingId,
+            transactionId,
+            transactionRef,
+            eventType,
+            recipient,
+            body.Length > 3900 ? body[..3900] : body);
 
-        await _uow.SaveChangesAsync(ct);
+        await Task.CompletedTask;
     }
 }

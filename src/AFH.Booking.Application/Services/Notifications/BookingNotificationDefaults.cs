@@ -1,5 +1,4 @@
 using AFH.Booking.Application.Models.Notifications;
-using AFH.Notification.Contract.V1.Dtos;
 
 namespace AFH.Booking.Application.Services.Notifications;
 
@@ -7,7 +6,7 @@ public static class BookingNotificationDefaults
 {
     public const string SourceApplication = "Booking";
 
-    public static BookingNotificationPolicy CreatePolicy(string sourceApplication, NotificationType notificationType)
+    public static BookingNotificationPolicy CreatePolicy(string sourceApplication, BookingNotificationType notificationType)
     {
         var typeName = notificationType.Name;
         var eventEnabled = !string.Equals(typeName, BookingNotificationTypes.BookingHoldCreated.Name, StringComparison.Ordinal);
@@ -44,8 +43,8 @@ public static class BookingNotificationDefaults
 
         return
         [
-            new BookingNotificationChannelPolicy(NotificationChannel.Email, emailEnabled, emailKey, "v1"),
-            new BookingNotificationChannelPolicy(NotificationChannel.Sms, false, smsKey, "v1")
+            new BookingNotificationChannelPolicy(BookingNotificationChannel.Email, emailEnabled, emailKey, "v1"),
+            new BookingNotificationChannelPolicy(BookingNotificationChannel.Sms, false, smsKey, "v1")
         ];
     }
 

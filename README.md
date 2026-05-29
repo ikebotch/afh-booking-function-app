@@ -135,15 +135,16 @@
 ## Notification Configuration Split
 - Legacy Booking self-service link options are flat keys under `Notifications`:
   - `Notifications:ClientPortalBaseUrl`
-- Source-side outbound publishing uses `Notifications:Integration:*`:
-  - `Notifications:Integration:Transport` is `Http` by default; allowed values are `Http`, `ServiceBus`, and transitional/local `InProcess`.
-  - `Notifications:Integration:Http:BaseUrl`
-  - `Notifications:Integration:Http:RequestPath`
-  - `Notifications:Integration:Http:TimeoutSeconds`
-  - `Notifications:Integration:Http:FunctionKey`
-    - Required when the receiving notification endpoint uses Azure Functions `AuthorizationLevel.Function`; sent as `x-functions-key`.
-  - `Notifications:Integration:Http:InternalToken`
-    - Optional override for HTTP publishing. When omitted, the publisher uses the shared `InternalApiAuth:Token`.
+- Booking-side outbound notification publishing uses `Booking:Notifications:Http:*`:
+  - `Booking:Notifications:Http:BaseUrl`
+  - `Booking:Notifications:Http:RequestPath`
+  - `Booking:Notifications:Http:TimeoutSeconds`
+  - `Booking:Notifications:Http:FunctionKey`
+    - Required when the receiving notification endpoint uses Azure Functions `AuthorizationLevel.Function`; sent as the `code` query value.
+  - `Booking:Notifications:Http:InternalToken`
+    - Required internal token for the notification API; sent as `Authorization: Bearer <InternalToken>`.
+- Notification-side source publishing uses `Notifications:Integration:*`:
+  - `Notifications:Integration:Transport` supports `ServiceBus` and transitional/local `InProcess`.
   - `Notifications:Integration:ServiceBus:FullyQualifiedNamespace`
   - `Notifications:Integration:ServiceBus:ConnectionString`
   - `Notifications:Integration:ServiceBus:TopicName`

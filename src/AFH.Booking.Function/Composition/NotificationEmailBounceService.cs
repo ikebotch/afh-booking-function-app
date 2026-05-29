@@ -3,13 +3,13 @@ using AFH.Booking.Application.Models.Approvals;
 using AFH.Notification.Application.Abstractions;
 using AFH.Notification.Application.Models;
 
-namespace AFH.Booking.Infrastructure.Clients;
+namespace AFH.Booking.Function.Composition;
 
-public sealed class EmailBounceService : IEmailBounceService
+public sealed class NotificationEmailBounceService : IEmailBounceService
 {
     private readonly INotificationBounceAuditStore _bounceAuditStore;
 
-    public EmailBounceService(INotificationBounceAuditStore bounceAuditStore)
+    public NotificationEmailBounceService(INotificationBounceAuditStore bounceAuditStore)
     {
         _bounceAuditStore = bounceAuditStore;
     }

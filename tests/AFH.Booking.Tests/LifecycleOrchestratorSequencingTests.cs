@@ -6,8 +6,6 @@ using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Application.Abstractions.Lifecycle;
-using AFH.Notification.Contract.V1.Requests;
-using AFH.Notification.Contract.V1.Dtos;
 using Moq;
 using System.Net;
 
@@ -68,8 +66,8 @@ public sealed class LifecycleOrchestratorSequencingTests
         string? publishedCancelNotificationCorrelationId = null;
         string? publishedCancelNotificationActorType = null;
         IReadOnlyDictionary<string, string>? publishedCancelNotificationData = null;
-        notificationStepCancel.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<NotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, string, string, IReadOnlyList<NotificationRecipient>, IReadOnlyDictionary<string, string>, CancellationToken>((eventType, correlationId, actorType, _, data, _) => {
+        notificationStepCancel.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string, string, IReadOnlyList<BookingNotificationRecipient>, IReadOnlyDictionary<string, string>, CancellationToken>((eventType, correlationId, actorType, _, data, _) => {
                 order.Add("notifications");
                 publishedCancelNotificationEventType = eventType;
                 publishedCancelNotificationCorrelationId = correlationId;
@@ -208,8 +206,8 @@ public sealed class LifecycleOrchestratorSequencingTests
         string? publishedNotificationCorrelationId = null;
         string? publishedNotificationActorType = null;
         IReadOnlyDictionary<string, string>? publishedNotificationData = null;
-        notificationStep.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<NotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, string, string, IReadOnlyList<NotificationRecipient>, IReadOnlyDictionary<string, string>, CancellationToken>((eventType, correlationId, actorType, _, data, _) => {
+        notificationStep.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
+            .Callback<string, string, string, IReadOnlyList<BookingNotificationRecipient>, IReadOnlyDictionary<string, string>, CancellationToken>((eventType, correlationId, actorType, _, data, _) => {
                 order.Add("notifications");
                 publishedNotificationEventType = eventType;
                 publishedNotificationCorrelationId = correlationId;

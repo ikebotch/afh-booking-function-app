@@ -1,5 +1,5 @@
 using AFH.Booking.Application.Models.Approvals;
-using AFH.Booking.Infrastructure.Clients;
+using AFH.Booking.Function.Composition;
 using AFH.Notification.Infrastructure.Bouncebacks;
 using AFH.Notification.Infrastructure.Persistence;
 using AFH.Notification.Infrastructure.Persistence.Models;
@@ -96,7 +96,7 @@ public class EmailBounceServiceTests
         return new NotificationDbContext(options);
     }
 
-    private static EmailBounceService CreateService(NotificationDbContext db)
+    private static NotificationEmailBounceService CreateService(NotificationDbContext db)
         => new(new EmailBouncebackStore(db, NullLogger<EmailBouncebackStore>.Instance));
 
     private static NotificationDispatchModel CreateDispatch(

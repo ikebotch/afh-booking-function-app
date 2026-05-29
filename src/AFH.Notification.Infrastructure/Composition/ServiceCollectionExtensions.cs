@@ -30,9 +30,6 @@ public static class ServiceCollectionExtensions
         services.Configure<NotificationQueueOptions>(options => BindNotificationQueueOptions(configuration, options));
         services.Configure<NotificationIntegrationOptions>(configuration.GetSection(NotificationIntegrationOptions.SectionName));
         services.Configure<ServiceBusNotificationPublisherOptions>(configuration.GetSection(ServiceBusNotificationPublisherOptions.SectionName));
-        services.Configure<HttpNotificationPublisherOptions>(configuration.GetSection(HttpNotificationPublisherOptions.SectionName));
-        services.Configure<InternalApiAuthOptions>(configuration.GetSection(InternalApiAuthOptions.SectionName));
-
 
         var connectionString = ResolveBookingDbConnectionString(configuration);
         if (string.IsNullOrWhiteSpace(connectionString))
@@ -78,18 +75,10 @@ public static class ServiceCollectionExtensions
                 return;
             case null:
             case "":
-            case "HTTP":
-                services.AddHttpClient<INotificationPublisher, HttpNotificationPublisher>((sp, http) =>
-                {
-                    var httpOptions = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<HttpNotificationPublisherOptions>>().Value;
-                    if (!string.IsNullOrWhiteSpace(httpOptions.BaseUrl))
-                        http.BaseAddress = new Uri(httpOptions.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
-
-                    http.Timeout = TimeSpan.FromSeconds(httpOptions.TimeoutSeconds <= 0 ? 30 : httpOptions.TimeoutSeconds);
-                });
+                services.AddScoped<INotificationPublisher, InProcessNotificationPublisher>();
                 return;
             default:
-                throw new InvalidOperationException($"{NotificationIntegrationOptions.SectionName}:Transport must be Http, ServiceBus, or InProcess.");
+                throw new InvalidOperationException($"{NotificationIntegrationOptions.SectionName}:Transport must be ServiceBus or InProcess.");
         }
     }
 

@@ -5,9 +5,6 @@ using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
-using AFH.Notification.Contract.Abstractions;
-using AFH.Notification.Contract.V1.Dtos;
-using AFH.Notification.Contract.V1.Requests;
 using System.Text.Json;
 
 namespace AFH.Booking.Application.Bookings;
@@ -372,11 +369,11 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         return cmd.RequestedBy.Trim();
     }
 
-    private static IReadOnlyList<NotificationRecipient> BuildBookingCancelledRecipients(
+    private static IReadOnlyList<BookingNotificationRecipient> BuildBookingCancelledRecipients(
         Domain.Client.ClientDirectoryItem? client)
     {
         if (client is null)
-            return Array.Empty<NotificationRecipient>();
+            return Array.Empty<BookingNotificationRecipient>();
 
         var displayName = $"{client.FirstName} {client.LastName}".Trim();
         if (string.IsNullOrWhiteSpace(displayName))
@@ -384,7 +381,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
 
         return
         [
-            new NotificationRecipient(
+            new BookingNotificationRecipient(
                 BookingNotificationRecipientTypes.Client,
                 displayName,
                 client.Email,

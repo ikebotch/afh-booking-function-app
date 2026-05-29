@@ -1,86 +1,72 @@
-using AFH.Notification.Contract.Abstractions;
-using AFH.Notification.Contract.V1.Requests;
-using AFH.Notification.Infrastructure.Options;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
+using System.Reflection;
 
-namespace AFH.Notification.Infrastructure.Integration;
+namespace AFH.Booking.Tests;
 
-public sealed class HttpNotificationPublisher : INotificationPublisher
+public sealed class ArchitectureGuardTests
 {
-    private readonly HttpClient _httpClient;
-    private readonly HttpNotificationPublisherOptions _options;
-    private readonly ILogger<HttpNotificationPublisher> _logger;
-
-    public HttpNotificationPublisher(
-        HttpClient httpClient,
-        IOptions<HttpNotificationPublisherOptions> options,
-        ILogger<HttpNotificationPublisher>? logger = null)
+    [Theory]
+    [InlineData("AFH.Booking.Application")]
+    [InlineData("AFH.Booking.Infrastructure")]
+    public void BookingProjects_DoNotReferenceNotificationProjects(string projectName)
     {
-        _httpClient = httpClient;
-        _options = options.Value;
-        _logger = logger ?? NullLogger<HttpNotificationPublisher>.Instance;
-    }
+        var projectPath = GetProjectPath(projectName);
+        var projectText = File.ReadAllText(projectPath);
 
-    public async Task PublishAsync(NotificationRequested notification, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(_options.BaseUrl))
-            throw new InvalidOperationException($"{HttpNotificationPublisherOptions.SectionName}:BaseUrl is required when Notifications:Integration:Transport is Http.");
+        Assert.DoesNotContain("AFH.Notification.", projectText, StringComparison.Ordinal);
 
-        _logger.LogInformation(
-            "Selected publisher transport. PublisherTransport=Http RequestPath={RequestPath}",
-            _options.RequestPath);
+        var sourceRoot = Path.GetDirectoryName(projectPath)!;
+        var sourceFiles = Directory.GetFiles(sourceRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToArray();
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, _options.RequestPath);
-        request.Content = JsonContent.Create(notification);
-
-        if (!string.IsNullOrWhiteSpace(notification.CorrelationId))
-            request.Headers.TryAddWithoutValidation("x-correlation-id", notification.CorrelationId);
-
-        if (notification.Data.TryGetValue("IdempotencyKey", out var idempotencyKey) && !string.IsNullOrWhiteSpace(idempotencyKey))
-            request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey.Trim());
-
-        var internalToken = ResolveInternalToken();
-        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
-            request.Headers.TryAddWithoutValidation("x-functions-key", _options.FunctionKey.Trim());
-
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", internalToken);
-
-        _logger.LogInformation(
-            "Notification HTTP publish started. NotificationType={NotificationType} RequestPath={RequestPath}",
-            notification.Type.Name,
-            _options.RequestPath);
-
-        try
+        foreach (var file in sourceFiles)
         {
-            using var response = await _httpClient.SendAsync(request, ct);
-            response.EnsureSuccessStatusCode();
-
-            _logger.LogInformation(
-                "Notification HTTP publish succeeded. NotificationType={NotificationType} StatusCode={StatusCode}",
-                notification.Type.Name,
-                (int)response.StatusCode);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(
-                ex,
-                "Notification HTTP publish failed. NotificationType={NotificationType} RequestPath={RequestPath}",
-                notification.Type.Name,
-                _options.RequestPath);
-            throw;
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("using AFH.Notification.", text, StringComparison.Ordinal);
         }
     }
 
-    private string ResolveInternalToken()
+    [Fact]
+    public void NotificationInfrastructure_DoesNotOwnBookingHttpPublisher()
     {
-        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
-            return _options.FunctionKey.Trim();
+        var projectRoot = Path.GetDirectoryName(GetProjectPath("AFH.Notification.Infrastructure"))!;
+        var sourceFiles = Directory.GetFiles(projectRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}Migrations{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToArray();
 
-        throw new InvalidOperationException(
-            "InternalApiAuth:Token is required for HTTP notification publishing unless Notifications:Integration:Http:InternalToken is configured.");
+        foreach (var file in sourceFiles)
+        {
+            var text = File.ReadAllText(file);
+            Assert.DoesNotContain("HttpNotificationPublisher", text, StringComparison.Ordinal);
+            Assert.DoesNotContain("HttpNotificationPublisherOptions", text, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void LocalSettingsTemplate_DocumentsBookingNotificationHttpPublisher()
+    {
+        var templatePath = Path.Combine(Path.GetDirectoryName(GetProjectPath("AFH.Booking.Function"))!, "local.settings.template.json");
+        var template = File.ReadAllText(templatePath);
+
+        Assert.Contains("Booking:Notifications:Http:BaseUrl", template, StringComparison.Ordinal);
+        Assert.Contains("Booking:Notifications:Http:FunctionKey", template, StringComparison.Ordinal);
+        Assert.Contains("Booking:Notifications:Http:InternalToken", template, StringComparison.Ordinal);
+        Assert.DoesNotContain("Notifications:Integration:Http:BaseUrl", template, StringComparison.Ordinal);
+    }
+
+    private static string GetProjectPath(string projectName)
+    {
+        var root = GetRepositoryRoot();
+        return Path.Combine(root, "src", projectName, $"{projectName}.csproj");
+    }
+
+    private static string GetRepositoryRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AFH.Booking.sln")))
+            dir = dir.Parent;
+
+        return dir?.FullName
+            ?? throw new InvalidOperationException("Could not locate AFH.Booking.sln.");
     }
 }

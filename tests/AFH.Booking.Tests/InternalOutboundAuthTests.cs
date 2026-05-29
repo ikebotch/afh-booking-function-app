@@ -1,10 +1,12 @@
 using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Models.BusinessContacts;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Client;
 using AFH.Booking.Domain.Location.Travel;
 using AFH.Booking.Domain.Options;
 using AFH.Booking.Infrastructure.Auth;
 using AFH.Booking.Infrastructure.Calendar;
+using AFH.Booking.Infrastructure.Clients;
 using AFH.Booking.Infrastructure.Location;
 using AFH.Booking.Infrastructure.Meetings;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -172,6 +174,74 @@ public class InternalOutboundAuthTests
         Assert.Equal("2026-04-02T09:00:00+00:00", timeContext.GetProperty("startTime").GetString());
         Assert.Equal("2026-04-02T10:00:00+00:00", timeContext.GetProperty("endTime").GetString());
         Assert.Equal(60, timeContext.GetProperty("searchIntervalMinutes").GetInt32());
+    }
+
+    [Fact]
+    public async Task BookingBusinessContactsClient_UsesNeutralLocationEndpointAndInternalAuth()
+    {
+        HttpRequestMessage? captured = null;
+        var handler = new StubHandler(request =>
+        {
+            captured = request;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "contacts": [
+                        {
+                          "contactType": "Manager",
+                          "displayName": "Regional Manager",
+                          "email": "manager@example.com",
+                          "mobileNumber": null,
+                          "channels": ["Email"]
+                        }
+                      ]
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        });
+
+        var sut = new BookingBusinessContactsClient(
+            new HttpClient(handler) { BaseAddress = new Uri("https://location.example") },
+            Options.Create(new LocationServiceOptions
+            {
+                BaseUrl = "https://location.example",
+                FunctionKey = "location-function-key",
+                InternalToken = "location-token"
+            }),
+            new InternalBearerServiceAuthenticator(),
+            NullLogger<BookingBusinessContactsClient>.Instance);
+
+        var contacts = await sut.GetContactsAsync(
+            new BookingBusinessContactSearch(
+                ["Manager", "ContactCentre"],
+                AdviserId: "adv-1",
+                Region: "South",
+                OrganisationId: "org-1",
+                ClientId: "client-1"),
+            CancellationToken.None);
+
+        var contact = Assert.Single(contacts);
+        Assert.Equal("Manager", contact.ContactType);
+        Assert.Equal("manager@example.com", contact.Email);
+        Assert.NotNull(captured);
+        Assert.Equal("/api/v1/admin/business-contacts", captured!.RequestUri!.AbsolutePath);
+        Assert.Contains("context=Booking", captured.RequestUri.Query);
+        Assert.Contains("roles=Manager%2CContactCentre", captured.RequestUri.Query);
+        Assert.Contains("adviserId=adv-1", captured.RequestUri.Query);
+        Assert.Contains("region=South", captured.RequestUri.Query);
+        Assert.Contains("organisationId=org-1", captured.RequestUri.Query);
+        Assert.Contains("clientId=client-1", captured.RequestUri.Query);
+        Assert.True(captured.Headers.TryGetValues("x-functions-key", out var functionKeyValues));
+        Assert.Equal("location-function-key", functionKeyValues!.Single());
+        Assert.Equal("Bearer", captured.Headers.Authorization?.Scheme);
+        Assert.Equal("location-token", captured.Headers.Authorization?.Parameter);
+        Assert.DoesNotContain("notification", captured.RequestUri.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("recipient", captured.RequestUri.ToString(), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("dispatch", captured.RequestUri.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

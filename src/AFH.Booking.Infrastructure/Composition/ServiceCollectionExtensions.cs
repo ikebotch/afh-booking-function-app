@@ -19,7 +19,6 @@ using AFH.Booking.Infrastructure.Logging;
 using AFH.Booking.Infrastructure.Meetings;
 using AFH.Booking.Infrastructure.Notifications;
 using AFH.Booking.Infrastructure.Notifications.Options;
-using AFH.Booking.Infrastructure.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
 using AFH.Common.Errors.ApplicationInsights.DependencyInjection;
@@ -55,8 +54,6 @@ public static class ServiceCollectionExtensions
         services.Configure<LifecycleGovernanceOptions>(config.GetSection(LifecycleGovernanceOptions.SectionName));
         services.Configure<OutlookGovernanceOptions>(config.GetSection(OutlookGovernanceOptions.SectionName));
         services.Configure<AdviserDirectoryOptions>(config.GetSection(AdviserDirectoryOptions.SectionName));
-        services.AddOptions<NotificationEmailOptions>()
-            .Bind(config.GetSection(NotificationEmailOptions.SectionName));
         services.Configure<NotificationApiPublisherOptions>(config.GetSection(NotificationApiPublisherOptions.SectionName));
         services.Configure<AvailabilityRulesOptions>(config.GetSection(AvailabilityRulesOptions.SectionName));
         services.Configure<ApplicationLoggingOptions>(config.GetSection(ApplicationLoggingOptions.SectionName));
@@ -176,6 +173,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ILifecycleStepRepository, LifecycleStepRepository>();
         services.AddScoped<IBookingNotificationPolicyProvider, BookingNotificationPolicyProvider>();
         services.AddScoped<IBookingNotificationRecipientResolver, BookingNotificationRecipientResolver>();
+        services.AddHttpClient<IBookingBusinessContactsClient, BookingBusinessContactsClient>((sp, http) =>
+        {
+            var options = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(options.BaseUrl))
+                http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
         services.AddHttpClient<IBookingNotificationPublisher, NotificationApiPublisher>((sp, http) =>
         {
             var options = sp.GetRequiredService<IOptions<NotificationApiPublisherOptions>>().Value;

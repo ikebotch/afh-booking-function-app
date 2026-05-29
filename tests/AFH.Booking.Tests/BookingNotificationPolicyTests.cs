@@ -1,16 +1,16 @@
+using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.AdviserProjection;
+using AFH.Booking.Application.Models.BusinessContacts;
 using AFH.Booking.Application.Models.Lifecycle.Constants;
 using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Application.Services.Lifecycle;
 using AFH.Booking.Infrastructure.Notifications;
-using AFH.Booking.Infrastructure.Options;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
 
@@ -191,6 +191,79 @@ public sealed class BookingNotificationPolicyTests
     }
 
     [Fact]
+    public async Task Resolver_CallsBusinessContactsEndpointWithNeutralRoles()
+    {
+        var contacts = new StubBusinessContactsClient(
+            new BookingBusinessContact(
+                BookingNotificationRecipientTypes.ContactCentre,
+                "Contact Centre",
+                "contact@example.com",
+                null,
+                [BookingNotificationChannel.Email]));
+
+        await CreateRecipientResolver(adviserEmail: null, businessContacts: contacts).ResolveAsync(
+            DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+            new Dictionary<string, string>
+            {
+                ["bookingId"] = "booking-1",
+                ["adviserId"] = "adv-1",
+                ["region"] = "South",
+                ["organisationId"] = "org-1",
+                ["clientId"] = "client-1"
+            },
+            CancellationToken.None);
+
+        Assert.NotNull(contacts.LastSearch);
+        Assert.Equal([BookingNotificationRecipientTypes.ContactCentre], contacts.LastSearch!.ContactTypes);
+        Assert.Equal("adv-1", contacts.LastSearch.AdviserId);
+        Assert.Equal("South", contacts.LastSearch.Region);
+        Assert.Equal("org-1", contacts.LastSearch.OrganisationId);
+        Assert.Equal("client-1", contacts.LastSearch.ClientId);
+    }
+
+    [Fact]
+    public async Task Resolver_MapsBusinessContactsIntoNotificationRecipients()
+    {
+        var recipients = await CreateRecipientResolver(
+                adviserEmail: null,
+                businessContacts: new StubBusinessContactsClient(
+                    new BookingBusinessContact(
+                        BookingNotificationRecipientTypes.ContactCentre,
+                        "Contact Centre",
+                        "contact@example.com",
+                        null,
+                        [BookingNotificationChannel.Email])))
+            .ResolveAsync(
+                DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
+                [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+                new Dictionary<string, string> { ["bookingId"] = "booking-1", ["adviserId"] = "adv-1" },
+                CancellationToken.None);
+
+        var contact = Assert.Single(ContactCentreRecipients(recipients));
+        Assert.Equal("Contact Centre", contact.DisplayName);
+        Assert.Equal("contact@example.com", contact.Email);
+        Assert.Equal([BookingNotificationChannel.Email], contact.PreferredChannels);
+    }
+
+    [Fact]
+    public async Task Resolver_MissingBusinessContactRole_SkipsOnlyMissingRole()
+    {
+        var recipients = await CreateRecipientResolver(
+                adviserEmail: "adviser@example.com",
+                businessContacts: new StubBusinessContactsClient())
+            .ResolveAsync(
+                DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
+                [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+                new Dictionary<string, string> { ["bookingId"] = "booking-1", ["adviserId"] = "adv-1" },
+                CancellationToken.None);
+
+        Assert.Contains(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.Client);
+        Assert.Contains(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.Adviser);
+        Assert.DoesNotContain(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.ContactCentre);
+    }
+
+    [Fact]
     public async Task Resolver_DeduplicatesRecipientAddressPerChannel()
     {
         var recipients = await CreateRecipientResolver(adviserEmail: "shared@example.com").ResolveAsync(
@@ -209,83 +282,29 @@ public sealed class BookingNotificationPolicyTests
     }
 
     [Fact]
-    public async Task Resolver_ContactCentreEmailAddress_ResolvesOneContactCentreRecipient()
+    public async Task Step_Skips_WhenNoRecipientsRemain()
     {
-        var recipients = await ResolveWithContactCentreOptions(
-            contactCentreEmailAddress: "contact@example.com",
-            adminBccRecipients: null);
+        var publisher = new CapturingPublisher();
+        var policy = DefaultPolicy(BookingNotificationTypes.BookingConfirmed) with
+        {
+            Recipients = [new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.ContactCentre, true)]
+        };
+        var step = new BookingNotificationStep(
+            publisher,
+            new StubPolicyProvider(policy),
+            CreateRecipientResolver(adviserEmail: null, businessContacts: new StubBusinessContactsClient()),
+            NullLogger<BookingNotificationStep>.Instance);
 
-        var contact = Assert.Single(ContactCentreRecipients(recipients));
-        Assert.Equal("contact@example.com", contact.Email);
-    }
+        var result = await step.ExecuteAsync(
+            LifecycleEventTypes.Booked,
+            "booking-1",
+            LifecycleActors.Client,
+            [],
+            new Dictionary<string, string> { ["bookingId"] = "booking-1" },
+            CancellationToken.None);
 
-    [Fact]
-    public async Task Resolver_AdminBccRecipients_ResolvesMultipleContactCentreRecipients()
-    {
-        var recipients = await ResolveWithContactCentreOptions(
-            contactCentreEmailAddress: null,
-            adminBccRecipients: "admin-one@example.com;admin-two@example.com");
-
-        Assert.Equal(
-            ["admin-one@example.com", "admin-two@example.com"],
-            ContactCentreEmails(recipients));
-    }
-
-    [Fact]
-    public async Task Resolver_AdminBccRecipients_TakesPrecedenceOverContactCentreEmailAddress()
-    {
-        var recipients = await ResolveWithContactCentreOptions(
-            contactCentreEmailAddress: "contact@example.com",
-            adminBccRecipients: "admin@example.com");
-
-        var contact = Assert.Single(ContactCentreRecipients(recipients));
-        Assert.Equal("admin@example.com", contact.Email);
-    }
-
-    [Fact]
-    public async Task Resolver_AdminBccRecipients_SupportsSemicolonAndCommaSeparatedValues()
-    {
-        var recipients = await ResolveWithContactCentreOptions(
-            contactCentreEmailAddress: null,
-            adminBccRecipients: "admin-one@example.com; admin-two@example.com,admin-three@example.com");
-
-        Assert.Equal(
-            ["admin-one@example.com", "admin-two@example.com", "admin-three@example.com"],
-            ContactCentreEmails(recipients));
-    }
-
-    [Fact]
-    public async Task Resolver_AdminBccRecipients_RemovesDuplicatesCaseInsensitively()
-    {
-        var recipients = await ResolveWithContactCentreOptions(
-            contactCentreEmailAddress: null,
-            adminBccRecipients: "Admin@example.com;admin@example.com,other@example.com");
-
-        Assert.Equal(
-            ["Admin@example.com", "other@example.com"],
-            ContactCentreEmails(recipients));
-    }
-
-    [Fact]
-    public async Task Resolver_AdminBccRecipients_IgnoresBlankEntries()
-    {
-        var recipients = await ResolveWithContactCentreOptions(
-            contactCentreEmailAddress: null,
-            adminBccRecipients: " ; admin@example.com, , ; second@example.com ; ");
-
-        Assert.Equal(
-            ["admin@example.com", "second@example.com"],
-            ContactCentreEmails(recipients));
-    }
-
-    [Fact]
-    public async Task Resolver_NoContactCentreEmailConfigured_ReturnsNoContactCentreRecipients()
-    {
-        var recipients = await ResolveWithContactCentreOptions(
-            contactCentreEmailAddress: null,
-            adminBccRecipients: null);
-
-        Assert.Empty(ContactCentreRecipients(recipients));
+        Assert.Equal(LifecycleStepStatuses.Skipped, result.Status);
+        Assert.Null(publisher.Request);
     }
 
     private static BookingDbContext CreateDbContext()
@@ -311,8 +330,7 @@ public sealed class BookingNotificationPolicyTests
 
     private static BookingNotificationRecipientResolver CreateRecipientResolver(
         string? adviserEmail,
-        string? contactCentreEmailAddress = "contact@example.com",
-        string? adminBccRecipients = null)
+        StubBusinessContactsClient? businessContacts = null)
     {
         var advisers = new Mock<IAdviserProfileProjectionRepository>();
         advisers.Setup(x => x.GetAsync("adv-1", It.IsAny<CancellationToken>()))
@@ -322,27 +340,14 @@ public sealed class BookingNotificationPolicyTests
 
         return new BookingNotificationRecipientResolver(
             advisers.Object,
-            Options.Create(new NotificationEmailOptions
-            {
-                ContactCentreEmailAddress = contactCentreEmailAddress,
-                AdminBccRecipients = adminBccRecipients
-            }),
+            businessContacts ?? new StubBusinessContactsClient(
+                new BookingBusinessContact(
+                    BookingNotificationRecipientTypes.ContactCentre,
+                    "Contact Centre",
+                    "contact@example.com",
+                    null,
+                    [BookingNotificationChannel.Email])),
             NullLogger<BookingNotificationRecipientResolver>.Instance);
-    }
-
-    private static async Task<IReadOnlyList<BookingNotificationRecipient>> ResolveWithContactCentreOptions(
-        string? contactCentreEmailAddress,
-        string? adminBccRecipients)
-    {
-        return await CreateRecipientResolver(
-                adviserEmail: null,
-                contactCentreEmailAddress,
-                adminBccRecipients)
-            .ResolveAsync(
-                DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
-                [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
-                new Dictionary<string, string> { ["adviserId"] = "adv-1" },
-                CancellationToken.None);
     }
 
     private static BookingNotificationRecipient[] ContactCentreRecipients(IReadOnlyList<BookingNotificationRecipient> recipients)
@@ -370,6 +375,21 @@ public sealed class BookingNotificationPolicyTests
         {
             Request = notification;
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class StubBusinessContactsClient(params BookingBusinessContact[] contacts) : IBookingBusinessContactsClient
+    {
+        public BookingBusinessContactSearch? LastSearch { get; private set; }
+
+        public Task<IReadOnlyList<BookingBusinessContact>> GetContactsAsync(
+            BookingBusinessContactSearch search,
+            CancellationToken ct)
+        {
+            LastSearch = search;
+            return Task.FromResult<IReadOnlyList<BookingBusinessContact>>(contacts
+                .Where(contact => search.ContactTypes.Contains(contact.ContactType, StringComparer.OrdinalIgnoreCase))
+                .ToArray());
         }
     }
 }

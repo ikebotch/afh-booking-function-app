@@ -62,9 +62,13 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         var existingBooking = existingBookingResult.Value;
         var before = CreateBeforeSnapshot(existingBooking);
 
+        var selectedOptionResult = await ResolveSelectedOptionAsync(cmd, existingBooking, ct);
+        if (!selectedOptionResult.IsSuccess || selectedOptionResult.Value is null)
+            return FailLike<SelectedRearrangementOption, RearrangeBookingResponse>(selectedOptionResult);
+
         var newBookingResult = await CreateAndConfirmNewBookingAsync(
             cmd,
-            existingBooking.Transaction.TransactionRef,
+            selectedOptionResult.Value.Transaction.TransactionRef,
             ct);
         if (!newBookingResult.IsSuccess || newBookingResult.Value is null)
             return FailLike<ConfirmedBookingContext, RearrangeBookingResponse>(newBookingResult);
@@ -124,6 +128,48 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             return Result<ExistingBookingContext>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' was not found.", Errors.Conflict);
 
         return Result<ExistingBookingContext>.Ok(new ExistingBookingContext(hold, slot, tx));
+    }
+
+    private async Task<Result<SelectedRearrangementOption>> ResolveSelectedOptionAsync(
+        RearrangeBookingCommand cmd,
+        ExistingBookingContext existingBooking,
+        CancellationToken ct)
+    {
+        var selectedSlot = await _slots.GetAsync(cmd.NewSlotId.Trim(), ct);
+        if (selectedSlot is null)
+        {
+            return Result<SelectedRearrangementOption>.Fail(
+                HttpStatusCode.Conflict,
+                $"Selected rearrangement slot '{cmd.NewSlotId}' is no longer available.",
+                Errors.SlotNoLongerAvailable);
+        }
+
+        var optionTransaction = await _transactions.GetAsync(selectedSlot.TransactionId, ct);
+        if (optionTransaction is null)
+        {
+            return Result<SelectedRearrangementOption>.Fail(
+                HttpStatusCode.Conflict,
+                $"Rearrangement option context for slot '{cmd.NewSlotId}' was not found.",
+                Errors.SlotNoLongerAvailable);
+        }
+
+        if (optionTransaction.IsExpired(_clock.UtcNow))
+        {
+            return Result<SelectedRearrangementOption>.Fail(
+                HttpStatusCode.Conflict,
+                $"Rearrangement option for slot '{cmd.NewSlotId}' has expired.",
+                Errors.SlotNoLongerAvailable);
+        }
+
+        if (!string.Equals(optionTransaction.TransactionRef, existingBooking.Transaction.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return Result<SelectedRearrangementOption>.Fail(
+                HttpStatusCode.Conflict,
+                $"Selected rearrangement slot '{cmd.NewSlotId}' does not belong to this booking.",
+                Errors.SlotNoLongerAvailable);
+        }
+
+        return Result<SelectedRearrangementOption>.Ok(new SelectedRearrangementOption(selectedSlot, optionTransaction));
     }
 
     private async Task<Result<ConfirmedBookingContext>> CreateAndConfirmNewBookingAsync(
@@ -466,6 +512,10 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
 
     private sealed record ExistingBookingContext(
         BookingHold Hold,
+        BookingSlot Slot,
+        BookingTransaction Transaction);
+
+    private sealed record SelectedRearrangementOption(
         BookingSlot Slot,
         BookingTransaction Transaction);
 

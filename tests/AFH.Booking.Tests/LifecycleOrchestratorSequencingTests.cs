@@ -171,8 +171,9 @@ public sealed class LifecycleOrchestratorSequencingTests
         var oldHold = BookingHold.Rehydrate("booking-old", "slot-old", "user-1", BookingHoldStatus.Confirmed, DateTime.UtcNow.AddHours(-2), DateTime.UtcNow.AddHours(1), DateTime.UtcNow.AddHours(-1), null, null, null, "provider-old", null);
         var oldSlot = BookingSlot.Rehydrate("slot-old", "tx-1", "adviser-old", "Old Adviser", DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1), 5, null, null, null, null, null, null, null, DateTime.UtcNow);
         var newHold = BookingHold.Rehydrate("booking-new", "slot-new", "user-2", BookingHoldStatus.Confirmed, DateTime.UtcNow, DateTime.UtcNow.AddMinutes(3), DateTime.UtcNow, null, null, null, "provider-new", null);
-        var newSlot = BookingSlot.Rehydrate("slot-new", "tx-1", "adviser-new", "New Adviser", DateTime.UtcNow.AddDays(2), DateTime.UtcNow.AddDays(2).AddHours(1), 7, null, null, null, null, null, null, null, DateTime.UtcNow);
+        var newSlot = BookingSlot.Rehydrate("slot-new", "option-tx-1", "adviser-new", "New Adviser", DateTime.UtcNow.AddDays(2), DateTime.UtcNow.AddDays(2).AddHours(1), 7, null, null, null, null, null, null, null, DateTime.UtcNow);
         var tx = BookingTransaction.Rehydrate("tx-1", "txn-ref", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Completed, DateTime.UtcNow, null);
+        var optionTx = BookingTransaction.Rehydrate("option-tx-1", "tx-1", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Open, DateTime.UtcNow, DateTime.UtcNow.AddMinutes(10));
 
         var holds = new Mock<IBookingHoldRepository>();
         holds.SetupSequence(x => x.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -185,6 +186,7 @@ public sealed class LifecycleOrchestratorSequencingTests
 
         var txRepo = new Mock<IBookingTransactionRepository>();
         txRepo.Setup(x => x.GetAsync("tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(tx);
+        txRepo.Setup(x => x.GetAsync("option-tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(optionTx);
 
         var create = new Mock<ICreateBookingService>();
         create.Setup(x => x.HandleAsync(It.IsAny<CreateHoldCommand>(), It.IsAny<CancellationToken>()))
@@ -254,6 +256,9 @@ public sealed class LifecycleOrchestratorSequencingTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
+        create.Verify(x => x.HandleAsync(
+            It.Is<CreateHoldCommand>(cmd => cmd.SlotId == "slot-new" && cmd.TransactionRef == "tx-1"),
+            It.IsAny<CancellationToken>()), Times.Once);
         Assert.Equal(new[] { "create", "confirm", "cancel", "sql", "notifications" }, order);
         Assert.NotNull(publishedNotificationEventType);
         Assert.Equal(LifecycleEventTypes.Rearranged, publishedNotificationEventType);
@@ -270,15 +275,19 @@ public sealed class LifecycleOrchestratorSequencingTests
         var oldHold = BookingHold.Rehydrate("booking-old", "slot-old", "user-1", BookingHoldStatus.Confirmed, DateTime.UtcNow.AddHours(-2), DateTime.UtcNow.AddHours(1), DateTime.UtcNow.AddHours(-1), null, null, null, "provider-old", null);
         var oldSlot = BookingSlot.Rehydrate("slot-old", "tx-1", "adviser-old", "Old Adviser", DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1), 5, null, null, null, null, null, null, null, DateTime.UtcNow);
         var tx = BookingTransaction.Rehydrate("tx-1", "txn-ref", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Completed, DateTime.UtcNow, null);
+        var newSlot = BookingSlot.Rehydrate("slot-new", "option-tx-1", "adviser-new", "New Adviser", DateTime.UtcNow.AddDays(2), DateTime.UtcNow.AddDays(2).AddHours(1), 7, null, null, null, null, null, null, null, DateTime.UtcNow);
+        var optionTx = BookingTransaction.Rehydrate("option-tx-1", "tx-1", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Open, DateTime.UtcNow, DateTime.UtcNow.AddMinutes(10));
 
         var holds = new Mock<IBookingHoldRepository>();
         holds.Setup(x => x.GetAsync("booking-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldHold);
 
         var slots = new Mock<IBookingSlotRepository>();
         slots.Setup(x => x.GetAsync("slot-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldSlot);
+        slots.Setup(x => x.GetAsync("slot-new", It.IsAny<CancellationToken>())).ReturnsAsync(newSlot);
 
         var txRepo = new Mock<IBookingTransactionRepository>();
         txRepo.Setup(x => x.GetAsync("tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(tx);
+        txRepo.Setup(x => x.GetAsync("option-tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(optionTx);
 
         var create = new Mock<ICreateBookingService>();
         create.Setup(x => x.HandleAsync(It.IsAny<CreateHoldCommand>(), It.IsAny<CancellationToken>()))
@@ -331,6 +340,153 @@ public sealed class LifecycleOrchestratorSequencingTests
             It.IsAny<CancellationToken>()), Times.Once);
         cancel.Verify(x => x.CancelAsync(It.IsAny<CancelBookingCommand>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
         audit.Verify(x => x.RecordEventAsync(It.IsAny<LifecycleAuditEntry>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RearrangementOrchestrator_UnknownNewSlot_ReturnsSlotNoLongerAvailableBeforeCreatingReplacement()
+    {
+        var oldHold = BookingHold.Rehydrate("booking-old", "slot-old", "user-1", BookingHoldStatus.Confirmed, DateTime.UtcNow.AddHours(-2), DateTime.UtcNow.AddHours(1), DateTime.UtcNow.AddHours(-1), null, null, null, "provider-old", null);
+        var oldSlot = BookingSlot.Rehydrate("slot-old", "tx-1", "adviser-old", "Old Adviser", DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1), 5, null, null, null, null, null, null, null, DateTime.UtcNow);
+        var tx = BookingTransaction.Rehydrate("tx-1", "txn-ref", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Completed, DateTime.UtcNow, null);
+
+        var holds = new Mock<IBookingHoldRepository>();
+        holds.Setup(x => x.GetAsync("booking-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldHold);
+
+        var slots = new Mock<IBookingSlotRepository>();
+        slots.Setup(x => x.GetAsync("slot-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldSlot);
+        slots.Setup(x => x.GetAsync("unknown-slot", It.IsAny<CancellationToken>())).ReturnsAsync((BookingSlot?)null);
+
+        var txRepo = new Mock<IBookingTransactionRepository>();
+        txRepo.Setup(x => x.GetAsync("tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(tx);
+
+        var create = new Mock<ICreateBookingService>();
+        var orchestrator = new RearrangementOrchestrator(
+            holds.Object,
+            slots.Object,
+            txRepo.Object,
+            create.Object,
+            Mock.Of<IConfirmBookingService>(),
+            Mock.Of<ICancellationOrchestrator>(),
+            Mock.Of<IBookingNotificationStep>(),
+            Mock.Of<IDownstreamUpdateService>(),
+            Mock.Of<ILifecycleAuditService>(),
+            Mock.Of<IUnitOfWork>(),
+            new StubClock(DateTime.UtcNow));
+
+        var result = await orchestrator.RearrangeAsync(
+            new RearrangeBookingCommand
+            {
+                BookingId = "booking-old",
+                NewSlotId = "unknown-slot",
+                RequestedBy = LifecycleActors.Client,
+                ReasonCode = "CLIENT_RESCHEDULE"
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.Conflict, result.StatusCode);
+        Assert.Equal(Errors.SlotNoLongerAvailable, result.ErrorCode);
+        create.Verify(x => x.HandleAsync(It.IsAny<CreateHoldCommand>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RearrangementOrchestrator_ExpiredOptionTransaction_ReturnsSlotNoLongerAvailable()
+    {
+        var oldHold = BookingHold.Rehydrate("booking-old", "slot-old", "user-1", BookingHoldStatus.Confirmed, DateTime.UtcNow.AddHours(-2), DateTime.UtcNow.AddHours(1), DateTime.UtcNow.AddHours(-1), null, null, null, "provider-old", null);
+        var oldSlot = BookingSlot.Rehydrate("slot-old", "tx-1", "adviser-old", "Old Adviser", DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1), 5, null, null, null, null, null, null, null, DateTime.UtcNow);
+        var newSlot = BookingSlot.Rehydrate("slot-new", "option-tx-1", "adviser-new", "New Adviser", DateTime.UtcNow.AddDays(2), DateTime.UtcNow.AddDays(2).AddHours(1), 7, null, null, null, null, null, null, null, DateTime.UtcNow);
+        var tx = BookingTransaction.Rehydrate("tx-1", "txn-ref", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Completed, DateTime.UtcNow, null);
+        var optionTx = BookingTransaction.Rehydrate("option-tx-1", "tx-1", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Open, DateTime.UtcNow.AddMinutes(-20), DateTime.UtcNow.AddMinutes(-1));
+
+        var holds = new Mock<IBookingHoldRepository>();
+        holds.Setup(x => x.GetAsync("booking-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldHold);
+
+        var slots = new Mock<IBookingSlotRepository>();
+        slots.Setup(x => x.GetAsync("slot-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldSlot);
+        slots.Setup(x => x.GetAsync("slot-new", It.IsAny<CancellationToken>())).ReturnsAsync(newSlot);
+
+        var txRepo = new Mock<IBookingTransactionRepository>();
+        txRepo.Setup(x => x.GetAsync("tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(tx);
+        txRepo.Setup(x => x.GetAsync("option-tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(optionTx);
+
+        var create = new Mock<ICreateBookingService>();
+        var orchestrator = new RearrangementOrchestrator(
+            holds.Object,
+            slots.Object,
+            txRepo.Object,
+            create.Object,
+            Mock.Of<IConfirmBookingService>(),
+            Mock.Of<ICancellationOrchestrator>(),
+            Mock.Of<IBookingNotificationStep>(),
+            Mock.Of<IDownstreamUpdateService>(),
+            Mock.Of<ILifecycleAuditService>(),
+            Mock.Of<IUnitOfWork>(),
+            new StubClock(DateTime.UtcNow));
+
+        var result = await orchestrator.RearrangeAsync(
+            new RearrangeBookingCommand
+            {
+                BookingId = "booking-old",
+                NewSlotId = "slot-new",
+                RequestedBy = LifecycleActors.Client,
+                ReasonCode = "CLIENT_RESCHEDULE"
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.Conflict, result.StatusCode);
+        Assert.Equal(Errors.SlotNoLongerAvailable, result.ErrorCode);
+        create.Verify(x => x.HandleAsync(It.IsAny<CreateHoldCommand>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RearrangementOrchestrator_OptionForDifferentBooking_ReturnsSlotNoLongerAvailable()
+    {
+        var oldHold = BookingHold.Rehydrate("booking-old", "slot-old", "user-1", BookingHoldStatus.Confirmed, DateTime.UtcNow.AddHours(-2), DateTime.UtcNow.AddHours(1), DateTime.UtcNow.AddHours(-1), null, null, null, "provider-old", null);
+        var oldSlot = BookingSlot.Rehydrate("slot-old", "tx-1", "adviser-old", "Old Adviser", DateTime.UtcNow.AddDays(1), DateTime.UtcNow.AddDays(1).AddHours(1), 5, null, null, null, null, null, null, null, DateTime.UtcNow);
+        var newSlot = BookingSlot.Rehydrate("slot-new", "other-option-tx", "adviser-new", "New Adviser", DateTime.UtcNow.AddDays(2), DateTime.UtcNow.AddDays(2).AddHours(1), 7, null, null, null, null, null, null, null, DateTime.UtcNow);
+        var tx = BookingTransaction.Rehydrate("tx-1", "txn-ref", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Completed, DateTime.UtcNow, null);
+        var otherOptionTx = BookingTransaction.Rehydrate("other-option-tx", "other-booking-tx", DateTime.UtcNow, TimeSpan.FromHours(1), "Europe/London", false, "Review", null, BookingTransactionStatus.Open, DateTime.UtcNow, DateTime.UtcNow.AddMinutes(10));
+
+        var holds = new Mock<IBookingHoldRepository>();
+        holds.Setup(x => x.GetAsync("booking-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldHold);
+
+        var slots = new Mock<IBookingSlotRepository>();
+        slots.Setup(x => x.GetAsync("slot-old", It.IsAny<CancellationToken>())).ReturnsAsync(oldSlot);
+        slots.Setup(x => x.GetAsync("slot-new", It.IsAny<CancellationToken>())).ReturnsAsync(newSlot);
+
+        var txRepo = new Mock<IBookingTransactionRepository>();
+        txRepo.Setup(x => x.GetAsync("tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(tx);
+        txRepo.Setup(x => x.GetAsync("other-option-tx", It.IsAny<CancellationToken>())).ReturnsAsync(otherOptionTx);
+
+        var create = new Mock<ICreateBookingService>();
+        var orchestrator = new RearrangementOrchestrator(
+            holds.Object,
+            slots.Object,
+            txRepo.Object,
+            create.Object,
+            Mock.Of<IConfirmBookingService>(),
+            Mock.Of<ICancellationOrchestrator>(),
+            Mock.Of<IBookingNotificationStep>(),
+            Mock.Of<IDownstreamUpdateService>(),
+            Mock.Of<ILifecycleAuditService>(),
+            Mock.Of<IUnitOfWork>(),
+            new StubClock(DateTime.UtcNow));
+
+        var result = await orchestrator.RearrangeAsync(
+            new RearrangeBookingCommand
+            {
+                BookingId = "booking-old",
+                NewSlotId = "slot-new",
+                RequestedBy = LifecycleActors.Client,
+                ReasonCode = "CLIENT_RESCHEDULE"
+            },
+            CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(HttpStatusCode.Conflict, result.StatusCode);
+        Assert.Equal(Errors.SlotNoLongerAvailable, result.ErrorCode);
+        create.Verify(x => x.HandleAsync(It.IsAny<CreateHoldCommand>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]

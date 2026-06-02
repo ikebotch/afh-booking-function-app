@@ -165,6 +165,10 @@ public class BookingOpenApiDocumentFactoryTests
         Assert.Contains("missing, invalid, or expired", rearrangePost["responses"]!["401"]!["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("does not match the route booking", rearrangePost["responses"]!["403"]!["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
 
+        var rearrangeRequestProperties = schemas["RearrangeBookingRequest"]!["properties"]!.AsObject();
+        Assert.True(rearrangeRequestProperties.ContainsKey("newSlotId"));
+        Assert.False(rearrangeRequestProperties.ContainsKey("newSlotTransactionId"));
+
         var optionsProperties = schemas["RearrangementOptionsResponse"]!["properties"]!.AsObject();
         Assert.True(optionsProperties.ContainsKey("transactionId"));
 

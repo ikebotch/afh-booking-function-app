@@ -132,6 +132,7 @@ public class BookingOpenApiDocumentFactoryTests
         var cancelPost = paths["/v1/self-service/bookings/{bookingId}/cancel"]!["post"]!.AsObject();
         var optionsPost = paths["/v1/self-service/bookings/{bookingId}/rearrangement/options"]!["post"]!.AsObject();
         var rearrangePost = paths["/v1/self-service/bookings/{bookingId}/rearrange"]!["post"]!.AsObject();
+        Assert.False(paths.ContainsKey("/v1/self-service/bookings/{bookingId}/hold"));
 
         Assert.Equal("Self-Service Bookings", viewGet["tags"]![0]!.GetValue<string>());
         Assert.Equal("View booking by secure client token", viewGet["summary"]!.GetValue<string>());
@@ -157,9 +158,15 @@ public class BookingOpenApiDocumentFactoryTests
         Assert.Equal("#/components/schemas/RearrangementOptionsRequest", optionsPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
         Assert.Equal("#/components/schemas/RearrangeBookingRequest", rearrangePost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
         Assert.Equal("CLIENT_RESCHEDULE", rearrangePost["requestBody"]!["content"]!["application/json"]!["example"]!["reasonCode"]!.GetValue<string>());
-        Assert.Contains("old token must not be reused", rearrangePost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("current existing booking id", rearrangePost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("newSlotId", rearrangePost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("No self-service hold endpoint exists", rearrangePost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("SlotNoLongerAvailable", rearrangePost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("missing, invalid, or expired", rearrangePost["responses"]!["401"]!["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains("does not match the route booking", rearrangePost["responses"]!["403"]!["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+
+        var optionsProperties = schemas["RearrangementOptionsResponse"]!["properties"]!.AsObject();
+        Assert.True(optionsProperties.ContainsKey("transactionId"));
 
         var bookingDetailsProperties = schemas["BookingDetailsResponse"]!["properties"]!.AsObject();
         Assert.True(bookingDetailsProperties.ContainsKey("viewBookingUrl"));

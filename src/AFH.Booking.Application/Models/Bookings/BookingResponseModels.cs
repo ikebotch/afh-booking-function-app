@@ -82,6 +82,7 @@ public sealed class RearrangeBookingResponse
 public sealed class RearrangementOptionsResponse
 {
     public string BookingId { get; init; } = default!;
+    public string TransactionId { get; init; } = default!;
     public string AssignedAdviserId { get; init; } = default!;
     public string AssignedAdviserName { get; init; } = default!;
     public bool AssignedAdviserHasAvailability { get; init; }

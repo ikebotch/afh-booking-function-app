@@ -138,7 +138,10 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         }, ct);
 
         if (!holdResult.IsSuccess || holdResult.Value is null)
-            return Result<ConfirmedBookingContext>.Fail(holdResult.StatusCode, holdResult.ErrorMessage ?? "Unable to create hold for new slot.", holdResult.ErrorCode);
+            return SlotUnavailableLike<ConfirmedBookingContext>(
+                holdResult.StatusCode,
+                holdResult.ErrorMessage ?? "Unable to create hold for new slot.",
+                holdResult.ErrorCode);
 
         var confirmResult = await _confirm.HandleAsync(new ConfirmBookingCommand
         {
@@ -147,7 +150,10 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         }, ct);
 
         if (!confirmResult.IsSuccess || confirmResult.Value is null)
-            return Result<ConfirmedBookingContext>.Fail(confirmResult.StatusCode, confirmResult.ErrorMessage ?? "Unable to confirm new booking.", confirmResult.ErrorCode);
+            return SlotUnavailableLike<ConfirmedBookingContext>(
+                confirmResult.StatusCode,
+                confirmResult.ErrorMessage ?? "Unable to confirm new booking.",
+                confirmResult.ErrorCode);
 
         var newHold = await _holds.GetAsync(holdResult.Value.BookingId, ct);
         if (newHold is null)
@@ -445,6 +451,17 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             failure.StatusCode,
             failure.ErrorMessage ?? "Request failed.",
             failure.ErrorCode);
+    }
+
+    private static Result<T> SlotUnavailableLike<T>(
+        HttpStatusCode statusCode,
+        string message,
+        string? errorCode)
+    {
+        if (statusCode != HttpStatusCode.Conflict)
+            return Result<T>.Fail(statusCode, message, errorCode);
+
+        return Result<T>.Fail(statusCode, message, Errors.SlotNoLongerAvailable);
     }
 
     private sealed record ExistingBookingContext(

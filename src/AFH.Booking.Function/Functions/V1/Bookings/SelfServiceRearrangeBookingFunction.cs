@@ -26,7 +26,7 @@ public sealed class SelfServiceRearrangeBookingFunction
     [BookingOpenApiOperation(
         "Self-Service Bookings",
         "Rearrange booking by secure client token",
-        Description = "Client-facing rearrange endpoint. Frontends must call this self-service route for client journeys, not internal/admin rearrange routes. Provide the opaque client access token as the `token` query value. Invalid or expired tokens return 401. A valid token for a different booking returns 403. Rearranging creates a replacement booking; the old token must not be reused for the new booking.",
+        Description = "Client-facing rearrange endpoint. The route `bookingId` is the current existing booking id from the secure link; the request body `newSlotId` identifies the selected replacement slot. Frontends must call this self-service route for client journeys, not internal/admin rearrange routes. Provide the opaque client access token as the `token` query value. Invalid or expired tokens return 401. A valid token for a different booking returns 403. No self-service hold endpoint exists in the MVP flow: options are shown, the client selects a slot, and submit re-checks availability before committing. If the selected slot is no longer available, the endpoint returns 409 with `SlotNoLongerAvailable`. Rearranging may create a replacement booking internally, but that new booking id is backend-owned and must not be supplied by the caller.",
         RequestBodyType = typeof(RearrangeBookingRequest),
         ResponseType = typeof(RearrangeBookingResponse),
         RequestExampleJson = """
@@ -68,6 +68,8 @@ public sealed class SelfServiceRearrangeBookingFunction
         var body = await req.ReadJsonAsync<RearrangeBookingRequest>(ct);
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, Errors.Validation);
+        if (string.IsNullOrWhiteSpace(body.NewSlotId))
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, "newSlotId is required.", ct, Errors.Validation);
 
         var result = await _service.HandleAsync(new RearrangeBookingCommand
         {

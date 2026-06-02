@@ -14,6 +14,7 @@ public static class Errors
     public const string HoldSlotMissing = "HoldSlotMissing";
     public const string HoldTransactionMissing = "HoldTransactionMissing";
     public const string HoldStateInvalid = "HoldStateInvalid";
+    public const string SlotNoLongerAvailable = "SlotNoLongerAvailable";
     public const string ReasonCodeRequired = "ReasonCodeRequired";
     public const string BookingConflictOverlap = "BookingConflictOverlap";
     public const string BookingConflictBufferViolation = "BookingConflictBufferViolation";

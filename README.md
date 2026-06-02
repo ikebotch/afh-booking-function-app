@@ -40,10 +40,21 @@
 - Implemented Sprint 2 self-service routes:
   - `GET /api/v1/self-service/bookings/{bookingId}?token={token}` views client-facing booking details.
   - `POST /api/v1/self-service/bookings/{bookingId}/cancel?token={token}` cancels the booking for the client journey.
-  - `POST /api/v1/self-service/bookings/{bookingId}/rearrangement/options?token={token}` returns UTC rearrangement options.
-  - `POST /api/v1/self-service/bookings/{bookingId}/rearrange?token={token}` rearranges the booking from a selected slot.
+  - `POST /api/v1/self-service/bookings/{bookingId}/rearrangement/options?token={token}` returns UTC rearrangement options for the current existing booking id in the route. The response includes top-level `transactionId` and keeps nested `assignedAdviserOptions.transactionId` / `alternativeAdviserOptions.transactionId` for compatibility.
+  - `POST /api/v1/self-service/bookings/{bookingId}/rearrange?token={token}` rearranges the current existing booking from the selected replacement slot. The body supplies `newSlotId`, `reasonCode`, and optional `reasonDetail`; callers must not provide or infer a new booking id.
 - Booking details responses include `viewBookingUrl`, `cancelBookingUrl`, and `rescheduleBookingUrl` when self-service links can be generated.
-- After rearrange, the replacement booking requires its own new token. Do not reuse the old booking token for the new booking.
+- Self-service rearrangement MVP is `options -> select slot -> rearrange`. There is no self-service hold endpoint in this phase. The final rearrange endpoint re-checks availability before committing; if the selected slot is no longer available, it returns `409 Conflict` with `SlotNoLongerAvailable`.
+- If rearrange creates a replacement booking record internally, that new booking id is backend-owned implementation detail. After rearrange, the replacement booking requires its own new token. Do not reuse the old booking token for the new booking.
+
+Self-service rearrange request:
+
+```json
+{
+  "newSlotId": "slot-new",
+  "reasonCode": "CLIENT_RESCHEDULE",
+  "reasonDetail": "Client selected a new time"
+}
+```
 
 ## Build And Test
 - `dotnet test AFH.BookingService.sln`

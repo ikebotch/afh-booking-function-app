@@ -2,8 +2,10 @@ using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Models.Availability;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Functions.V1.Bookings;
+using Microsoft.Azure.Functions.Worker.Http;
 using System.Net;
 using System.Text;
+using System.Text.Json.Nodes;
 
 namespace AFH.Booking.Tests;
 
@@ -133,6 +135,23 @@ public sealed class SelfServiceFunctionTests
     }
 
     [Fact]
+    public async Task RearrangementOptions_ResponseIncludesTopLevelTransactionId()
+    {
+        var access = new StubAccessService();
+        var service = new StubRearrangementOptionsService();
+        var sut = new SelfServiceRearrangementOptionsFunction(access, service);
+        var request = CreateJsonRequest("""{"duration":45,"limit":5}""");
+        request.Headers.Add("x-booking-access-token", "client-token");
+
+        var response = await sut.Run(request, "booking-1", CancellationToken.None);
+
+        var json = await ReadJsonAsync(response);
+        var data = GetData(json);
+        Assert.Equal("tx-1", GetString(data, "transactionId"));
+        Assert.Equal("tx-1", GetString(GetObject(data, "assignedAdviserOptions"), "transactionId"));
+    }
+
+    [Fact]
     public async Task RearrangeBooking_ValidToken_UsesClientActor()
     {
         var access = new StubAccessService();
@@ -151,6 +170,75 @@ public sealed class SelfServiceFunctionTests
         Assert.Equal("client-actor", service.LastCommand?.ActorId);
     }
 
+    [Fact]
+    public async Task RearrangeBooking_UsesCurrentRouteBookingIdAndDoesNotReadNewBookingIdFromCaller()
+    {
+        var access = new StubAccessService();
+        var service = new StubRearrangeBookingService();
+        var sut = new SelfServiceRearrangeBookingFunction(access, service);
+        var request = CreateJsonRequest("""{"newBookingId":"caller-owned-id","newSlotId":"slot-new","reasonCode":"CLIENT_RESCHEDULE"}""");
+        request.Headers.Add("x-booking-access-token", "client-token");
+
+        var response = await sut.Run(request, "current-booking", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("current-booking", access.LastBookingId);
+        Assert.Equal("current-booking", service.LastCommand?.BookingId);
+        Assert.Equal("slot-new", service.LastCommand?.NewSlotId);
+    }
+
+    [Fact]
+    public async Task RearrangeBooking_TokenBookingMismatch_ReturnsForbiddenAndDoesNotCallService()
+    {
+        var access = new StubAccessService(Result<BookingChangeActorContext>.Fail(
+            HttpStatusCode.Forbidden,
+            "Client token does not match booking.",
+            Errors.Unauthorized));
+        var service = new StubRearrangeBookingService();
+        var sut = new SelfServiceRearrangeBookingFunction(access, service);
+        var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"CLIENT_RESCHEDULE"}""");
+        request.Headers.Add("x-booking-access-token", "booking-1-token");
+
+        var response = await sut.Run(request, "booking-2", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(service.LastCommand);
+    }
+
+    [Fact]
+    public async Task RearrangeBooking_MissingNewSlotId_ReturnsBadRequestAndDoesNotCallService()
+    {
+        var access = new StubAccessService();
+        var service = new StubRearrangeBookingService();
+        var sut = new SelfServiceRearrangeBookingFunction(access, service);
+        var request = CreateJsonRequest("""{"reasonCode":"CLIENT_RESCHEDULE"}""");
+        request.Headers.Add("x-booking-access-token", "client-token");
+
+        var response = await sut.Run(request, "booking-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(service.LastCommand);
+    }
+
+    [Fact]
+    public async Task RearrangeBooking_UnavailableSelectedSlot_ReturnsConflict()
+    {
+        var access = new StubAccessService();
+        var service = new StubRearrangeBookingService(Result<RearrangeBookingResponse>.Fail(
+            HttpStatusCode.Conflict,
+            "The selected slot is no longer available.",
+            Errors.SlotNoLongerAvailable));
+        var sut = new SelfServiceRearrangeBookingFunction(access, service);
+        var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"CLIENT_RESCHEDULE"}""");
+        request.Headers.Add("x-booking-access-token", "client-token");
+
+        var response = await sut.Run(request, "booking-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        var json = await ReadJsonAsync(response);
+        Assert.Equal(Errors.SlotNoLongerAvailable, GetData(json)["code"]!.GetValue<string>());
+    }
+
     private static TestHttpRequestData CreateJsonRequest(string json)
     {
         var request = TestHttpRequestData.Create(method: "POST");
@@ -159,6 +247,28 @@ public sealed class SelfServiceFunctionTests
         writer.Flush();
         request.Body.Position = 0;
         return request;
+    }
+
+    private static async Task<JsonObject> ReadJsonAsync(HttpResponseData response)
+    {
+        response.Body.Position = 0;
+        using var reader = new StreamReader(response.Body);
+        return JsonNode.Parse(await reader.ReadToEndAsync())!.AsObject();
+    }
+
+    private static JsonObject GetData(JsonObject envelope) =>
+        (envelope["data"] ?? envelope["Data"])!.AsObject();
+
+    private static JsonObject GetObject(JsonObject source, string camelName)
+    {
+        var pascalName = char.ToUpperInvariant(camelName[0]) + camelName[1..];
+        return (source[camelName] ?? source[pascalName])!.AsObject();
+    }
+
+    private static string GetString(JsonObject source, string camelName)
+    {
+        var pascalName = char.ToUpperInvariant(camelName[0]) + camelName[1..];
+        return (source[camelName] ?? source[pascalName])!.GetValue<string>();
     }
 
     private sealed class StubAccessService(Result<BookingChangeActorContext>? result = null) : IBookingChangeAccessService
@@ -233,21 +343,26 @@ public sealed class SelfServiceFunctionTests
             return Task.FromResult(Result<RearrangementOptionsResponse>.Ok(new RearrangementOptionsResponse
             {
                 BookingId = cmd.BookingId,
+                TransactionId = "tx-1",
                 AssignedAdviserId = "adv-1",
                 AssignedAdviserName = "Adviser One",
-                AssignedAdviserOptions = new GetAvailabilityResponse(),
+                AssignedAdviserOptions = new GetAvailabilityResponse { TransactionId = "tx-1" },
                 AlternativeAdviserOptions = new GetAvailabilityResponse()
             }));
         }
     }
 
-    private sealed class StubRearrangeBookingService : IRearrangeBookingService
+    private sealed class StubRearrangeBookingService(Result<RearrangeBookingResponse>? result = null) : IRearrangeBookingService
     {
+        private readonly Result<RearrangeBookingResponse>? _result = result;
         public RearrangeBookingCommand? LastCommand { get; private set; }
 
         public Task<Result<RearrangeBookingResponse>> HandleAsync(RearrangeBookingCommand cmd, CancellationToken ct)
         {
             LastCommand = cmd;
+            if (_result is not null)
+                return Task.FromResult(_result);
+
             return Task.FromResult(Result<RearrangeBookingResponse>.Ok(new RearrangeBookingResponse
             {
                 PreviousBookingId = cmd.BookingId,

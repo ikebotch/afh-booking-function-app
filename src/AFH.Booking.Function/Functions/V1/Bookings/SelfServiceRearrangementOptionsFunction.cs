@@ -26,7 +26,7 @@ public sealed class SelfServiceRearrangementOptionsFunction
     [BookingOpenApiOperation(
         "Self-Service Bookings",
         "Get rearrangement options by secure client token",
-        Description = "Client-facing rearrangement options endpoint. Frontends must call this self-service route for client journeys, not internal/admin rearrangement routes. Provide the opaque client access token as the `token` query value. Invalid or expired tokens return 401. A valid token for a different booking returns 403. All returned slot times remain UTC.",
+        Description = "Client-facing rearrangement options endpoint for the current existing booking id in the route. Frontends must call this self-service route for client journeys, not internal/admin rearrangement routes. Provide the opaque client access token as the `token` query value. Invalid or expired tokens return 401. A valid token for a different booking returns 403. The response includes top-level `transactionId`; nested availability payloads keep their `transactionId` for backwards compatibility. All returned slot times remain UTC.",
         RequestBodyType = typeof(RearrangementOptionsRequest),
         RequestBodyRequired = false,
         ResponseType = typeof(RearrangementOptionsResponse),

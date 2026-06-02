@@ -325,7 +325,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             CancellationToken.None);
 
         Assert.False(result.IsSuccess);
-        Assert.Equal(Errors.ExactRouteTimeUnavailable, result.ErrorCode);
+        Assert.Equal(Errors.SlotNoLongerAvailable, result.ErrorCode);
         confirm.Verify(x => x.HandleAsync(
             It.Is<ConfirmBookingCommand>(cmd => cmd.HoldId == "booking-new"),
             It.IsAny<CancellationToken>()), Times.Once);

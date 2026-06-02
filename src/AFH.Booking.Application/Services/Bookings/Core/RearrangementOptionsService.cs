@@ -127,6 +127,7 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
         return Result<RearrangementOptionsResponse>.Ok(new RearrangementOptionsResponse
         {
             BookingId = hold.Id,
+            TransactionId = tx.Id,
             AssignedAdviserId = slot.AdviserId,
             AssignedAdviserName = slot.AdviserName,
             AssignedAdviserHasAvailability = assignedOptions.Advisers.Count > 0,

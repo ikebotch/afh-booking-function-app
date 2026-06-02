@@ -116,6 +116,7 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             BookingId = response.BookingId,
+            TransactionId = response.TransactionId,
             AssignedAdviserId = response.AssignedAdviserId,
             AssignedAdviserName = response.AssignedAdviserName,
             AssignedAdviserHasAvailability = response.AssignedAdviserHasAvailability,

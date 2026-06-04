@@ -9,7 +9,8 @@ internal static class BookingChangeValidation
         LifecycleActors.Client,
         LifecycleActors.LeadTech,
         LifecycleActors.Adviser,
-        LifecycleActors.System
+        LifecycleActors.System,
+        BookingActorContext.ActorInternalAdmin
     };
 
     public static Result Validate(CancelBookingCommand command)

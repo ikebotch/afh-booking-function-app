@@ -208,7 +208,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             After: CreateSnapshot(context.Hold, context.Slot, context.Transaction),
             OccurredUtc: utcNow,
             CorrelationId: cmd.CorrelationId,
-            SourceSystem: "BookingService",
+            SourceSystem: cmd.ActorContext?.SourceApplication ?? "BookingService",
             RelatedBookingId: null,
             PreviousState: ResolveLifecycleStateBeforeCancellation(before),
             NewState: LifecycleStates.Cancelled), ct);

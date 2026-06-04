@@ -1,0 +1,14 @@
+subject=AFH Booking: Adviser request {{outcome}}
+channel=Email
+---
+Hello {{greetingName}},
+
+Your booking change request has been reviewed.
+
+Request: {{changeType}}
+Outcome: {{outcome}}
+Booking: {{bookingId}}
+
+{{decisionNotes}}
+
+This is an automated AFH booking notification.

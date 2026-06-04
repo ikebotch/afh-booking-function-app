@@ -1,0 +1,4 @@
+subject=AFH Booking
+channel=Sms
+---
+Your AFH booking {{changeType}} request for {{bookingId}} was {{outcome}}.

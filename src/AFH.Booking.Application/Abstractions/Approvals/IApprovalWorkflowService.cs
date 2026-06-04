@@ -8,6 +8,10 @@ public interface IApprovalWorkflowService
 
     Task<IReadOnlyList<ApprovalRequestResponse>> ListPendingAsync(CancellationToken ct);
 
+    Task<IReadOnlyList<ApprovalRequestResponse>> ListAsync(
+        ListApprovalWorkflowRequestsQuery query,
+        CancellationToken ct);
+
     Task<ApprovalRequestResponse?> GetAsync(string requestId, CancellationToken ct);
 
     Task<ApprovalRequestResponse?> ReviewAsync(ReviewApprovalWorkflowRequest request, CancellationToken ct);

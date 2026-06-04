@@ -5,4 +5,5 @@ public sealed class ReviewApprovalRequest
     public bool Approved { get; init; }
     public string Reviewer { get; init; } = "Ian";
     public string? Notes { get; init; }
+    public string? SelectedSlotId { get; init; }
 }

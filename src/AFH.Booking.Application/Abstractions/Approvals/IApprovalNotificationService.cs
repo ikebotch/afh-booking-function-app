@@ -16,6 +16,7 @@ public interface IApprovalNotificationService
         CancellationToken ct);
 
     Task RecordOutcomeAsync(
+        string requestId,
         string bookingId,
         string transactionId,
         string transactionRef,
@@ -23,6 +24,8 @@ public interface IApprovalNotificationService
         string approverId,
         string outcome,
         string changeType,
+        string? reasonCode,
+        string? reasonDetail,
         string? notes,
         CancellationToken ct);
 }

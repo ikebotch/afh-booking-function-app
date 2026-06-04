@@ -66,7 +66,7 @@ public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        context.SetDomainUserPrincipal(access.Principal!);
+        context.SetDomainUserPrincipal(access.Principal!, access.User);
 
         if (!string.IsNullOrWhiteSpace(access.RequiredPermission))
         {

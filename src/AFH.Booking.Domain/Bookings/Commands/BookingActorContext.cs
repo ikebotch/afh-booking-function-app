@@ -12,6 +12,8 @@ public sealed record BookingActorContext(
 {
     public const string SourceSelfService = "SelfService";
     public const string SourceLeadTech = "LeadTech";
+    public const string SourceAdviserPortal = "AdviserPortal";
+    public const string SourceManagerPortal = "ManagerPortal";
     public const string SourceInternalAdmin = "InternalAdmin";
     public const string SourceApprovalWorkflow = "ApprovalWorkflow";
     public const string SourceSystemJob = "SystemJob";
@@ -20,6 +22,7 @@ public sealed record BookingActorContext(
     public const string ActorLeadTech = "LeadTech";
     public const string ActorInternalAdmin = "InternalAdmin";
     public const string ActorAdviser = "Adviser";
+    public const string ActorManager = "Manager";
     public const string ActorSystem = "System";
 
     public static BookingActorContext SelfServiceClient(
@@ -68,14 +71,45 @@ public sealed record BookingActorContext(
             canOverrideRules,
             permissions);
 
-    public static BookingActorContext ApprovalWorkflow(
+    public static BookingActorContext AdviserPortal(
         string? actorId,
         string? displayName = null,
         string? correlationId = null,
         IEnumerable<string>? permissions = null)
         => Create(
-            SourceApprovalWorkflow,
+            SourceAdviserPortal,
             ActorAdviser,
+            actorId,
+            displayName,
+            correlationId,
+            isSelfService: false,
+            canOverrideRules: false,
+            permissions);
+
+    public static BookingActorContext ManagerPortal(
+        string? actorId,
+        string? displayName = null,
+        string? correlationId = null,
+        IEnumerable<string>? permissions = null)
+        => Create(
+            SourceManagerPortal,
+            ActorManager,
+            actorId,
+            displayName,
+            correlationId,
+            isSelfService: false,
+            canOverrideRules: true,
+            permissions);
+
+    public static BookingActorContext ApprovalWorkflow(
+        string? actorId,
+        string? displayName = null,
+        string? correlationId = null,
+        string actorType = ActorManager,
+        IEnumerable<string>? permissions = null)
+        => Create(
+            SourceApprovalWorkflow,
+            actorType,
             actorId,
             displayName,
             correlationId,

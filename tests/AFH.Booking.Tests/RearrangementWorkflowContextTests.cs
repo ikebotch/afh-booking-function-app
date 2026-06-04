@@ -252,7 +252,7 @@ public sealed class RearrangementWorkflowContextTests
     }
 
     [Fact]
-    public async Task ApprovalReview_RearrangeExecution_PreservesApprovalActorSourceAndRequestId()
+    public async Task ApprovalReview_RearrangeExecution_PreservesReviewerActorSourceAndRequestId()
     {
         RearrangeBookingCommand? capturedRearrange = null;
         var row = new ApprovalWorkflowRecord
@@ -321,8 +321,8 @@ public sealed class RearrangementWorkflowContextTests
         Assert.Equal("approval-1", capturedRearrange!.ApprovalRequestId);
         Assert.Equal("slot-assigned", capturedRearrange.NewSlotId);
         Assert.Equal(BookingActorContext.SourceApprovalWorkflow, capturedRearrange.ActorContext?.SourceApplication);
-        Assert.Equal(LifecycleActors.Adviser, capturedRearrange.ActorContext?.ActorType);
-        Assert.Equal("adviser-1", capturedRearrange.ActorContext?.ActorId);
+        Assert.Equal(BookingActorContext.ActorManager, capturedRearrange.ActorContext?.ActorType);
+        Assert.Equal("manager-1", capturedRearrange.ActorContext?.ActorId);
         Assert.Equal("corr-approval", capturedRearrange.ActorContext?.CorrelationId);
     }
 

@@ -244,7 +244,7 @@ public sealed class CancellationWorkflowContextTests
     }
 
     [Fact]
-    public async Task ApprovalReview_CancelExecution_PreservesApprovalActorSourceAndRequestId()
+    public async Task ApprovalReview_CancelExecution_PreservesReviewerActorSourceAndRequestId()
     {
         CancelBookingCommand? capturedCancel = null;
         var row = new ApprovalWorkflowRecord
@@ -303,8 +303,8 @@ public sealed class CancellationWorkflowContextTests
         Assert.NotNull(capturedCancel);
         Assert.Equal("approval-1", capturedCancel!.ApprovalRequestId);
         Assert.Equal(BookingActorContext.SourceApprovalWorkflow, capturedCancel.ActorContext?.SourceApplication);
-        Assert.Equal(LifecycleActors.Adviser, capturedCancel.ActorContext?.ActorType);
-        Assert.Equal("adviser-1", capturedCancel.ActorContext?.ActorId);
+        Assert.Equal(BookingActorContext.ActorManager, capturedCancel.ActorContext?.ActorType);
+        Assert.Equal("manager-1", capturedCancel.ActorContext?.ActorId);
         Assert.Equal("corr-approval", capturedCancel.ActorContext?.CorrelationId);
     }
 

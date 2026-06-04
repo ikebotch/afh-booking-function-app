@@ -10,6 +10,7 @@ namespace AFH.Booking.Application.Approvals;
 
 public sealed class ApprovalWorkflowService : IApprovalWorkflowService
 {
+    private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IApprovalWorkflowStore _store;
     private readonly IApprovalRoutingService _routing;
     private readonly ICancellationOrchestrator _cancellation;
@@ -45,16 +46,24 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
     {
         ValidateCreate(request);
 
+        var actor = request.ActorContext;
+        var requestedBy = actor?.ActorType ?? request.RequestedBy.Trim();
+        var requesterId = actor?.ActorId ?? request.RequesterId;
+        var correlationId = actor?.CorrelationId ?? request.CorrelationId;
+        var requestedUtc = DateTime.UtcNow;
         var booking = await _store.LoadBookingAsync(request.BookingId, ct);
         var lifecycleState = ResolveLifecycleState(booking.Hold.Status) ?? LifecycleStates.Booked;
         var routeTarget = await _routing.ResolveAsync(ct);
+        var notes = BuildCreateNotes(request, actor, booking.Hold.Id, requestedUtc, correlationId);
         var payloadJson = JsonSerializer.Serialize(new
         {
             request.ChangeType,
             request.NewSlotId,
             request.ReasonCode,
             request.ReasonDetail,
-            request.RequesterId
+            RequesterId = requesterId,
+            Notes = notes,
+            ProposedAlternativeTimes = request.ProposedAlternativeTimes ?? []
         }, _jsonOptions);
 
         var model = new ApprovalWorkflowRecord
@@ -63,10 +72,10 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             BookingId = booking.Hold.Id,
             TransactionId = booking.Transaction.Id,
             ChangeType = request.ChangeType.Trim(),
-            RequestedBy = request.RequestedBy.Trim(),
-            RequesterId = request.RequesterId,
+            RequestedBy = requestedBy,
+            RequesterId = requesterId,
             Status = "Pending",
-            RequestedUtc = DateTime.UtcNow,
+            RequestedUtc = requestedUtc,
             ReasonCode = request.ReasonCode?.Trim(),
             ReasonDetail = request.ReasonDetail?.Trim(),
             RequestedPayloadJson = payloadJson,
@@ -82,10 +91,10 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
                 Id = Guid.NewGuid().ToString("N"),
                 ApprovalRequestId = model.Id,
                 EventType = "Requested",
-                ActorType = request.RequestedBy.Trim(),
-                ActorId = request.RequesterId,
+                ActorType = requestedBy,
+                ActorId = requesterId,
                 Outcome = "Pending",
-                Comments = request.ReasonDetail,
+                Comments = request.AdviserNote ?? request.ReasonDetail,
                 OccurredUtc = model.RequestedUtc
             },
             ct);
@@ -94,10 +103,10 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             BookingId: model.BookingId,
             TransactionId: model.TransactionId,
             EventType: "ApprovalRequested",
-            ActorType: request.RequestedBy.Trim(),
-            ActorId: request.RequesterId,
+            ActorType: requestedBy,
+            ActorId: requesterId,
             ReasonCode: request.ReasonCode,
-            ReasonNotes: request.ReasonDetail,
+            ReasonNotes: request.AdviserNote ?? request.ReasonDetail,
             Before: new
             {
                 approvalStatus = "None",
@@ -110,8 +119,8 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
                 approverTarget = routeTarget.DisplayName
             },
             OccurredUtc: model.RequestedUtc,
-            CorrelationId: request.CorrelationId,
-            SourceSystem: "BookingService",
+            CorrelationId: correlationId,
+            SourceSystem: actor?.SourceApplication ?? "BookingService",
             RelatedBookingId: null,
             PreviousState: lifecycleState,
             NewState: lifecycleState,
@@ -124,7 +133,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             booking.Hold.Id,
             booking.Transaction.Id,
             booking.Transaction.TransactionRef,
-            request.RequesterId ?? request.RequestedBy,
+            requesterId ?? requestedBy,
             model.ChangeType,
             request.ReasonCode!,
             request.ReasonDetail,
@@ -136,6 +145,14 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
     public async Task<IReadOnlyList<ApprovalRequestResponse>> ListPendingAsync(CancellationToken ct)
     {
         var rows = await _store.ListPendingAsync(ct);
+        return rows.Select(ToResponse).ToList();
+    }
+
+    public async Task<IReadOnlyList<ApprovalRequestResponse>> ListAsync(
+        ListApprovalWorkflowRequestsQuery query,
+        CancellationToken ct)
+    {
+        var rows = await _store.ListAsync(query, ct);
         return rows.Select(ToResponse).ToList();
     }
 
@@ -156,8 +173,14 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         if (!string.Equals(row.Status, "Pending", StringComparison.OrdinalIgnoreCase))
             return ToResponse(row);
 
+        var reviewerActor = request.ActorContext;
+        var reviewerActorType = reviewerActor?.ActorType ?? "Approver";
+        var reviewerId = reviewerActor?.ActorId ?? request.Reviewer.Trim();
+        var reviewerDisplay = reviewerActor?.DisplayName ?? request.Reviewer.Trim();
+        var correlationId = reviewerActor?.CorrelationId ?? request.CorrelationId;
+
         row.Status = request.Approved ? "Approved" : "Rejected";
-        row.Reviewer = request.Reviewer.Trim();
+        row.Reviewer = reviewerDisplay;
         row.ReviewNotes = request.Notes?.Trim();
         row.ReviewedUtc = DateTime.UtcNow;
 
@@ -170,8 +193,8 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             Id = Guid.NewGuid().ToString("N"),
             ApprovalRequestId = row.Id,
             EventType = "Decision",
-            ActorType = "Approver",
-            ActorId = row.Reviewer,
+            ActorType = reviewerActorType,
+            ActorId = reviewerId,
             Outcome = row.Status,
             Comments = row.ReviewNotes,
             OccurredUtc = row.ReviewedUtc.Value
@@ -181,15 +204,15 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             BookingId: row.BookingId,
             TransactionId: row.TransactionId,
             EventType: request.Approved ? "ApprovalApproved" : "ApprovalRejected",
-            ActorType: "Approver",
-            ActorId: row.Reviewer,
+            ActorType: reviewerActorType,
+            ActorId: reviewerId,
             ReasonCode: row.ReasonCode,
             ReasonNotes: request.Notes,
             Before: new { approvalStatus = "Pending", changeType = row.ChangeType },
             After: new { approvalStatus = row.Status, approver = row.Reviewer },
             OccurredUtc: row.ReviewedUtc.Value,
-            CorrelationId: request.CorrelationId,
-            SourceSystem: "BookingService",
+            CorrelationId: correlationId,
+            SourceSystem: reviewerActor?.SourceApplication ?? "BookingService",
             RelatedBookingId: null,
             PreviousState: beforeDecisionState,
             NewState: beforeDecisionState,
@@ -198,13 +221,16 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         await _uow.SaveChangesAsync(ct);
 
         await _notifications.RecordOutcomeAsync(
+            row.Id,
             row.BookingId,
             row.TransactionId,
             bookingBeforeDecision.Transaction.TransactionRef,
             row.RequesterId ?? row.RequestedBy,
-            row.Reviewer!,
+            reviewerId ?? row.Reviewer!,
             row.Status,
             row.ChangeType,
+            row.ReasonCode,
+            row.ReasonDetail,
             row.ReviewNotes,
             ct);
 
@@ -231,7 +257,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         CancellationToken ct)
     {
         var payload = JsonSerializer.Deserialize<ApprovalPayload>(row.RequestedPayloadJson ?? "{}", _jsonOptions) ?? new ApprovalPayload();
-        var execution = await ExecuteApprovedRequestAsync(row, payload, review.CorrelationId, ct);
+        var execution = await ExecuteApprovedRequestAsync(row, payload, review, ct);
         if (!execution.IsSuccess)
         {
             row.ExecutionError = execution.ErrorMessage;
@@ -279,7 +305,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
                 lifecycleState = executionState
             },
             OccurredUtc: DateTime.UtcNow,
-            CorrelationId: review.CorrelationId,
+            CorrelationId: review.ActorContext?.CorrelationId ?? review.CorrelationId,
             SourceSystem: "BookingService",
             RelatedBookingId: row.BookingId,
             PreviousState: beforeDecisionState,
@@ -292,22 +318,31 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
     private async Task<Result> ExecuteApprovedRequestAsync(
         ApprovalWorkflowRecord request,
         ApprovalPayload payload,
-        string? correlationId,
+        ReviewApprovalWorkflowRequest review,
         CancellationToken ct)
     {
+        var actor = review.ActorContext ?? BookingActorContext.ApprovalWorkflow(
+            review.Reviewer,
+            displayName: review.Reviewer,
+            correlationId: review.CorrelationId);
+        var correlationId = actor.CorrelationId ?? review.CorrelationId ?? request.Id;
+
         if (string.Equals(request.ChangeType, "Cancel", StringComparison.OrdinalIgnoreCase))
         {
             var result = await _cancellation.CancelAsync(new CancelBookingCommand
             {
                 BookingId = request.BookingId,
                 ActorContext = BookingActorContext.ApprovalWorkflow(
-                    request.RequesterId,
-                    correlationId: correlationId ?? request.Id),
-                RequestedBy = LifecycleActors.Adviser,
-                ActorId = request.RequesterId,
+                    actor.ActorId,
+                    displayName: actor.DisplayName,
+                    correlationId: correlationId,
+                    actorType: actor.ActorType,
+                    permissions: actor.Permissions),
+                RequestedBy = actor.ActorType,
+                ActorId = actor.ActorId,
                 ReasonCode = request.ReasonCode,
                 ReasonDetail = request.ReasonDetail,
-                CorrelationId = correlationId ?? request.Id,
+                CorrelationId = correlationId,
                 ApprovalRequestId = request.Id
             }, sendClientNotification: true, ct);
 
@@ -319,15 +354,18 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         var rearrangeResult = await _rearrangement.RearrangeAsync(new RearrangeBookingCommand
         {
             BookingId = request.BookingId,
-            NewSlotId = payload.NewSlotId ?? string.Empty,
+            NewSlotId = review.SelectedSlotId ?? payload.NewSlotId ?? string.Empty,
             ActorContext = BookingActorContext.ApprovalWorkflow(
-                request.RequesterId,
-                correlationId: correlationId ?? request.Id),
-            RequestedBy = LifecycleActors.Adviser,
-            ActorId = request.RequesterId,
+                actor.ActorId,
+                displayName: actor.DisplayName,
+                correlationId: correlationId,
+                actorType: actor.ActorType,
+                permissions: actor.Permissions),
+            RequestedBy = actor.ActorType,
+            ActorId = actor.ActorId,
             ReasonCode = request.ReasonCode,
             ReasonDetail = request.ReasonDetail,
-            CorrelationId = correlationId ?? request.Id,
+            CorrelationId = correlationId,
             ApprovalRequestId = request.Id
         }, ct);
 
@@ -338,17 +376,50 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
 
     private static void ValidateCreate(CreateApprovalWorkflowRequest request)
     {
-        if (!string.Equals(request.RequestedBy, LifecycleActors.Adviser, StringComparison.OrdinalIgnoreCase))
+        var requestedBy = request.ActorContext?.ActorType ?? request.RequestedBy;
+        if (!string.Equals(requestedBy, LifecycleActors.Adviser, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Only adviser approval requests are supported by this workflow.");
 
         if (string.IsNullOrWhiteSpace(request.ReasonCode))
             throw new InvalidOperationException("reasonCode is required for adviser approval requests.");
 
         if (string.Equals(request.ChangeType, "Rearrange", StringComparison.OrdinalIgnoreCase) &&
-            string.IsNullOrWhiteSpace(request.NewSlotId))
+            string.IsNullOrWhiteSpace(request.NewSlotId) &&
+            !HasProposedSlot(request.ProposedAlternativeTimes))
         {
-            throw new InvalidOperationException("newSlotId is required for adviser rearrangement approval requests.");
+            throw new InvalidOperationException("newSlotId or proposedAlternativeTimes is required for adviser rearrangement approval requests.");
         }
+    }
+
+    private static bool HasProposedSlot(IReadOnlyList<ApprovalProposedAlternativeTime>? alternatives)
+        => alternatives?.Any(x => !string.IsNullOrWhiteSpace(x.SlotId)) == true;
+
+    private static IReadOnlyList<ApprovalRequestNoteResponse> BuildCreateNotes(
+        CreateApprovalWorkflowRequest request,
+        BookingActorContext? actor,
+        string bookingId,
+        DateTime createdUtc,
+        string? correlationId)
+    {
+        var text = request.AdviserNote ?? request.ReasonDetail;
+        if (string.IsNullOrWhiteSpace(text))
+            return [];
+
+        return
+        [
+            new ApprovalRequestNoteResponse
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                BookingId = bookingId,
+                ApprovalRequestId = string.Empty,
+                ActorType = actor?.ActorType ?? request.RequestedBy.Trim(),
+                ActorId = actor?.ActorId ?? request.RequesterId,
+                DisplayName = actor?.DisplayName,
+                Text = text.Trim(),
+                CreatedUtc = createdUtc,
+                CorrelationId = correlationId
+            }
+        ];
     }
 
     private static string? ResolveLifecycleState(BookingHoldStatus status)
@@ -372,7 +443,9 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
     {
         var payload = string.IsNullOrWhiteSpace(model.RequestedPayloadJson)
             ? null
-            : JsonSerializer.Deserialize<ApprovalPayload>(model.RequestedPayloadJson);
+            : JsonSerializer.Deserialize<ApprovalPayload>(model.RequestedPayloadJson, PayloadJsonOptions);
+
+        var notes = NormalizeNotes(payload?.Notes, model);
 
         return new ApprovalRequestResponse
         {
@@ -387,6 +460,8 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             ReasonCode = model.ReasonCode,
             ReasonDetail = model.ReasonDetail,
             NewSlotId = payload?.NewSlotId,
+            Notes = notes,
+            ProposedAlternativeTimes = payload?.ProposedAlternativeTimes ?? [],
             Reviewer = model.Reviewer,
             ReviewedUtc = model.ReviewedUtc,
             ReviewNotes = model.ReviewNotes,
@@ -398,8 +473,31 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         };
     }
 
+    private static IReadOnlyList<ApprovalRequestNoteResponse> NormalizeNotes(
+        IReadOnlyList<ApprovalRequestNoteResponse>? notes,
+        ApprovalWorkflowRecord model)
+    {
+        if (notes is null || notes.Count == 0)
+            return [];
+
+        return notes.Select(note => new ApprovalRequestNoteResponse
+        {
+            Id = note.Id,
+            BookingId = string.IsNullOrWhiteSpace(note.BookingId) ? model.BookingId : note.BookingId,
+            ApprovalRequestId = string.IsNullOrWhiteSpace(note.ApprovalRequestId) ? model.Id : note.ApprovalRequestId,
+            ActorType = note.ActorType,
+            ActorId = note.ActorId,
+            DisplayName = note.DisplayName,
+            Text = note.Text,
+            CreatedUtc = note.CreatedUtc,
+            CorrelationId = note.CorrelationId
+        }).ToList();
+    }
+
     private sealed class ApprovalPayload
     {
         public string? NewSlotId { get; init; }
+        public IReadOnlyList<ApprovalRequestNoteResponse>? Notes { get; init; }
+        public IReadOnlyList<ApprovalProposedAlternativeTime>? ProposedAlternativeTimes { get; init; }
     }
 }

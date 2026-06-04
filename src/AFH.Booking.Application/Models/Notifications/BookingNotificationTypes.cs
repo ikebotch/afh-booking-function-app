@@ -6,4 +6,5 @@ public static class BookingNotificationTypes
     public static readonly BookingNotificationType BookingRescheduled = new("Booking", "BookingRescheduled");
     public static readonly BookingNotificationType BookingCancelled = new("Booking", "BookingCancelled");
     public static readonly BookingNotificationType BookingHoldCreated = new("Booking", "BookingHoldCreated");
+    public static readonly BookingNotificationType AdviserRequestOutcome = new("Booking", "AdviserRequestOutcome");
 }

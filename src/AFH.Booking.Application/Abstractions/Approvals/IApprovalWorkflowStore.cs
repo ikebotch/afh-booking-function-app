@@ -13,6 +13,10 @@ public interface IApprovalWorkflowStore
 
     Task<IReadOnlyList<ApprovalWorkflowRecord>> ListPendingAsync(CancellationToken ct);
 
+    Task<IReadOnlyList<ApprovalWorkflowRecord>> ListAsync(
+        ListApprovalWorkflowRequestsQuery query,
+        CancellationToken ct);
+
     Task<ApprovalWorkflowRecord?> GetAsync(string requestId, CancellationToken ct);
 
     Task<ApprovalWorkflowRecord?> GetForUpdateAsync(string requestId, CancellationToken ct);

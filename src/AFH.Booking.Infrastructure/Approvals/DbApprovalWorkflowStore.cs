@@ -54,6 +54,43 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
         return rows.Select(ToRecord).ToList();
     }
 
+    public async Task<IReadOnlyList<ApprovalWorkflowRecord>> ListAsync(
+        ListApprovalWorkflowRequestsQuery query,
+        CancellationToken ct)
+    {
+        var rows = _db.ApprovalRequests.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(query.RequesterId))
+        {
+            var requesterId = query.RequesterId.Trim();
+            rows = rows.Where(x => x.RequesterId == requesterId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.BookingId))
+        {
+            var bookingId = query.BookingId.Trim();
+            rows = rows.Where(x => x.BookingId == bookingId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Status))
+        {
+            var status = query.Status.Trim();
+            rows = rows.Where(x => x.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.ChangeType))
+        {
+            var changeType = query.ChangeType.Trim();
+            rows = rows.Where(x => x.ChangeType == changeType);
+        }
+
+        var results = await rows
+            .OrderByDescending(x => x.RequestedUtc)
+            .ToListAsync(ct);
+
+        return results.Select(ToRecord).ToList();
+    }
+
     public async Task<ApprovalWorkflowRecord?> GetAsync(string requestId, CancellationToken ct)
     {
         var row = await _db.ApprovalRequests.AsNoTracking().SingleOrDefaultAsync(x => x.Id == requestId, ct);

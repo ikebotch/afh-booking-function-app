@@ -1,9 +1,12 @@
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using System.Security.Claims;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
 
@@ -21,6 +24,7 @@ public sealed class ReviewApprovalRequestFunction
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/approval-requests/{requestId}/review")]
         HttpRequestData req,
+        FunctionContext context,
         string requestId,
         CancellationToken ct)
     {
@@ -31,16 +35,49 @@ public sealed class ReviewApprovalRequestFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, "Validation");
 
+        var actor = BuildReviewerActorContext(context, BookingChangeRequestContext.GetCorrelationId(req));
+
         var review = await _approvals.ReviewAsync(new ReviewApprovalWorkflowRequest(
             RequestId: requestId.Trim(),
             Approved: body.Approved,
-            Reviewer: string.IsNullOrWhiteSpace(body.Reviewer) ? "Approver" : body.Reviewer.Trim(),
+            Reviewer: actor.ActorId ?? actor.DisplayName ?? (string.IsNullOrWhiteSpace(body.Reviewer) ? "Approver" : body.Reviewer.Trim()),
             Notes: body.Notes,
-            CorrelationId: BookingChangeRequestContext.GetCorrelationId(req)), ct);
+            CorrelationId: actor.CorrelationId,
+            ActorContext: actor,
+            SelectedSlotId: body.SelectedSlotId), ct);
 
         if (review is null)
             return await req.ProblemAsync(HttpStatusCode.NotFound, $"Approval request '{requestId}' was not found.", ct, "NotFound");
 
         return await req.OkJsonAsync(review.ToContract(), ct);
+    }
+
+    private static BookingActorContext BuildReviewerActorContext(FunctionContext context, string? correlationId)
+    {
+        var user = context.GetDomainUserContext();
+        var principal = context.GetDomainUserPrincipal();
+        var actorId = user?.UserId ?? GetClaimValue(principal, "oid", "http://schemas.microsoft.com/identity/claims/objectidentifier", ClaimTypes.NameIdentifier) ?? user?.Email ?? GetClaimValue(principal, ClaimTypes.Email, "email", ClaimTypes.Upn, "preferred_username");
+        var displayName = user?.DisplayName ?? GetClaimValue(principal, "name", ClaimTypes.Name);
+
+        return BookingActorContext.ManagerPortal(
+            actorId,
+            displayName,
+            correlationId,
+            user?.Permissions);
+    }
+
+    private static string? GetClaimValue(ClaimsPrincipal? principal, params string[] claimTypes)
+    {
+        if (principal is null)
+            return null;
+
+        foreach (var claimType in claimTypes)
+        {
+            var claim = principal.FindFirst(claimType);
+            if (!string.IsNullOrWhiteSpace(claim?.Value))
+                return claim.Value;
+        }
+
+        return null;
     }
 }

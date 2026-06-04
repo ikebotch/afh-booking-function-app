@@ -1,3 +1,5 @@
+using AFH.Booking.Domain.Bookings.Commands;
+
 namespace AFH.Booking.Application.Models.Approvals;
 
 public sealed record CreateApprovalWorkflowRequest(
@@ -8,14 +10,25 @@ public sealed record CreateApprovalWorkflowRequest(
     string? ReasonCode,
     string? ReasonDetail,
     string? NewSlotId,
-    string? CorrelationId);
+    string? CorrelationId,
+    BookingActorContext? ActorContext = null,
+    string? AdviserNote = null,
+    IReadOnlyList<ApprovalProposedAlternativeTime>? ProposedAlternativeTimes = null);
 
 public sealed record ReviewApprovalWorkflowRequest(
     string RequestId,
     bool Approved,
     string Reviewer,
     string? Notes,
-    string? CorrelationId);
+    string? CorrelationId,
+    BookingActorContext? ActorContext = null,
+    string? SelectedSlotId = null);
+
+public sealed record ListApprovalWorkflowRequestsQuery(
+    string? RequesterId,
+    string? BookingId,
+    string? Status,
+    string? ChangeType);
 
 public sealed record ApprovalRouteTarget(
     string TargetType,
@@ -36,6 +49,8 @@ public sealed class ApprovalRequestResponse
     public string? ReasonCode { get; init; }
     public string? ReasonDetail { get; init; }
     public string? NewSlotId { get; init; }
+    public IReadOnlyList<ApprovalRequestNoteResponse> Notes { get; init; } = [];
+    public IReadOnlyList<ApprovalProposedAlternativeTime> ProposedAlternativeTimes { get; init; } = [];
     public string? ApproverTargetType { get; init; }
     public string? ApproverTargetValue { get; init; }
     public string? ApproverTargetDisplayName { get; init; }
@@ -43,6 +58,29 @@ public sealed class ApprovalRequestResponse
     public DateTime? ReviewedUtc { get; init; }
     public string? ReviewNotes { get; init; }
     public DateTime? ExecutedUtc { get; init; }
+}
+
+public sealed class ApprovalRequestNoteResponse
+{
+    public string Id { get; init; } = default!;
+    public string BookingId { get; init; } = default!;
+    public string ApprovalRequestId { get; init; } = default!;
+    public string ActorType { get; init; } = default!;
+    public string? ActorId { get; init; }
+    public string? DisplayName { get; init; }
+    public string Text { get; init; } = default!;
+    public DateTime CreatedUtc { get; init; }
+    public string? CorrelationId { get; init; }
+}
+
+public sealed class ApprovalProposedAlternativeTime
+{
+    public string? SlotId { get; init; }
+    public string? AdviserId { get; init; }
+    public DateTime? StartUtc { get; init; }
+    public DateTime? EndUtc { get; init; }
+    public string? Note { get; init; }
+    public int? PreferenceOrder { get; init; }
 }
 
 public sealed class EmailBounceWebhookRequest

@@ -10,6 +10,9 @@ public sealed class BookingNotificationIdempotencyPolicy : INotificationIdempote
 
     public string GetPrimaryId(NotificationRequested request)
     {
+        if (request.Data.TryGetValue("IdempotencyKey", out var idempotencyKey) && !string.IsNullOrWhiteSpace(idempotencyKey))
+            return idempotencyKey;
+
         if (request.Data.TryGetValue("BookingId", out var bookingId) && !string.IsNullOrWhiteSpace(bookingId))
             return bookingId;
 

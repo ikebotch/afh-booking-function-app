@@ -43,6 +43,8 @@ public class TimeZoneAndRouteTests
     [InlineData("Config_UpsertMeetingTopic", EndpointAccessPolicy.InternalOnly)]
     [InlineData("Approvals_ListPending", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Approvals_Review", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Approvals_ListAdviserRequests", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Bookings_CreateApprovalRequest", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_LeadTechCancel", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_LeadTechRearrange", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_LeadTechRearrangementOptions", EndpointAccessPolicy.UserAuthenticated)]
@@ -54,6 +56,8 @@ public class TimeZoneAndRouteTests
     [Theory]
     [InlineData("Approvals_ListPending", BookingPermissionNames.ApprovalsRead)]
     [InlineData("Approvals_Review", BookingPermissionNames.ApprovalsReview)]
+    [InlineData("Approvals_ListAdviserRequests", BookingPermissionNames.ApprovalRequestsReadOwn)]
+    [InlineData("Bookings_CreateApprovalRequest", BookingPermissionNames.ApprovalRequestsCreate)]
     [InlineData("Bookings_LeadTechCancel", BookingPermissionNames.CancelAsLeadTech)]
     [InlineData("Bookings_LeadTechRearrange", BookingPermissionNames.RearrangeAsLeadTech)]
     [InlineData("Bookings_LeadTechRearrangementOptions", BookingPermissionNames.RearrangementOptionsRead)]
@@ -66,7 +70,6 @@ public class TimeZoneAndRouteTests
     }
 
     [Theory]
-    [InlineData("Bookings_CreateApprovalRequest")]
     [InlineData("Bookings_GetRearrangementOptions")]
     [InlineData("Bookings_Rearrange")]
     [InlineData("Bookings_RecordNoShow")]

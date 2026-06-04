@@ -150,6 +150,8 @@ public static class ApplicationResponseMappingExtensions
             ReasonCode = response.ReasonCode,
             ReasonDetail = response.ReasonDetail,
             NewSlotId = response.NewSlotId,
+            Notes = response.Notes.Select(ToContract).ToList(),
+            ProposedAlternativeTimes = response.ProposedAlternativeTimes.Select(ToContract).ToList(),
             ApproverTargetType = response.ApproverTargetType,
             ApproverTargetValue = response.ApproverTargetValue,
             ApproverTargetDisplayName = response.ApproverTargetDisplayName,
@@ -157,6 +159,31 @@ public static class ApplicationResponseMappingExtensions
             ReviewedUtc = AsUtc(response.ReviewedUtc),
             ReviewNotes = response.ReviewNotes,
             ExecutedUtc = AsUtc(response.ExecutedUtc)
+        };
+
+    private static ContractResponses.ApprovalRequestNoteResponse ToContract(this AppApprovals.ApprovalRequestNoteResponse note)
+        => new()
+        {
+            Id = note.Id,
+            BookingId = note.BookingId,
+            ApprovalRequestId = note.ApprovalRequestId,
+            ActorType = note.ActorType,
+            ActorId = note.ActorId,
+            DisplayName = note.DisplayName,
+            Text = note.Text,
+            CreatedUtc = AsUtc(note.CreatedUtc),
+            CorrelationId = note.CorrelationId
+        };
+
+    private static ContractResponses.ApprovalProposedAlternativeTimeResponse ToContract(this AppApprovals.ApprovalProposedAlternativeTime alternative)
+        => new()
+        {
+            SlotId = alternative.SlotId,
+            AdviserId = alternative.AdviserId,
+            StartUtc = AsUtc(alternative.StartUtc),
+            EndUtc = AsUtc(alternative.EndUtc),
+            Note = alternative.Note,
+            PreferenceOrder = alternative.PreferenceOrder
         };
 
     public static ContractResponses.EmailBounceEventResponse ToContract(this AppApprovals.EmailBounceEventResponse response)

@@ -15,6 +15,7 @@ public sealed class BookingNotificationTemplatePolicy : INotificationTemplatePol
             "BookingRescheduled" => "Booking.booking-rescheduled.v1.txt",
             "BookingCancelled" => "Booking.booking-cancelled.v1.txt",
             "BookingHoldCreated" => "Booking.booking-hold.v1.txt",
+            "AdviserRequestOutcome" => "Booking.adviser-request-outcome.v1.txt",
             _ => throw new NotSupportedException($"Booking notification template '{notificationType.Name}' is not supported yet.")
         };
 }

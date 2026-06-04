@@ -1,6 +1,8 @@
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Models.Approvals;
+using AFH.Booking.Application.Models.Auth;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Domain.Auth;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Http;
@@ -37,9 +39,21 @@ public sealed class CreateApprovalRequestFunction
         if (!IsAllowedChangeType(changeType))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "changeType must be 'Cancel' or 'Rearrange'.", ct, "Validation");
 
-        var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy) ? "Adviser" : body.RequestedBy.Trim();
-        if (!string.Equals(requestedBy, "Adviser", StringComparison.OrdinalIgnoreCase))
-            return await req.ProblemAsync(HttpStatusCode.BadRequest, "Only Adviser requests require approval.", ct, "Validation");
+        var user = context.GetDomainUserContext();
+        if (user is null)
+            return await req.ProblemAsync(HttpStatusCode.Unauthorized, "Authenticated adviser identity is required.", ct, "Unauthorized");
+
+        if (!user.Permissions.Contains(BookingPermissionNames.ApprovalRequestsCreate, StringComparer.OrdinalIgnoreCase))
+        {
+            return await req.ProblemAsync(
+                HttpStatusCode.Forbidden,
+                $"Permission '{BookingPermissionNames.ApprovalRequestsCreate}' is required.",
+                ct,
+                "Forbidden");
+        }
+
+        if (string.IsNullOrWhiteSpace(user.UserId) && string.IsNullOrWhiteSpace(user.Email))
+            return await req.ProblemAsync(HttpStatusCode.Forbidden, "Authenticated adviser identity could not be resolved.", ct, "Forbidden");
 
         if (string.IsNullOrWhiteSpace(body?.ReasonCode))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "reasonCode is required for adviser approval requests.", ct, "Validation");
@@ -51,7 +65,7 @@ public sealed class CreateApprovalRequestFunction
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "newSlotId or proposedAlternativeTimes is required for adviser rearrangement approval requests.", ct, "Validation");
         }
 
-        var actor = BuildAdviserActorContext(context, BookingChangeRequestContext.GetCorrelationId(req));
+        var actor = BuildAdviserActorContext(context, user, BookingChangeRequestContext.GetCorrelationId(req));
 
         ApprovalRequestResponse created;
         try
@@ -81,18 +95,20 @@ public sealed class CreateApprovalRequestFunction
         => string.Equals(value, "Cancel", StringComparison.OrdinalIgnoreCase) ||
            string.Equals(value, "Rearrange", StringComparison.OrdinalIgnoreCase);
 
-    private static BookingActorContext BuildAdviserActorContext(FunctionContext context, string? correlationId)
+    private static BookingActorContext BuildAdviserActorContext(
+        FunctionContext context,
+        AdviserUserContext user,
+        string? correlationId)
     {
-        var user = context.GetDomainUserContext();
         var principal = context.GetDomainUserPrincipal();
-        var actorId = user?.UserId ?? GetClaimValue(principal, "oid", "http://schemas.microsoft.com/identity/claims/objectidentifier", ClaimTypes.NameIdentifier) ?? user?.Email ?? GetClaimValue(principal, ClaimTypes.Email, "email", ClaimTypes.Upn, "preferred_username");
-        var displayName = user?.DisplayName ?? GetClaimValue(principal, "name", ClaimTypes.Name);
+        var actorId = user.UserId ?? GetClaimValue(principal, "oid", "http://schemas.microsoft.com/identity/claims/objectidentifier", ClaimTypes.NameIdentifier) ?? user.Email ?? GetClaimValue(principal, ClaimTypes.Email, "email", ClaimTypes.Upn, "preferred_username");
+        var displayName = user.DisplayName ?? GetClaimValue(principal, "name", ClaimTypes.Name);
 
         return BookingActorContext.AdviserPortal(
             actorId,
             displayName,
             correlationId,
-            user?.Permissions);
+            user.Permissions);
     }
 
     private static ApprovalProposedAlternativeTime ToApplication(ApprovalProposedAlternativeTimeRequest request)

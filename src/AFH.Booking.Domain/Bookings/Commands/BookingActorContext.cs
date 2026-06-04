@@ -97,6 +97,12 @@ public sealed record BookingActorContext(
             canOverrideRules: true,
             permissions: null);
 
+    public static BookingActorContext ForSystemJob(
+        string? actorId,
+        string? correlationId = null,
+        string sourceApplication = SourceSystemJob)
+        => SystemJob(actorId, correlationId, sourceApplication);
+
     private static BookingActorContext Create(
         string sourceApplication,
         string actorType,

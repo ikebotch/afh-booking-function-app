@@ -37,6 +37,9 @@ public sealed class ReleaseHoldFunction
         var result = await _service.HandleAsync(new ReleaseHoldCommand
         {
             HoldId = holdId.Trim(),
+            ReasonCode = "ManualRelease",
+            ReasonDetail = "Released by manual hold release endpoint.",
+            ReleaseKind = ReleaseHoldKind.ManualRelease,
             ActorContext = BookingActorContext.InternalAdmin(
                 correlationId: BookingChangeRequestContext.GetCorrelationId(req))
         }, ct);

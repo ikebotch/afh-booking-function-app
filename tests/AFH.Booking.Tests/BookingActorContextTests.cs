@@ -169,6 +169,8 @@ public sealed class BookingActorContextTests
         await sut.Run(null!, CancellationToken.None);
 
         Assert.Equal("hold-1", release.LastCommand?.HoldId);
+        Assert.Equal(ReleaseHoldKind.Expiry, release.LastCommand?.ReleaseKind);
+        Assert.Equal("HoldExpired", release.LastCommand?.ReasonCode);
         Assert.Equal(LifecycleActors.System, release.LastCommand?.ActorContext?.ActorType);
         Assert.Equal("HoldsCleanup", release.LastCommand?.ActorContext?.ActorId);
     }

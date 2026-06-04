@@ -59,7 +59,10 @@ public sealed class HoldsCleanupFunction
                 var result = await _release.HandleAsync(new ReleaseHoldCommand
                 {
                     HoldId = hold.Id,
-                    ActorContext = BookingActorContext.SystemJob("HoldsCleanup")
+                    ReasonCode = "HoldExpired",
+                    ReasonDetail = "Expired by holds cleanup job.",
+                    ReleaseKind = ReleaseHoldKind.Expiry,
+                    ActorContext = BookingActorContext.ForSystemJob("HoldsCleanup")
                 }, ct);
 
                 if (result.IsSuccess)

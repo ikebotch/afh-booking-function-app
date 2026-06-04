@@ -7,6 +7,8 @@ public static class LifecycleEventTypes
     public const string Rearranged = "Rearranged";
     public const string NoShow = "No Show";
     public const string HoldCreated = "HoldCreated";
+    public const string HoldReleased = "HoldReleased";
+    public const string HoldExpired = "HoldExpired";
 }
 
 public static class LifecycleStates

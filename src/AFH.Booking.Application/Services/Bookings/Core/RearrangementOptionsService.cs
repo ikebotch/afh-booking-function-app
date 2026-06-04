@@ -4,6 +4,9 @@ using AFH.Booking.Application.Models.Common;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Availability;
 using AFH.Booking.Domain.Bookings.Commands;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AFH.Booking.Application.Bookings;
 
@@ -13,17 +16,20 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
     private readonly IAvailabilityService _availability;
+    private readonly ILogger<RearrangementOptionsService> _logger;
 
     public RearrangementOptionsService(
         IBookingHoldRepository holds,
         IBookingSlotRepository slots,
         IBookingTransactionRepository transactions,
-        IAvailabilityService availability)
+        IAvailabilityService availability,
+        ILogger<RearrangementOptionsService>? logger = null)
     {
         _holds = holds;
         _slots = slots;
         _transactions = transactions;
         _availability = availability;
+        _logger = logger ?? NullLogger<RearrangementOptionsService>.Instance;
     }
 
     public async Task<Result<RearrangementOptionsResponse>> HandleAsync(GetRearrangementOptionsCommand cmd, CancellationToken ct)
@@ -72,11 +78,23 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
         var isRemote = cmd.IsRemote ?? tx.IsRemote;
         var meetingType = string.IsNullOrWhiteSpace(cmd.MeetingType) ? tx.MeetingType ?? "Review" : cmd.MeetingType;
         var limit = cmd.Limit.GetValueOrDefault(10);
+        var clientLookupRef = ResolveClientLookupRef(tx, isRemote);
+        if (!isRemote && string.IsNullOrWhiteSpace(clientLookupRef))
+        {
+            return Result<RearrangementOptionsResponse>.Fail(
+                HttpStatusCode.BadRequest,
+                "Original booking transaction reference is required for in-person rearrangement options.",
+                Errors.Validation);
+        }
+
+        LogRearrangementContext(hold.Id, tx.TransactionRef, !isRemote, clientLookupRef is null ? "NotRequiredRemote" : "OriginalBookingTransactionRef");
 
         var assignedQuery = new GetAvailabilityQuery
         {
             ClientId = tx.TransactionRef,
             TransactionId = tx.Id,
+            ClientLookupRef = clientLookupRef,
+            ClientLookupSource = clientLookupRef is null ? null : "OriginalBookingTransactionRef",
             PreferredStart = startUtc,
             Duration = durationMinutes,
             IsRemote = isRemote,
@@ -101,6 +119,8 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
         {
             ClientId = tx.TransactionRef,
             TransactionId = tx.Id,
+            ClientLookupRef = clientLookupRef,
+            ClientLookupSource = clientLookupRef is null ? null : "OriginalBookingTransactionRef",
             PreferredStart = startUtc,
             Duration = durationMinutes,
             IsRemote = isRemote,
@@ -161,4 +181,30 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
                 NextCursor = null
             }
         };
+
+    private static string? ResolveClientLookupRef(BookingTransaction tx, bool isRemote)
+        => isRemote ? null : tx.TransactionRef;
+
+    private void LogRearrangementContext(
+        string bookingId,
+        string? bookingTransactionRef,
+        bool lookupAttempted,
+        string lookupSource)
+    {
+        _logger.LogInformation(
+            "Booking in-person rearrangement context. BookingId={BookingId} BookingTransactionRefHash={BookingTransactionRefHash} ClientLookupAttempted={ClientLookupAttempted} LookupSource={LookupSource}",
+            bookingId,
+            HashForLog(bookingTransactionRef),
+            lookupAttempted,
+            lookupSource);
+    }
+
+    private static string? HashForLog(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value.Trim()));
+        return Convert.ToHexString(bytes)[..12];
+    }
 }

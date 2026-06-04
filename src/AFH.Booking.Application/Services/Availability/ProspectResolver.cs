@@ -2,6 +2,8 @@ using AFH.Booking.Application.Abstractions.Availability;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Models.Availability;
 using AFH.Booking.Domain.Availability;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace AFH.Booking.Application.Availability;
 
@@ -25,7 +27,8 @@ public sealed class ProspectResolver : IProspectResolver
         if (query.IsRemote)
             return (null, null);
 
-        var leadKey = string.IsNullOrWhiteSpace(query.TransactionId) ? query.ClientId : query.TransactionId;
+        var lookup = ResolveLeadLookup(query);
+        var leadKey = lookup.Reference;
         if (string.IsNullOrWhiteSpace(leadKey))
         {
             return (null,
@@ -38,11 +41,22 @@ public sealed class ProspectResolver : IProspectResolver
         Domain.Client.ClientDirectoryItem? prospect;
         try
         {
+            _logger.LogInformation(
+                "Booking availability prospect lookup. IsRemote={IsRemote} LookupAttempted={LookupAttempted} LookupSource={LookupSource} LookupRefHash={LookupRefHash}",
+                false,
+                true,
+                lookup.Source,
+                HashForLog(leadKey));
+
             prospect = await _clients.GetAsync(leadKey.Trim(), ct);
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogWarning(ex, "Leads directory call failed for lookup key {LeadKey}.", leadKey);
+            _logger.LogWarning(
+                ex,
+                "Leads directory call failed. LookupSource={LookupSource} LookupRefHash={LookupRefHash}.",
+                lookup.Source,
+                HashForLog(leadKey));
             return (null,
                 Result<GetAvailabilityResponse>.Fail(
                     HttpStatusCode.BadGateway,
@@ -60,13 +74,40 @@ public sealed class ProspectResolver : IProspectResolver
         }
 
         _logger.LogInformation(
-            "Booking availability prospect resolved. IsRemote={IsRemote} TransactionId={TransactionId} ProspectLocationResolved={ProspectLocationResolved}",
+            "Booking availability prospect resolved. IsRemote={IsRemote} LookupSource={LookupSource} LookupRefHash={LookupRefHash} ProspectLocationResolved={ProspectLocationResolved}",
             false,
-            query.TransactionId ?? query.ClientId,
+            lookup.Source,
+            HashForLog(leadKey),
             !string.IsNullOrWhiteSpace(prospect.StreetName1) &&
             !string.IsNullOrWhiteSpace(prospect.Town) &&
             !string.IsNullOrWhiteSpace(prospect.PostalCode));
 
         return (prospect, null);
+    }
+
+    private static (string? Reference, string Source) ResolveLeadLookup(GetAvailabilityQuery query)
+    {
+        if (!string.IsNullOrWhiteSpace(query.ClientLookupRef))
+        {
+            return (
+                query.ClientLookupRef,
+                string.IsNullOrWhiteSpace(query.ClientLookupSource)
+                    ? "ClientLookupRef"
+                    : query.ClientLookupSource);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.TransactionId))
+            return (query.TransactionId, "TransactionId");
+
+        return (query.ClientId, "ClientId");
+    }
+
+    private static string? HashForLog(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value.Trim()));
+        return Convert.ToHexString(bytes)[..12];
     }
 }

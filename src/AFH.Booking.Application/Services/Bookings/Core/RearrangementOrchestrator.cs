@@ -265,7 +265,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             },
             OccurredUtc: _clock.UtcNow,
             CorrelationId: cmd.CorrelationId,
-            SourceSystem: "BookingService",
+            SourceSystem: cmd.ActorContext?.SourceApplication ?? "BookingService",
             RelatedBookingId: existingBooking.Hold.Id,
             PreviousState: LifecycleStates.Booked,
             NewState: LifecycleStates.Rearranged), ct);

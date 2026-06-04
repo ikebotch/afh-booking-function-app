@@ -8,6 +8,7 @@ using AFH.Booking.Application.Approvals;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Models.Approvals;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using Moq;
@@ -176,12 +177,11 @@ public sealed class RearrangementWorkflowContextTests
         }, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        harness.NotificationStep.Verify(x => x.ExecuteAsync(
-            LifecycleEventTypes.Rearranged,
-            "booking-new",
-            BookingActorContext.ActorInternalAdmin,
-            It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
-            It.IsAny<IReadOnlyDictionary<string, string>>(),
+        harness.Notifications.Verify(x => x.RequestAsync(
+            It.Is<BookingWorkflowNotificationRequest>(request =>
+                request.LifecycleEventType == LifecycleEventTypes.Rearranged &&
+                request.CorrelationId == "booking-new" &&
+                request.ActorType == BookingActorContext.ActorInternalAdmin),
             It.IsAny<CancellationToken>()), Times.Once);
         harness.Downstream.Verify(x => x.PublishBookingChangeAsync(
             "booking-new",
@@ -318,14 +318,14 @@ public sealed class RearrangementWorkflowContextTests
         private RearrangementHarness(
             RearrangementOrchestrator sut,
             Mock<ICancellationOrchestrator> cancel,
-            Mock<IBookingNotificationStep> notificationStep,
+            Mock<IBookingWorkflowNotificationAdapter> notifications,
             Mock<IDownstreamUpdateService> downstream,
             List<BookingLifecycleEventRecord> events,
             Func<CreateHoldCommand?> getLastCreateHoldCommand)
         {
             Sut = sut;
             Cancel = cancel;
-            NotificationStep = notificationStep;
+            Notifications = notifications;
             Downstream = downstream;
             Events = events;
             _getLastCreateHoldCommand = getLastCreateHoldCommand;
@@ -335,7 +335,7 @@ public sealed class RearrangementWorkflowContextTests
 
         public RearrangementOrchestrator Sut { get; }
         public Mock<ICancellationOrchestrator> Cancel { get; }
-        public Mock<IBookingNotificationStep> NotificationStep { get; }
+        public Mock<IBookingWorkflowNotificationAdapter> Notifications { get; }
         public Mock<IDownstreamUpdateService> Downstream { get; }
         public List<BookingLifecycleEventRecord> Events { get; }
         public CreateHoldCommand? LastCreateHoldCommand => _getLastCreateHoldCommand();
@@ -474,15 +474,11 @@ public sealed class RearrangementWorkflowContextTests
                     CancelledUtc = FixedNow,
                     Status = "Cancelled"
                 }));
-            var notificationStep = new Mock<IBookingNotificationStep>();
-            notificationStep.Setup(x => x.ExecuteAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<string>(),
-                    It.IsAny<string>(),
-                    It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
-                    It.IsAny<IReadOnlyDictionary<string, string>>(),
+            var notifications = new Mock<IBookingWorkflowNotificationAdapter>();
+            notifications.Setup(x => x.RequestAsync(
+                    It.IsAny<BookingWorkflowNotificationRequest>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync((LifecycleStepStatuses.Succeeded, null, null));
+                .ReturnsAsync(BookingWorkflowNotificationOutcome.Succeeded("BookingRescheduled", 0));
             var downstream = new Mock<IDownstreamUpdateService>();
             downstream.Setup(x => x.PublishBookingChangeAsync(
                     It.IsAny<string>(),
@@ -514,13 +510,13 @@ public sealed class RearrangementWorkflowContextTests
                 create.Object,
                 confirm.Object,
                 cancel.Object,
-                notificationStep.Object,
+                notifications.Object,
                 downstream.Object,
                 lifecycle.Object,
                 uow.Object,
                 new StubClock(FixedNow));
 
-            return new RearrangementHarness(sut, cancel, notificationStep, downstream, events, () => lastCreate);
+            return new RearrangementHarness(sut, cancel, notifications, downstream, events, () => lastCreate);
         }
     }
 

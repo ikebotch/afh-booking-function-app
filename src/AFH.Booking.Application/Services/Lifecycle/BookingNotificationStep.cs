@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Notifications;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Application.Models.Lifecycle.Constants;
 using AFH.Booking.Application.Models.Notifications;
 using Microsoft.Extensions.Logging;
@@ -45,7 +46,10 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
             _logger.LogInformation(
                 "Booking notification step skipped because lifecycle event has no notification mapping. LifecycleEventType={LifecycleEventType}",
                 lifecycleEventType);
-            return (LifecycleStepStatuses.Skipped, null, null);
+            return (
+                LifecycleStepStatuses.Skipped,
+                BookingWorkflowNotificationOutcomeStatuses.SkippedNoMapping,
+                "Lifecycle event has no notification mapping.");
         }
 
         _logger.LogInformation(
@@ -74,7 +78,21 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
                 _logger.LogInformation(
                     "Booking notification skipped because policy is disabled. NotificationType={NotificationType}",
                     notificationType.Name);
-                return (LifecycleStepStatuses.Skipped, null, null);
+                return (
+                    LifecycleStepStatuses.Skipped,
+                    BookingWorkflowNotificationOutcomeStatuses.SkippedPolicyDisabled,
+                    "Notification policy is disabled.");
+            }
+
+            if (policy.Channels.Count(x => x.Enabled) == 0)
+            {
+                _logger.LogInformation(
+                    "Booking notification skipped because policy has no enabled channels. NotificationType={NotificationType}",
+                    notificationType.Name);
+                return (
+                    LifecycleStepStatuses.Skipped,
+                    BookingWorkflowNotificationOutcomeStatuses.SkippedNoChannels,
+                    "No notification channels are enabled.");
             }
 
             var resolvedRecipients = await _recipientResolver.ResolveAsync(policy, recipients, data, ct);
@@ -91,7 +109,10 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
                 _logger.LogInformation(
                     "Booking notification skipped because no recipients resolved. NotificationType={NotificationType}",
                     notificationType.Name);
-                return (LifecycleStepStatuses.Skipped, null, null);
+                return (
+                    LifecycleStepStatuses.Skipped,
+                    BookingWorkflowNotificationOutcomeStatuses.SkippedNoRecipients,
+                    "No notification recipients resolved.");
             }
 
             _logger.LogInformation(

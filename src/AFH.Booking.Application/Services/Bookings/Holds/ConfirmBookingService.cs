@@ -7,6 +7,7 @@ using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Application.Bookings;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
@@ -28,7 +29,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     private readonly IBookingConflictService _conflicts;
     private readonly ISelectedSlotRouteTimeGuard _routeTimeGuard;
     private readonly IBookingLifecycleRecorder _lifecycle;
-    private readonly IBookingNotificationStep _notificationStep;
+    private readonly IBookingWorkflowNotificationAdapter _notifications;
     private readonly IHoldWindowFactory _holdWindowFactory;
     private readonly IBookingTokenService _tokenService;
     private readonly NotificationsOptions _notificationOptions;
@@ -46,7 +47,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         IBookingConflictService conflicts,
         ISelectedSlotRouteTimeGuard routeTimeGuard,
         IBookingLifecycleRecorder lifecycle,
-        IBookingNotificationStep notificationStep,
+        IBookingWorkflowNotificationAdapter notifications,
         IHoldWindowFactory holdWindowFactory,
         IBookingTokenService tokenService,
         IOptions<NotificationsOptions> notificationOptions,
@@ -63,7 +64,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         _conflicts = conflicts;
         _routeTimeGuard = routeTimeGuard;
         _lifecycle = lifecycle;
-        _notificationStep = notificationStep;
+        _notifications = notifications;
         _holdWindowFactory = holdWindowFactory;
         _tokenService = tokenService;
         _notificationOptions = notificationOptions.Value;
@@ -357,6 +358,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         var notificationStatus = LifecycleStepStatuses.Succeeded;
         string? notificationErrorCode = null;
         string? notificationErrorDetails = null;
+        BookingWorkflowNotificationOutcome? outcome = null;
 
         try
         {
@@ -364,28 +366,33 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 ? null
                 : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
 
-            var result = await _notificationStep.ExecuteAsync(
-                LifecycleEventTypes.Booked,
-                context.Hold.Id,
-                LifecycleActors.Client,
-                BuildBookingConfirmedRecipients(client),
-                BuildBookingConfirmedNotificationData(
-                    context,
-                    _holdWindowFactory.Create(context.Slot, context.Transaction),
-                    eventId,
-                    joinUrl,
-                    links),
+            outcome = await _notifications.RequestAsync(
+                new BookingWorkflowNotificationRequest(
+                    LifecycleEventTypes.Booked,
+                    context.Hold.Id,
+                    LifecycleActors.Client,
+                    BuildBookingConfirmedRecipients(client),
+                    BuildBookingConfirmedNotificationData(
+                        context,
+                        _holdWindowFactory.Create(context.Slot, context.Transaction),
+                        eventId,
+                        joinUrl,
+                        links)),
                 ct);
-
-            notificationStatus = result.Status;
-            notificationErrorCode = result.ErrorCode;
-            notificationErrorDetails = result.ErrorDetails;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            notificationStatus = LifecycleStepStatuses.Failed;
-            notificationErrorCode = LifecycleErrorCodes.NotificationFailed;
-            notificationErrorDetails = ex.Message;
+            outcome = BookingWorkflowNotificationOutcome.Failed(
+                "BookingConfirmed",
+                0,
+                failureCode: LifecycleErrorCodes.NotificationFailed);
+        }
+
+        if (outcome is not null)
+        {
+            notificationStatus = outcome.ToLifecycleStepStatus();
+            notificationErrorCode = outcome.ToLifecycleStepErrorCode();
+            notificationErrorDetails = outcome.ToLifecycleStepDetails();
         }
 
         await _lifecycle.RecordStepAsync(

@@ -3,6 +3,7 @@ using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings.Commands;
 using System.Text.Json;
@@ -18,7 +19,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
     private readonly ICalendarGateway _calendar;
     private readonly IAdviserProfileProjectionRepository _profiles;
     private readonly IClock _clock;
-    private readonly IBookingNotificationStep _notificationStep;
+    private readonly IBookingWorkflowNotificationAdapter _notifications;
     private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
     private readonly IBookingLifecycleRecorder _lifecycle;
@@ -32,7 +33,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         ICalendarGateway calendar,
         IAdviserProfileProjectionRepository profiles,
         IClock clock,
-        IBookingNotificationStep notificationStep,
+        IBookingWorkflowNotificationAdapter notifications,
         IDownstreamUpdateService downstreamUpdates,
         IBookingLifecycleRecorder lifecycle,
         ILogger<CancellationOrchestrator> logger,
@@ -45,7 +46,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         _calendar = calendar;
         _profiles = profiles;
         _clock = clock;
-        _notificationStep = notificationStep;
+        _notifications = notifications;
         _clients = clients;
         _downstreamUpdates = downstreamUpdates;
         _lifecycle = lifecycle;
@@ -248,6 +249,9 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         var notificationStepStatus = LifecycleStepStatuses.Skipped;
         string? notificationStepError = null;
         string? notificationStepDetails = null;
+        BookingWorkflowNotificationOutcome? outcome = sendClientNotification
+            ? null
+            : BookingWorkflowNotificationOutcome.NotRequested("BookingCancelled");
 
         if (sendClientNotification)
         {
@@ -257,25 +261,30 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
                     ? null
                     : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
 
-                var result = await _notificationStep.ExecuteAsync(
-                    LifecycleEventTypes.Cancelled,
-                    context.Hold.Id,
-                    ResolveNotificationActorType(cmd),
-                    BuildBookingCancelledRecipients(client),
-                    BuildBookingCancelledNotificationData(cmd, context, eventId),
+                outcome = await _notifications.RequestAsync(
+                    new BookingWorkflowNotificationRequest(
+                        LifecycleEventTypes.Cancelled,
+                        context.Hold.Id,
+                        ResolveNotificationActorType(cmd),
+                        BuildBookingCancelledRecipients(client),
+                        BuildBookingCancelledNotificationData(cmd, context, eventId)),
                     ct);
-
-                notificationStepStatus = result.Status;
-                notificationStepError = result.ErrorCode;
-                notificationStepDetails = result.ErrorDetails;
             }
             catch (Exception ex)
             {
-                notificationStepStatus = LifecycleStepStatuses.Failed;
-                notificationStepError = LifecycleErrorCodes.NotificationFailed;
-                notificationStepDetails = ex.Message;
+                outcome = BookingWorkflowNotificationOutcome.Failed(
+                    "BookingCancelled",
+                    0,
+                    failureCode: LifecycleErrorCodes.NotificationFailed);
                 _logger.LogWarning(ex, "Notification dispatch failed for HoldId={HoldId}", context.Hold.Id);
             }
+        }
+
+        if (outcome is not null)
+        {
+            notificationStepStatus = outcome.ToLifecycleStepStatus();
+            notificationStepError = outcome.ToLifecycleStepErrorCode();
+            notificationStepDetails = outcome.ToLifecycleStepDetails();
         }
 
         await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(

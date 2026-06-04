@@ -6,6 +6,7 @@ using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Application.Models.Lifecycle;
+using AFH.Booking.Application.Models.Lifecycle.Constants;
 using AFH.Booking.Domain.Bookings.Commands;
 using Microsoft.Extensions.Logging;
 
@@ -19,7 +20,7 @@ public sealed class CreateBookingService : ICreateBookingService
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
     private readonly IBookingLifecycleRecorder _lifecycle;
-    private readonly IBookingNotificationStep _notificationStep;
+    private readonly IBookingWorkflowNotificationAdapter _notifications;
     private readonly IClientDirectory? _clients;
     private readonly ILogger<CreateBookingService> _logger;
 
@@ -30,7 +31,7 @@ public sealed class CreateBookingService : ICreateBookingService
         IUnitOfWork uow,
         IClock clock,
         IBookingLifecycleRecorder lifecycle,
-        IBookingNotificationStep notificationStep,
+        IBookingWorkflowNotificationAdapter notifications,
         ILogger<CreateBookingService> logger,
         IClientDirectory? clients = null)
     {
@@ -40,7 +41,7 @@ public sealed class CreateBookingService : ICreateBookingService
         _uow = uow;
         _clock = clock;
         _lifecycle = lifecycle;
-        _notificationStep = notificationStep;
+        _notifications = notifications;
         _logger = logger;
         _clients = clients;
     }
@@ -169,6 +170,7 @@ public sealed class CreateBookingService : ICreateBookingService
         string? notificationErrorCode = null;
         string? notificationErrorDetails = null;
         var startedUtc = _clock.UtcNow;
+        BookingWorkflowNotificationOutcome? outcome = null;
 
         try
         {
@@ -176,20 +178,29 @@ public sealed class CreateBookingService : ICreateBookingService
                 ? null
                 : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
 
-            (notificationStatus, notificationErrorCode, notificationErrorDetails) = await _notificationStep.ExecuteAsync(
-                LifecycleEventTypes.HoldCreated,
-                hold.Id,
-                LifecycleActors.System,
-                BuildHoldCreatedRecipients(client),
-                BuildHoldCreatedNotificationData(hold, context),
+            outcome = await _notifications.RequestAsync(
+                new BookingWorkflowNotificationRequest(
+                    LifecycleEventTypes.HoldCreated,
+                    hold.Id,
+                    LifecycleActors.System,
+                    BuildHoldCreatedRecipients(client),
+                    BuildHoldCreatedNotificationData(hold, context)),
                 ct);
         }
         catch (Exception ex)
         {
-            notificationStatus = LifecycleStepStatuses.Failed;
-            notificationErrorCode = LifecycleErrorCodes.NotificationFailed;
-            notificationErrorDetails = ex.Message;
+            outcome = BookingWorkflowNotificationOutcome.Failed(
+                "BookingHoldCreated",
+                0,
+                failureCode: LifecycleErrorCodes.NotificationFailed);
             _logger.LogWarning(ex, "Hold notification publish failed for HoldId={HoldId}. Hold creation succeeded.", hold.Id);
+        }
+
+        if (outcome is not null)
+        {
+            notificationStatus = outcome.ToLifecycleStepStatus();
+            notificationErrorCode = outcome.ToLifecycleStepErrorCode();
+            notificationErrorDetails = outcome.ToLifecycleStepDetails();
         }
 
         await _lifecycle.RecordStepAsync(lifecycleEventId, new BookingLifecycleStepRecord(

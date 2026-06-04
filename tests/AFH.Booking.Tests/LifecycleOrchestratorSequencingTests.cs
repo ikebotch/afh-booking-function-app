@@ -3,6 +3,7 @@ using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Application.Abstractions.Lifecycle;
@@ -61,20 +62,20 @@ public sealed class LifecycleOrchestratorSequencingTests
         audit.Setup(x => x.RecordStepAsync(It.IsAny<LifecycleAuditStepEntry>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var notificationStepCancel = new Mock<IBookingNotificationStep>();
+        var notificationStepCancel = new Mock<IBookingWorkflowNotificationAdapter>();
         string? publishedCancelNotificationEventType = null;
         string? publishedCancelNotificationCorrelationId = null;
         string? publishedCancelNotificationActorType = null;
         IReadOnlyDictionary<string, string>? publishedCancelNotificationData = null;
-        notificationStepCancel.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, string, string, IReadOnlyList<BookingNotificationRecipient>, IReadOnlyDictionary<string, string>, CancellationToken>((eventType, correlationId, actorType, _, data, _) => {
+        notificationStepCancel.Setup(x => x.RequestAsync(It.IsAny<BookingWorkflowNotificationRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<BookingWorkflowNotificationRequest, CancellationToken>((request, _) => {
                 order.Add("notifications");
-                publishedCancelNotificationEventType = eventType;
-                publishedCancelNotificationCorrelationId = correlationId;
-                publishedCancelNotificationActorType = actorType;
-                publishedCancelNotificationData = data;
+                publishedCancelNotificationEventType = request.LifecycleEventType;
+                publishedCancelNotificationCorrelationId = request.CorrelationId;
+                publishedCancelNotificationActorType = request.ActorType;
+                publishedCancelNotificationData = request.Data;
             })
-            .ReturnsAsync((LifecycleStepStatuses.Succeeded, null, null));
+            .ReturnsAsync(BookingWorkflowNotificationOutcome.Succeeded("BookingCancelled", 0));
 
         var orchestrator = new CancellationOrchestrator(
             holds.Object,
@@ -142,7 +143,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             calendar.Object,
             new StubProfiles("adviser-1", "adviser.one@tenant.com"),
             new StubClock(DateTime.UtcNow),
-            Mock.Of<IBookingNotificationStep>(),
+            Mock.Of<IBookingWorkflowNotificationAdapter>(),
             downstream.Object,
             new BookingLifecycleRecorder(audit.Object),
             Mock.Of<ILogger<CancellationOrchestrator>>());
@@ -203,20 +204,20 @@ public sealed class LifecycleOrchestratorSequencingTests
             .Callback(() => order.Add("cancel"))
             .ReturnsAsync(Result<CancelBookingResponse>.Ok(new CancelBookingResponse { BookingId = "booking-old", CancelledUtc = DateTime.UtcNow, Status = "Cancelled" }));
 
-        var notificationStep = new Mock<IBookingNotificationStep>();
+        var notificationStep = new Mock<IBookingWorkflowNotificationAdapter>();
         string? publishedNotificationEventType = null;
         string? publishedNotificationCorrelationId = null;
         string? publishedNotificationActorType = null;
         IReadOnlyDictionary<string, string>? publishedNotificationData = null;
-        notificationStep.Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .Callback<string, string, string, IReadOnlyList<BookingNotificationRecipient>, IReadOnlyDictionary<string, string>, CancellationToken>((eventType, correlationId, actorType, _, data, _) => {
+        notificationStep.Setup(x => x.RequestAsync(It.IsAny<BookingWorkflowNotificationRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<BookingWorkflowNotificationRequest, CancellationToken>((request, _) => {
                 order.Add("notifications");
-                publishedNotificationEventType = eventType;
-                publishedNotificationCorrelationId = correlationId;
-                publishedNotificationActorType = actorType;
-                publishedNotificationData = data;
+                publishedNotificationEventType = request.LifecycleEventType;
+                publishedNotificationCorrelationId = request.CorrelationId;
+                publishedNotificationActorType = request.ActorType;
+                publishedNotificationData = request.Data;
             })
-            .ReturnsAsync((LifecycleStepStatuses.Succeeded, null, null));
+            .ReturnsAsync(BookingWorkflowNotificationOutcome.Succeeded("BookingRescheduled", 0));
 
         var downstream = new Mock<IDownstreamUpdateService>();
         downstream.Setup(x => x.PublishBookingChangeAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -317,7 +318,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             create.Object,
             confirm.Object,
             cancel.Object,
-            Mock.Of<IBookingNotificationStep>(),
+            Mock.Of<IBookingWorkflowNotificationAdapter>(),
             downstream.Object,
             new BookingLifecycleRecorder(audit.Object),
             uow.Object,
@@ -367,7 +368,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             create.Object,
             Mock.Of<IConfirmBookingService>(),
             Mock.Of<ICancellationOrchestrator>(),
-            Mock.Of<IBookingNotificationStep>(),
+            Mock.Of<IBookingWorkflowNotificationAdapter>(),
             Mock.Of<IDownstreamUpdateService>(),
             new BookingLifecycleRecorder(Mock.Of<ILifecycleAuditService>()),
             Mock.Of<IUnitOfWork>(),
@@ -417,7 +418,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             create.Object,
             Mock.Of<IConfirmBookingService>(),
             Mock.Of<ICancellationOrchestrator>(),
-            Mock.Of<IBookingNotificationStep>(),
+            Mock.Of<IBookingWorkflowNotificationAdapter>(),
             Mock.Of<IDownstreamUpdateService>(),
             new BookingLifecycleRecorder(Mock.Of<ILifecycleAuditService>()),
             Mock.Of<IUnitOfWork>(),
@@ -467,7 +468,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             create.Object,
             Mock.Of<IConfirmBookingService>(),
             Mock.Of<ICancellationOrchestrator>(),
-            Mock.Of<IBookingNotificationStep>(),
+            Mock.Of<IBookingWorkflowNotificationAdapter>(),
             Mock.Of<IDownstreamUpdateService>(),
             new BookingLifecycleRecorder(Mock.Of<ILifecycleAuditService>()),
             Mock.Of<IUnitOfWork>(),
@@ -523,7 +524,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             create.Object,
             confirm.Object,
             cancel.Object,
-            Mock.Of<IBookingNotificationStep>(),
+            Mock.Of<IBookingWorkflowNotificationAdapter>(),
             downstream.Object,
             new BookingLifecycleRecorder(audit.Object),
             uow.Object,

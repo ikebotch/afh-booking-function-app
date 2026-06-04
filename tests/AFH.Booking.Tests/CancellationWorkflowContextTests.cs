@@ -8,6 +8,7 @@ using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Models.AdviserProjection;
 using AFH.Booking.Application.Models.Approvals;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Application.Services.AdviserProjection;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
@@ -176,12 +177,8 @@ public sealed class CancellationWorkflowContextTests
         }, sendClientNotification: false, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        harness.NotificationStep.Verify(x => x.ExecuteAsync(
-            It.IsAny<string>(),
-            It.IsAny<string>(),
-            It.IsAny<string>(),
-            It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
-            It.IsAny<IReadOnlyDictionary<string, string>>(),
+        harness.Notifications.Verify(x => x.RequestAsync(
+            It.IsAny<BookingWorkflowNotificationRequest>(),
             It.IsAny<CancellationToken>()), Times.Never);
         var notification = Assert.Single(harness.Steps, x => x.StepName == LifecycleStepNames.Notifications);
         Assert.Equal(LifecycleStepStatuses.Skipped, notification.Status);
@@ -305,14 +302,14 @@ public sealed class CancellationWorkflowContextTests
             CancellationOrchestrator sut,
             Mock<ICalendarGateway> calendar,
             Mock<IDownstreamUpdateService> downstream,
-            Mock<IBookingNotificationStep> notificationStep,
+            Mock<IBookingWorkflowNotificationAdapter> notifications,
             List<BookingLifecycleEventRecord> events,
             List<BookingLifecycleStepRecord> steps)
         {
             Sut = sut;
             Calendar = calendar;
             Downstream = downstream;
-            NotificationStep = notificationStep;
+            Notifications = notifications;
             Events = events;
             Steps = steps;
         }
@@ -320,7 +317,7 @@ public sealed class CancellationWorkflowContextTests
         public CancellationOrchestrator Sut { get; }
         public Mock<ICalendarGateway> Calendar { get; }
         public Mock<IDownstreamUpdateService> Downstream { get; }
-        public Mock<IBookingNotificationStep> NotificationStep { get; }
+        public Mock<IBookingWorkflowNotificationAdapter> Notifications { get; }
         public List<BookingLifecycleEventRecord> Events { get; }
         public List<BookingLifecycleStepRecord> Steps { get; }
 
@@ -389,15 +386,11 @@ public sealed class CancellationWorkflowContextTests
             var calendar = new Mock<ICalendarGateway>();
             calendar.Setup(x => x.CancelBookingEventAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .Returns(Task.CompletedTask);
-            var notificationStep = new Mock<IBookingNotificationStep>();
-            notificationStep.Setup(x => x.ExecuteAsync(
-                    It.IsAny<string>(),
-                    It.IsAny<string>(),
-                    It.IsAny<string>(),
-                    It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
-                    It.IsAny<IReadOnlyDictionary<string, string>>(),
+            var notifications = new Mock<IBookingWorkflowNotificationAdapter>();
+            notifications.Setup(x => x.RequestAsync(
+                    It.IsAny<BookingWorkflowNotificationRequest>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync((LifecycleStepStatuses.Succeeded, null, null));
+                .ReturnsAsync(BookingWorkflowNotificationOutcome.Succeeded("BookingCancelled", 0));
             var downstream = new Mock<IDownstreamUpdateService>();
             downstream.Setup(x => x.PublishBookingChangeAsync(
                     It.IsAny<string>(),
@@ -429,12 +422,12 @@ public sealed class CancellationWorkflowContextTests
                 calendar.Object,
                 new StubProfiles("adviser-1", "adviser.one@tenant.com"),
                 new StubClock(FixedNow),
-                notificationStep.Object,
+                notifications.Object,
                 downstream.Object,
                 lifecycle.Object,
                 Mock.Of<ILogger<CancellationOrchestrator>>());
 
-            return new CancellationHarness(sut, calendar, downstream, notificationStep, events, steps);
+            return new CancellationHarness(sut, calendar, downstream, notifications, events, steps);
         }
     }
 

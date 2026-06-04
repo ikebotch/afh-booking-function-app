@@ -9,6 +9,7 @@ using AFH.Booking.Application.Holds;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Application.Abstractions.Lifecycle;
+using AFH.Booking.Application.Models.Lifecycle;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
@@ -23,7 +24,7 @@ public class CreateBookingServiceTests
     private readonly Mock<IUnitOfWork> _uow;
     private readonly Mock<IClock> _clock;
     private readonly Mock<IBookingLifecycleRecorder> _lifecycle;
-    private readonly Mock<IBookingNotificationStep> _notificationStep;
+    private readonly Mock<IBookingWorkflowNotificationAdapter> _notifications;
     private readonly CreateBookingService _sut;
 
     private static readonly DateTime FixedNow = new DateTime(2026, 03, 25, 10, 0, 0, DateTimeKind.Utc);
@@ -36,19 +37,15 @@ public class CreateBookingServiceTests
         _uow = new Mock<IUnitOfWork>();
         _clock = new Mock<IClock>();
         _lifecycle = new Mock<IBookingLifecycleRecorder>();
-        _notificationStep = new Mock<IBookingNotificationStep>();
+        _notifications = new Mock<IBookingWorkflowNotificationAdapter>();
 
         _clock.Setup(c => c.UtcNow).Returns(FixedNow);
         _lifecycle.Setup(x => x.RecordEventAsync(It.IsAny<BookingLifecycleEventRecord>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("hold-created-event-id");
-        _notificationStep.Setup(x => x.ExecuteAsync(
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
-                It.IsAny<IReadOnlyDictionary<string, string>>(),
+        _notifications.Setup(x => x.RequestAsync(
+                It.IsAny<BookingWorkflowNotificationRequest>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((LifecycleStepStatuses.Succeeded, null, null));
+            .ReturnsAsync(BookingWorkflowNotificationOutcome.Succeeded("BookingHoldCreated", 0));
 
         _sut = new CreateBookingService(
             _loader.Object,
@@ -57,7 +54,7 @@ public class CreateBookingServiceTests
             _uow.Object,
             _clock.Object,
             _lifecycle.Object,
-            _notificationStep.Object,
+            _notifications.Object,
             NullLogger<CreateBookingService>.Instance);
     }
 
@@ -130,14 +127,16 @@ public class CreateBookingServiceTests
             .ReturnsAsync(Result<BookingHold>.Ok(hold));
         _calendarService.Setup(c => c.CreateHoldEventAsync(context, hold, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<Unit>.Ok(Unit.Value));
-        _notificationStep.Setup(x => x.ExecuteAsync(
-                LifecycleEventTypes.HoldCreated,
-                hold.Id,
-                LifecycleActors.System,
-                It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
-                It.IsAny<IReadOnlyDictionary<string, string>>(),
+        _notifications.Setup(x => x.RequestAsync(
+                It.Is<BookingWorkflowNotificationRequest>(request =>
+                    request.LifecycleEventType == LifecycleEventTypes.HoldCreated &&
+                    request.CorrelationId == hold.Id &&
+                    request.ActorType == LifecycleActors.System),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync((LifecycleStepStatuses.Skipped, null, "Policy disabled"));
+            .ReturnsAsync(BookingWorkflowNotificationOutcome.Skipped(
+                "BookingHoldCreated",
+                BookingWorkflowNotificationOutcomeStatuses.SkippedPolicyDisabled,
+                0));
         _lifecycle.Setup(x => x.RecordEventAsync(It.IsAny<BookingLifecycleEventRecord>(), It.IsAny<CancellationToken>()))
             .Callback<BookingLifecycleEventRecord, CancellationToken>((entry, _) => lifecycleEvent = entry)
             .ReturnsAsync("hold-created-event-id");
@@ -222,12 +221,8 @@ public class CreateBookingServiceTests
             .ReturnsAsync(Result<BookingHold>.Ok(hold));
         _calendarService.Setup(c => c.CreateHoldEventAsync(context, hold, It.IsAny<CancellationToken>()))
             .ReturnsAsync(Result<Unit>.Ok(Unit.Value));
-        _notificationStep.Setup(x => x.ExecuteAsync(
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<string>(),
-                It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
-                It.IsAny<IReadOnlyDictionary<string, string>>(),
+        _notifications.Setup(x => x.RequestAsync(
+                It.IsAny<BookingWorkflowNotificationRequest>(),
                 It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("notification policy unavailable"));
         _lifecycle.Setup(x => x.RecordStepAsync(

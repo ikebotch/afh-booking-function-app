@@ -8,6 +8,7 @@ using AFH.Booking.Application.Abstractions.Location;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Holds;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Common;
@@ -97,10 +98,10 @@ public sealed class BookingTransactionRehydrationTests
         audit.Setup(a => a.RecordStepAsync(It.IsAny<LifecycleAuditStepEntry>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
-        var notificationPublisher = new Mock<IBookingNotificationStep>();
+        var notificationPublisher = new Mock<IBookingWorkflowNotificationAdapter>();
         notificationPublisher
-            .Setup(x => x.ExecuteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync((LifecycleStepStatuses.Succeeded, null, null));
+            .Setup(x => x.RequestAsync(It.IsAny<BookingWorkflowNotificationRequest>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BookingWorkflowNotificationOutcome.Succeeded("BookingConfirmed", 0));
 
         var tokenService = new Mock<IBookingTokenService>();
         tokenService

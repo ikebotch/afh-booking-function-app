@@ -3,6 +3,7 @@ using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Domain.Bookings.Commands;
 using System.Text.Json;
 
@@ -16,7 +17,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private readonly ICreateBookingService _create;
     private readonly IConfirmBookingService _confirm;
     private readonly ICancellationOrchestrator _cancel;
-    private readonly IBookingNotificationStep _notificationStep;
+    private readonly IBookingWorkflowNotificationAdapter _notifications;
     private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
     private readonly IBookingLifecycleRecorder _lifecycle;
@@ -30,7 +31,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         ICreateBookingService create,
         IConfirmBookingService confirm,
         ICancellationOrchestrator cancel,
-        IBookingNotificationStep notificationStep,
+        IBookingWorkflowNotificationAdapter notifications,
         IDownstreamUpdateService downstreamUpdates,
         IBookingLifecycleRecorder lifecycle,
         IUnitOfWork uow,
@@ -43,7 +44,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         _create = create;
         _confirm = confirm;
         _cancel = cancel;
-        _notificationStep = notificationStep;
+        _notifications = notifications;
         _clients = clients;
         _downstreamUpdates = downstreamUpdates;
         _lifecycle = lifecycle;
@@ -304,6 +305,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         var notificationStatus = LifecycleStepStatuses.Succeeded;
         string? notificationErrorCode = null;
         string? notificationErrorDetails = null;
+        BookingWorkflowNotificationOutcome? outcome = null;
 
         try
         {
@@ -311,23 +313,28 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
                 ? null
                 : await _clients.GetAsync(existingBooking.Transaction.TransactionRef, ct);
 
-            var result = await _notificationStep.ExecuteAsync(
-                LifecycleEventTypes.Rearranged,
-                newBookingId,
-                ResolveNotificationActorType(cmd),
-                BuildBookingRescheduledRecipients(client),
-                BuildBookingRescheduledNotificationData(cmd, existingBooking, newBooking, eventId, notificationSummary),
+            outcome = await _notifications.RequestAsync(
+                new BookingWorkflowNotificationRequest(
+                    LifecycleEventTypes.Rearranged,
+                    newBookingId,
+                    ResolveNotificationActorType(cmd),
+                    BuildBookingRescheduledRecipients(client),
+                    BuildBookingRescheduledNotificationData(cmd, existingBooking, newBooking, eventId, notificationSummary)),
                 ct);
-
-            notificationStatus = result.Status;
-            notificationErrorCode = result.ErrorCode;
-            notificationErrorDetails = result.ErrorDetails;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            notificationStatus = LifecycleStepStatuses.Failed;
-            notificationErrorCode = LifecycleErrorCodes.NotificationFailed;
-            notificationErrorDetails = ex.Message;
+            outcome = BookingWorkflowNotificationOutcome.Failed(
+                "BookingRescheduled",
+                0,
+                failureCode: LifecycleErrorCodes.NotificationFailed);
+        }
+
+        if (outcome is not null)
+        {
+            notificationStatus = outcome.ToLifecycleStepStatus();
+            notificationErrorCode = outcome.ToLifecycleStepErrorCode();
+            notificationErrorDetails = outcome.ToLifecycleStepDetails();
         }
 
         await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(

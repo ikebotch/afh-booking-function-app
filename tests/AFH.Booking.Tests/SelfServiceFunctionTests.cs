@@ -120,6 +120,26 @@ public sealed class SelfServiceFunctionTests
     }
 
     [Fact]
+    public async Task CancelBooking_InvalidToken_ReturnsUnauthorizedAndDoesNotCallService()
+    {
+        var access = new StubAccessService(Result<BookingChangeActorContext>.Fail(
+            HttpStatusCode.Unauthorized,
+            "Client token has expired.",
+            Errors.Unauthorized));
+        var service = new StubCancelBookingService();
+        var sut = new SelfServiceCancelBookingFunction(access, service);
+        var request = CreateJsonRequest("""{"reasonCode":"CLIENT_REQUEST"}""");
+        request.Headers.Add("x-booking-access-token", "expired-token");
+
+        var response = await sut.Run(request, "booking-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("booking-1", access.LastBookingId);
+        Assert.Equal("expired-token", access.LastToken);
+        Assert.Null(service.LastCommand);
+    }
+
+    [Fact]
     public async Task RearrangementOptions_ValidToken_CallsApplicationService()
     {
         var access = new StubAccessService();

@@ -37,9 +37,7 @@ public sealed class RearrangeBookingFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, "Validation");
 
-        var requestedBy = string.IsNullOrWhiteSpace(body.RequestedBy)
-            ? BookingActorContext.ActorInternalAdmin
-            : body.RequestedBy.Trim();
+        var requestedBy = ResolveInternalRequestedBy(body.RequestedBy);
         var correlationId = req.Headers.TryGetValues("x-correlation-id", out var values)
             ? values.FirstOrDefault()
             : null;
@@ -70,5 +68,16 @@ public sealed class RearrangeBookingFunction
         }
 
         return await req.OkJsonAsync(result.Value!.ToContract(), ct);
+    }
+
+    private static string ResolveInternalRequestedBy(string? requestedBy)
+    {
+        if (string.IsNullOrWhiteSpace(requestedBy) ||
+            string.Equals(requestedBy.Trim(), LifecycleActors.Client, StringComparison.OrdinalIgnoreCase))
+        {
+            return BookingActorContext.ActorInternalAdmin;
+        }
+
+        return requestedBy.Trim();
     }
 }

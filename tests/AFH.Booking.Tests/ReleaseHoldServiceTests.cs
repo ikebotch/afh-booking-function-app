@@ -169,6 +169,26 @@ public sealed class ReleaseHoldServiceTests
         _holds.Verify(x => x.UpdateAsync(It.IsAny<BookingHold>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Theory]
+    [InlineData(BookingHoldStatus.Released)]
+    [InlineData(BookingHoldStatus.Expired)]
+    [InlineData(BookingHoldStatus.Cancelled)]
+    public async Task HandleAsync_DuplicateReleaseOrExpiry_DoesNotRecordAnotherLifecycleEvent(BookingHoldStatus status)
+    {
+        var hold = Hold(status: status);
+        _holds.Setup(x => x.GetForUpdateAsync("hold-1", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(hold);
+
+        var result = await _sut.HandleAsync(Command(), CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("hold-1", result.Value!.BookingId);
+        Assert.Empty(_events);
+        Assert.Empty(_steps);
+        _calendar.Verify(x => x.CancelBookingEventAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _holds.Verify(x => x.UpdateAsync(It.IsAny<BookingHold>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     [Fact]
     public async Task HandleAsync_StringWrapper_UsesCommandImplementation()
     {

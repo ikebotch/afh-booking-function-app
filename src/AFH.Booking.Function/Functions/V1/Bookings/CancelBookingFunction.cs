@@ -43,17 +43,25 @@ public sealed class CancelBookingFunction
                 return await req.ProblemAsync(HttpStatusCode.BadRequest, "bookingId is required.", ct, "Validation");
 
             var body = await req.ReadJsonAsync<CancelBookingRequest>(ct);
-            var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy) ? "Client" : body!.RequestedBy!.Trim();
+            var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy)
+                ? BookingActorContext.ActorInternalAdmin
+                : body!.RequestedBy!.Trim();
+            var correlationId = req.Headers.TryGetValues("x-correlation-id", out var values)
+                ? values.FirstOrDefault()
+                : null;
 
             var cmd = new CancelBookingCommand
             {
                 BookingId = bookingId.Trim(),
+                ActorContext = BookingActorContext.InternalAdmin(
+                    correlationId: correlationId,
+                    actorType: requestedBy),
                 Reason = BuildReason(body),
                 RequestedBy = requestedBy,
                 ReasonCode = body?.ReasonCode,
                 ReasonDetail = body?.ReasonDetail,
                 ApprovalRequestId = body?.ApprovalRequestId,
-                CorrelationId = req.Headers.TryGetValues("x-correlation-id", out var values) ? values.FirstOrDefault() : null
+                CorrelationId = correlationId
             };
 
             var result = await _service.HandleAsync(cmd, ct);
@@ -92,7 +100,7 @@ public sealed class CancelBookingFunction
             : request.ReasonCode.Trim();
 
         var requestedBy = string.IsNullOrWhiteSpace(request.RequestedBy)
-            ? "Unknown"
+            ? BookingActorContext.ActorInternalAdmin
             : request.RequestedBy.Trim();
 
         var detail = string.IsNullOrWhiteSpace(request.ReasonDetail)

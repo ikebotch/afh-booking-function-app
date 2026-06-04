@@ -118,7 +118,7 @@ public sealed class BookingTransactionRehydrationTests
             new Mock<IMeetingLinkFactory>().Object,
             conflicts.Object,
             routeTimeGuard.Object,
-            audit.Object,
+            new BookingLifecycleRecorder(audit.Object),
             notificationPublisher.Object,
             holdWindowFactory.Object,
             tokenService.Object,

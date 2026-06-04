@@ -25,14 +25,16 @@ public sealed class LeadTechCancelBookingFunction
         CancellationToken ct)
     {
         var body = await req.ReadJsonAsync<CancelBookingRequest>(ct) ?? new CancelBookingRequest();
+        var correlationId = BookingChangeRequestContext.GetCorrelationId(req);
         var result = await _service.HandleAsync(new CancelBookingCommand
         {
             BookingId = bookingId.Trim(),
+            ActorContext = BookingActorContext.LeadTech(correlationId: correlationId),
             RequestedBy = LifecycleActors.LeadTech,
             ReasonCode = body.ReasonCode,
             ReasonDetail = body.ReasonDetail,
             Reason = body.Reason,
-            CorrelationId = BookingChangeRequestContext.GetCorrelationId(req)
+            CorrelationId = correlationId
         }, ct);
 
         if (!result.IsSuccess)

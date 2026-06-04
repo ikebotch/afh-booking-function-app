@@ -28,6 +28,8 @@ public sealed class LeadTechRearrangementOptionsFunction
         var result = await _service.HandleAsync(new GetRearrangementOptionsCommand
         {
             BookingId = bookingId,
+            ActorContext = BookingActorContext.LeadTech(
+                correlationId: BookingChangeRequestContext.GetCorrelationId(req)),
             PreferredStartUtc = body?.PreferredStartUtc,
             Duration = body?.Duration,
             IsRemote = body?.IsRemote,

@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using AFH.Booking.Function.Mapping;
 
@@ -36,6 +37,13 @@ public sealed class CreateHoldFunction
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Invalid JSON body.", ct, Errors.Validation);
 
         var cmd = body.ToCommand();
+        cmd = new CreateHoldCommand
+        {
+            SlotId = cmd.SlotId,
+            TransactionRef = cmd.TransactionRef,
+            ActorContext = BookingActorContext.InternalAdmin(
+                correlationId: BookingChangeRequestContext.GetCorrelationId(req))
+        };
         var result = await _service.HandleAsync(cmd, ct);
 
         if (!result.IsSuccess)

@@ -5,4 +5,5 @@ namespace AFH.Booking.Application.Abstractions.Bookings;
 public interface IReleaseHoldService
 {
     Task<Result<ReleaseHoldResponse>> HandleAsync(string holdId, CancellationToken ct);
+    Task<Result<ReleaseHoldResponse>> HandleAsync(ReleaseHoldCommand command, CancellationToken ct);
 }

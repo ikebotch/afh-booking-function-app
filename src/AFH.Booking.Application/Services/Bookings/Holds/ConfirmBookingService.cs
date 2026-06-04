@@ -27,7 +27,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     private readonly IMeetingLinkFactory _meetingLinks;
     private readonly IBookingConflictService _conflicts;
     private readonly ISelectedSlotRouteTimeGuard _routeTimeGuard;
-    private readonly ILifecycleAuditService _audit;
+    private readonly IBookingLifecycleRecorder _lifecycle;
     private readonly IBookingNotificationStep _notificationStep;
     private readonly IHoldWindowFactory _holdWindowFactory;
     private readonly IBookingTokenService _tokenService;
@@ -45,7 +45,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         IMeetingLinkFactory meetingLinks,
         IBookingConflictService conflicts,
         ISelectedSlotRouteTimeGuard routeTimeGuard,
-        ILifecycleAuditService audit,
+        IBookingLifecycleRecorder lifecycle,
         IBookingNotificationStep notificationStep,
         IHoldWindowFactory holdWindowFactory,
         IBookingTokenService tokenService,
@@ -62,7 +62,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         _meetingLinks = meetingLinks;
         _conflicts = conflicts;
         _routeTimeGuard = routeTimeGuard;
-        _audit = audit;
+        _lifecycle = lifecycle;
         _notificationStep = notificationStep;
         _holdWindowFactory = holdWindowFactory;
         _tokenService = tokenService;
@@ -145,7 +145,10 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 Errors.HoldTransactionMissing);
         }
 
-        return Result<ConfirmationContext>.Ok(new ConfirmationContext(hold, slot, tx));
+        return Result<ConfirmationContext>.Ok(new ConfirmationContext(hold, slot, tx)
+        {
+            CommandActorContext = cmd.ActorContext
+        });
     }
 
     private static Result ValidateHoldCanBeConfirmed(BookingHold hold, DateTime utcNow)
@@ -296,11 +299,12 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         DateTime utcNow,
         CancellationToken ct)
     {
-        var eventId = await _audit.RecordEventAsync(
-            new LifecycleAuditEntry(
+        var eventId = await _lifecycle.RecordEventAsync(
+            new BookingLifecycleEventRecord(
                 BookingId: context.Hold.Id,
                 TransactionId: context.Transaction.Id,
                 EventType: LifecycleEventTypes.Booked,
+                ActorContext: cmd.ActorContext,
                 ActorType: LifecycleActors.Client,
                 ActorId: null,
                 ReasonCode: null,
@@ -315,26 +319,28 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 NewState: LifecycleStates.Booked),
             ct);
 
-        await _audit.RecordStepAsync(
-            new LifecycleAuditStepEntry(
-                eventId,
+        await _lifecycle.RecordStepAsync(
+            eventId,
+            new BookingLifecycleStepRecord(
                 LifecycleStepNames.Outlook,
                 1,
                 string.IsNullOrWhiteSpace(context.Hold.CalendarProviderEventId)
                     ? LifecycleStepStatuses.Skipped
                     : LifecycleStepStatuses.Succeeded,
                 utcNow,
-                _clock.UtcNow),
+                _clock.UtcNow,
+                ActorContext: cmd.ActorContext),
             ct);
 
-        await _audit.RecordStepAsync(
-            new LifecycleAuditStepEntry(
-                eventId,
+        await _lifecycle.RecordStepAsync(
+            eventId,
+            new BookingLifecycleStepRecord(
                 LifecycleStepNames.SqlAudit,
                 2,
                 LifecycleStepStatuses.Succeeded,
                 utcNow,
-                _clock.UtcNow),
+                _clock.UtcNow,
+                ActorContext: cmd.ActorContext),
             ct);
 
         return eventId;
@@ -382,16 +388,17 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             notificationErrorDetails = ex.Message;
         }
 
-        await _audit.RecordStepAsync(
-            new LifecycleAuditStepEntry(
-                eventId,
+        await _lifecycle.RecordStepAsync(
+            eventId,
+            new BookingLifecycleStepRecord(
                 LifecycleStepNames.Notifications,
                 3,
                 notificationStatus,
                 notificationStartedUtc,
                 _clock.UtcNow,
                 notificationErrorCode,
-                notificationErrorDetails),
+                notificationErrorDetails,
+                ActorContext: context.CommandActorContext),
             ct);
     }
 
@@ -549,5 +556,8 @@ Manage your booking:
     private sealed record ConfirmationContext(
         BookingHold Hold,
         BookingSlot Slot,
-        BookingTransaction Transaction);
+        BookingTransaction Transaction)
+    {
+        public BookingActorContext? CommandActorContext { get; init; }
+    }
 }

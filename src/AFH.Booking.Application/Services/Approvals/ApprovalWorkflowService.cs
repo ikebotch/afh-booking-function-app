@@ -300,6 +300,9 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             var result = await _cancellation.CancelAsync(new CancelBookingCommand
             {
                 BookingId = request.BookingId,
+                ActorContext = BookingActorContext.ApprovalWorkflow(
+                    request.RequesterId,
+                    correlationId: correlationId ?? request.Id),
                 RequestedBy = LifecycleActors.Adviser,
                 ActorId = request.RequesterId,
                 ReasonCode = request.ReasonCode,
@@ -317,6 +320,9 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         {
             BookingId = request.BookingId,
             NewSlotId = payload.NewSlotId ?? string.Empty,
+            ActorContext = BookingActorContext.ApprovalWorkflow(
+                request.RequesterId,
+                correlationId: correlationId ?? request.Id),
             RequestedBy = LifecycleActors.Adviser,
             ActorId = request.RequesterId,
             ReasonCode = request.ReasonCode,

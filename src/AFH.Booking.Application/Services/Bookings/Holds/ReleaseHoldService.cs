@@ -2,6 +2,7 @@
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Application.Services.AdviserProjection;
+using AFH.Booking.Domain.Bookings.Commands;
 
 namespace AFH.Booking.Application.Holds;
 
@@ -27,8 +28,12 @@ public sealed class ReleaseHoldService : IReleaseHoldService
         _clock = clock;
     }
 
-    public async Task<Result<ReleaseHoldResponse>> HandleAsync(string holdId, CancellationToken ct)
+    public Task<Result<ReleaseHoldResponse>> HandleAsync(string holdId, CancellationToken ct)
+        => HandleAsync(new ReleaseHoldCommand { HoldId = holdId }, ct);
+
+    public async Task<Result<ReleaseHoldResponse>> HandleAsync(ReleaseHoldCommand command, CancellationToken ct)
     {
+        var holdId = command.HoldId;
         if (string.IsNullOrWhiteSpace(holdId))
             return Result<ReleaseHoldResponse>.Fail(
                 HttpStatusCode.BadRequest,

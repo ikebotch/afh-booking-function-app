@@ -73,7 +73,7 @@ public sealed class NoShowBookingServiceTests
             holds.Object,
             slots.Object,
             transactions.Object,
-            audit.Object,
+            new BookingLifecycleRecorder(audit.Object),
             uow.Object,
             new StubClock(now));
 
@@ -123,7 +123,7 @@ public sealed class NoShowBookingServiceTests
             holds.Object,
             Mock.Of<IBookingSlotRepository>(),
             Mock.Of<IBookingTransactionRepository>(),
-            audit.Object,
+            new BookingLifecycleRecorder(audit.Object),
             Mock.Of<IUnitOfWork>(),
             new StubClock(now));
 

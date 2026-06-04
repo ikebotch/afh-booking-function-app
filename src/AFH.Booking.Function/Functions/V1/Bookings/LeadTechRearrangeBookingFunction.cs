@@ -28,14 +28,16 @@ public sealed class LeadTechRearrangeBookingFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, Errors.Validation);
 
+        var correlationId = BookingChangeRequestContext.GetCorrelationId(req);
         var result = await _service.HandleAsync(new RearrangeBookingCommand
         {
             BookingId = bookingId.Trim(),
             NewSlotId = body.NewSlotId,
+            ActorContext = BookingActorContext.LeadTech(correlationId: correlationId),
             RequestedBy = LifecycleActors.LeadTech,
             ReasonCode = body.ReasonCode,
             ReasonDetail = body.ReasonDetail,
-            CorrelationId = BookingChangeRequestContext.GetCorrelationId(req)
+            CorrelationId = correlationId
         }, ct);
 
         if (!result.IsSuccess)

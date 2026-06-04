@@ -20,7 +20,7 @@ public sealed class NoShowBookingService : INoShowBookingService
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
-    private readonly ILifecycleAuditService _audit;
+    private readonly IBookingLifecycleRecorder _lifecycle;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
 
@@ -28,14 +28,14 @@ public sealed class NoShowBookingService : INoShowBookingService
         IBookingHoldRepository holds,
         IBookingSlotRepository slots,
         IBookingTransactionRepository transactions,
-        ILifecycleAuditService audit,
+        IBookingLifecycleRecorder lifecycle,
         IUnitOfWork uow,
         IClock clock)
     {
         _holds = holds;
         _slots = slots;
         _transactions = transactions;
-        _audit = audit;
+        _lifecycle = lifecycle;
         _uow = uow;
         _clock = clock;
     }
@@ -79,10 +79,11 @@ public sealed class NoShowBookingService : INoShowBookingService
             return Result<RecordNoShowResponse>.Fail(HttpStatusCode.Conflict, $"Transaction '{slot.TransactionId}' linked to slot was not found.", Errors.Conflict);
 
         var now = _clock.UtcNow;
-        var eventId = await _audit.RecordEventAsync(new LifecycleAuditEntry(
+        var eventId = await _lifecycle.RecordEventAsync(new BookingLifecycleEventRecord(
             BookingId: hold.Id,
             TransactionId: tx.Id,
             EventType: LifecycleEventTypes.NoShow,
+            ActorContext: cmd.ActorContext,
             ActorType: actor,
             ActorId: cmd.ActorId,
             ReasonCode: cmd.ReasonCode,
@@ -99,16 +100,14 @@ public sealed class NoShowBookingService : INoShowBookingService
                 ? "ConfirmedBookingMarkedNoShow"
                 : cmd.ReasonCode.Trim()), ct);
 
-        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
-            eventId,
+        await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.SqlAudit,
             1,
             LifecycleStepStatuses.Succeeded,
             now,
             _clock.UtcNow,
-            null,
-            null,
-            cmd.CorrelationId), ct);
+            CorrelationId: cmd.CorrelationId,
+            ActorContext: cmd.ActorContext), ct);
 
         await _uow.SaveChangesAsync(ct);
 

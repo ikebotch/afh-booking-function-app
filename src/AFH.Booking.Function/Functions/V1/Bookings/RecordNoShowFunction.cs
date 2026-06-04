@@ -44,16 +44,22 @@ public sealed class RecordNoShowFunction
                 return await req.ProblemAsync(HttpStatusCode.BadRequest, "bookingId is required.", ct, Errors.Validation);
 
             var body = await req.ReadJsonAsync<RecordNoShowRequest>(ct) ?? new RecordNoShowRequest();
+            var requestedBy = string.IsNullOrWhiteSpace(body.RequestedBy)
+                ? LifecycleActors.System
+                : body.RequestedBy.Trim();
+            var correlationId = BookingChangeRequestContext.GetCorrelationId(req);
             var result = await _service.HandleAsync(new RecordNoShowCommand
             {
                 BookingId = bookingId.Trim(),
-                RequestedBy = string.IsNullOrWhiteSpace(body.RequestedBy)
-                    ? LifecycleActors.System
-                    : body.RequestedBy.Trim(),
+                ActorContext = BookingActorContext.InternalAdmin(
+                    actorId: body.ActorId,
+                    correlationId: correlationId,
+                    actorType: requestedBy),
+                RequestedBy = requestedBy,
                 ActorId = body.ActorId,
                 ReasonCode = body.ReasonCode,
                 ReasonDetail = body.ReasonDetail,
-                CorrelationId = BookingChangeRequestContext.GetCorrelationId(req)
+                CorrelationId = correlationId
             }, ct);
 
             if (!result.IsSuccess)

@@ -35,6 +35,8 @@ public sealed class GetRearrangementOptionsFunction
         var cmd = new GetRearrangementOptionsCommand
         {
             BookingId = bookingId,
+            ActorContext = BookingActorContext.InternalAdmin(
+                correlationId: BookingChangeRequestContext.GetCorrelationId(req)),
             PreferredStartUtc = body?.PreferredStartUtc,
             Duration = body?.Duration,
             IsRemote = body?.IsRemote,

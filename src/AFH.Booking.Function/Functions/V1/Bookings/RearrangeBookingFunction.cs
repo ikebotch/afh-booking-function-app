@@ -37,17 +37,25 @@ public sealed class RearrangeBookingFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, "Validation");
 
-        var requestedBy = string.IsNullOrWhiteSpace(body.RequestedBy) ? "Client" : body.RequestedBy.Trim();
+        var requestedBy = string.IsNullOrWhiteSpace(body.RequestedBy)
+            ? BookingActorContext.ActorInternalAdmin
+            : body.RequestedBy.Trim();
+        var correlationId = req.Headers.TryGetValues("x-correlation-id", out var values)
+            ? values.FirstOrDefault()
+            : null;
 
         var cmd = new RearrangeBookingCommand
         {
             BookingId = bookingId.Trim(),
             NewSlotId = body.NewSlotId,
+            ActorContext = BookingActorContext.InternalAdmin(
+                correlationId: correlationId,
+                actorType: requestedBy),
             RequestedBy = requestedBy,
             ReasonCode = body.ReasonCode,
             ReasonDetail = body.ReasonDetail,
             ApprovalRequestId = body.ApprovalRequestId,
-            CorrelationId = req.Headers.TryGetValues("x-correlation-id", out var values) ? values.FirstOrDefault() : null
+            CorrelationId = correlationId
         };
 
         var result = await _service.HandleAsync(cmd, ct);

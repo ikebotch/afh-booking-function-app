@@ -21,7 +21,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
     private readonly IBookingNotificationStep _notificationStep;
     private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
-    private readonly ILifecycleAuditService _audit;
+    private readonly IBookingLifecycleRecorder _lifecycle;
     private readonly ILogger<CancellationOrchestrator> _logger;
 
     public CancellationOrchestrator(
@@ -34,7 +34,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         IClock clock,
         IBookingNotificationStep notificationStep,
         IDownstreamUpdateService downstreamUpdates,
-        ILifecycleAuditService audit,
+        IBookingLifecycleRecorder lifecycle,
         ILogger<CancellationOrchestrator> logger,
         IClientDirectory? clients = null)
     {
@@ -48,7 +48,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         _notificationStep = notificationStep;
         _clients = clients;
         _downstreamUpdates = downstreamUpdates;
-        _audit = audit;
+        _lifecycle = lifecycle;
         _logger = logger;
     }
 
@@ -195,10 +195,11 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         DateTime utcNow,
         CancellationToken ct)
     {
-        var eventId = await _audit.RecordEventAsync(new LifecycleAuditEntry(
+        var eventId = await _lifecycle.RecordEventAsync(new BookingLifecycleEventRecord(
             BookingId: context.Hold.Id,
             TransactionId: context.Transaction.Id,
             EventType: LifecycleEventTypes.Cancelled,
+            ActorContext: cmd.ActorContext,
             ActorType: string.IsNullOrWhiteSpace(cmd.RequestedBy) ? LifecycleActors.Unknown : cmd.RequestedBy,
             ActorId: cmd.ActorId,
             ReasonCode: cmd.ReasonCode,
@@ -212,8 +213,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             PreviousState: ResolveLifecycleStateBeforeCancellation(before),
             NewState: LifecycleStates.Cancelled), ct);
 
-        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
-            eventId,
+        await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.Outlook,
             1,
             outlookStep.Status,
@@ -221,19 +221,18 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             _clock.UtcNow,
             outlookStep.ErrorCode,
             outlookStep.ErrorDetails,
-            cmd.CorrelationId), ct);
+            cmd.CorrelationId,
+            cmd.ActorContext), ct);
 
         var sqlCompletedUtc = _clock.UtcNow;
-        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
-            eventId,
+        await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.SqlAudit,
             2,
             LifecycleStepStatuses.Succeeded,
             utcNow,
             sqlCompletedUtc,
-            null,
-            null,
-            cmd.CorrelationId), ct);
+            CorrelationId: cmd.CorrelationId,
+            ActorContext: cmd.ActorContext), ct);
 
         return eventId;
     }
@@ -279,8 +278,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             }
         }
 
-        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
-            eventId,
+        await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.Notifications,
             3,
             notificationStepStatus,
@@ -288,7 +286,8 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             _clock.UtcNow,
             notificationStepError,
             notificationStepDetails,
-            cmd.CorrelationId), ct);
+            cmd.CorrelationId,
+            cmd.ActorContext), ct);
     }
 
     private async Task PublishCancellationUpdateAsync(

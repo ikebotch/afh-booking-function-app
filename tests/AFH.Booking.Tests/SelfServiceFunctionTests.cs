@@ -114,6 +114,9 @@ public sealed class SelfServiceFunctionTests
         Assert.Equal("booking-1", service.LastCommand?.BookingId);
         Assert.Equal(LifecycleActors.Client, service.LastCommand?.RequestedBy);
         Assert.Equal("client-actor", service.LastCommand?.ActorId);
+        Assert.Equal(BookingActorContext.SourceSelfService, service.LastCommand?.ActorContext?.SourceApplication);
+        Assert.Equal(LifecycleActors.Client, service.LastCommand?.ActorContext?.ActorType);
+        Assert.True(service.LastCommand?.ActorContext?.IsSelfService);
     }
 
     [Fact]
@@ -132,6 +135,9 @@ public sealed class SelfServiceFunctionTests
         Assert.Equal("booking-1", service.LastCommand?.BookingId);
         Assert.Equal(45, service.LastCommand?.Duration);
         Assert.Equal(5, service.LastCommand?.Limit);
+        Assert.Equal(BookingActorContext.SourceSelfService, service.LastCommand?.ActorContext?.SourceApplication);
+        Assert.Equal(LifecycleActors.Client, service.LastCommand?.ActorContext?.ActorType);
+        Assert.True(service.LastCommand?.ActorContext?.IsSelfService);
     }
 
     [Fact]
@@ -168,6 +174,9 @@ public sealed class SelfServiceFunctionTests
         Assert.Equal("slot-new", service.LastCommand?.NewSlotId);
         Assert.Equal(LifecycleActors.Client, service.LastCommand?.RequestedBy);
         Assert.Equal("client-actor", service.LastCommand?.ActorId);
+        Assert.Equal(BookingActorContext.SourceSelfService, service.LastCommand?.ActorContext?.SourceApplication);
+        Assert.Equal(LifecycleActors.Client, service.LastCommand?.ActorContext?.ActorType);
+        Assert.True(service.LastCommand?.ActorContext?.IsSelfService);
     }
 
     [Fact]

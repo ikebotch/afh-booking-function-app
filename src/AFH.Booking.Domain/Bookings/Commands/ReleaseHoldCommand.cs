@@ -4,5 +4,5 @@
 public sealed class ReleaseHoldCommand
 {
     public string HoldId { get; init; } = default!;
+    public BookingActorContext? ActorContext { get; init; }
 }
-   

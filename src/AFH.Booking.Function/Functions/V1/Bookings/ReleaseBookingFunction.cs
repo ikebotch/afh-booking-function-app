@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
@@ -33,7 +34,12 @@ public sealed class ReleaseHoldFunction
         if (string.IsNullOrWhiteSpace(holdId))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "holdId is required.", ct, "Validation");
 
-        var result = await _service.HandleAsync(holdId.Trim(), ct);
+        var result = await _service.HandleAsync(new ReleaseHoldCommand
+        {
+            HoldId = holdId.Trim(),
+            ActorContext = BookingActorContext.InternalAdmin(
+                correlationId: BookingChangeRequestContext.GetCorrelationId(req))
+        }, ct);
 
         if (!result.IsSuccess)
             return await req.ProblemAsync(

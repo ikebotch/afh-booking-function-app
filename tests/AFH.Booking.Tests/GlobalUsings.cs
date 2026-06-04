@@ -14,6 +14,7 @@ global using AFH.Booking.Application.Models.Governance.Constants;
 global using AFH.Booking.Application.Models.Lifecycle;
 global using AFH.Booking.Application.Models.Lifecycle.Constants;
 global using AFH.Booking.Application.Models.Notifications;
+global using AFH.Booking.Application.Lifecycle;
 global using AFH.Booking.Domain.Calendar;
 global using Microsoft.Extensions.Logging;
 global using Xunit;

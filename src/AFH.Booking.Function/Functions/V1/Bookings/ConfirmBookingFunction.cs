@@ -59,7 +59,9 @@ public sealed class ConfirmHoldFunction
         {
             HoldId = holdId.Trim(),
             BookingId = body?.BookingId ?? holdId.Trim(),
-            Notes = body?.Notes
+            Notes = body?.Notes,
+            ActorContext = BookingActorContext.InternalAdmin(
+                correlationId: BookingChangeRequestContext.GetCorrelationId(req))
         };
 
         var result = await _service.HandleAsync(cmd, ct);

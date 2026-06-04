@@ -56,7 +56,11 @@ public sealed class HoldsCleanupFunction
 
             try
             {
-                var result = await _release.HandleAsync(hold.Id, ct);
+                var result = await _release.HandleAsync(new ReleaseHoldCommand
+                {
+                    HoldId = hold.Id,
+                    ActorContext = BookingActorContext.SystemJob("HoldsCleanup")
+                }, ct);
 
                 if (result.IsSuccess)
                     released++;

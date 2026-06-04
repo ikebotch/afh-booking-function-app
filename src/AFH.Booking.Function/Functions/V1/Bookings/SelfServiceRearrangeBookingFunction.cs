@@ -71,15 +71,19 @@ public sealed class SelfServiceRearrangeBookingFunction
         if (string.IsNullOrWhiteSpace(body.NewSlotId))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "newSlotId is required.", ct, Errors.Validation);
 
+        var correlationId = BookingChangeRequestContext.GetCorrelationId(req) ?? access.Value.CorrelationId;
         var result = await _service.HandleAsync(new RearrangeBookingCommand
         {
             BookingId = bookingId.Trim(),
             NewSlotId = body.NewSlotId,
+            ActorContext = BookingActorContext.SelfServiceClient(
+                access.Value.ActorId,
+                correlationId),
             RequestedBy = LifecycleActors.Client,
             ActorId = access.Value.ActorId,
             ReasonCode = body.ReasonCode,
             ReasonDetail = body.ReasonDetail,
-            CorrelationId = BookingChangeRequestContext.GetCorrelationId(req) ?? access.Value.CorrelationId
+            CorrelationId = correlationId
         }, ct);
 
         if (!result.IsSuccess)

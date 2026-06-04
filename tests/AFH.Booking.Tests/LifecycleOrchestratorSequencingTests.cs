@@ -86,7 +86,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             new StubClock(DateTime.UtcNow),
             notificationStepCancel.Object,
             downstream.Object,
-            audit.Object,
+            new BookingLifecycleRecorder(audit.Object),
             Mock.Of<ILogger<CancellationOrchestrator>>());
 
         var result = await orchestrator.CancelAsync(
@@ -144,7 +144,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             new StubClock(DateTime.UtcNow),
             Mock.Of<IBookingNotificationStep>(),
             downstream.Object,
-            audit.Object,
+            new BookingLifecycleRecorder(audit.Object),
             Mock.Of<ILogger<CancellationOrchestrator>>());
 
         var result = await orchestrator.CancelAsync(
@@ -241,7 +241,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             cancel.Object,
             notificationStep.Object,
             downstream.Object,
-            audit.Object,
+            new BookingLifecycleRecorder(audit.Object),
             uow.Object,
             new StubClock(DateTime.UtcNow));
 
@@ -319,7 +319,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             cancel.Object,
             Mock.Of<IBookingNotificationStep>(),
             downstream.Object,
-            audit.Object,
+            new BookingLifecycleRecorder(audit.Object),
             uow.Object,
             new StubClock(DateTime.UtcNow));
 
@@ -369,7 +369,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             Mock.Of<ICancellationOrchestrator>(),
             Mock.Of<IBookingNotificationStep>(),
             Mock.Of<IDownstreamUpdateService>(),
-            Mock.Of<ILifecycleAuditService>(),
+            new BookingLifecycleRecorder(Mock.Of<ILifecycleAuditService>()),
             Mock.Of<IUnitOfWork>(),
             new StubClock(DateTime.UtcNow));
 
@@ -419,7 +419,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             Mock.Of<ICancellationOrchestrator>(),
             Mock.Of<IBookingNotificationStep>(),
             Mock.Of<IDownstreamUpdateService>(),
-            Mock.Of<ILifecycleAuditService>(),
+            new BookingLifecycleRecorder(Mock.Of<ILifecycleAuditService>()),
             Mock.Of<IUnitOfWork>(),
             new StubClock(DateTime.UtcNow));
 
@@ -469,7 +469,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             Mock.Of<ICancellationOrchestrator>(),
             Mock.Of<IBookingNotificationStep>(),
             Mock.Of<IDownstreamUpdateService>(),
-            Mock.Of<ILifecycleAuditService>(),
+            new BookingLifecycleRecorder(Mock.Of<ILifecycleAuditService>()),
             Mock.Of<IUnitOfWork>(),
             new StubClock(DateTime.UtcNow));
 
@@ -525,7 +525,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             cancel.Object,
             Mock.Of<IBookingNotificationStep>(),
             downstream.Object,
-            audit.Object,
+            new BookingLifecycleRecorder(audit.Object),
             uow.Object,
             new StubClock(DateTime.UtcNow));
 

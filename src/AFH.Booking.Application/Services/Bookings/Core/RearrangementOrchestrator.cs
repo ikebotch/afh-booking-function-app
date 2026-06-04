@@ -19,7 +19,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private readonly IBookingNotificationStep _notificationStep;
     private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
-    private readonly ILifecycleAuditService _audit;
+    private readonly IBookingLifecycleRecorder _lifecycle;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
 
@@ -32,7 +32,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         ICancellationOrchestrator cancel,
         IBookingNotificationStep notificationStep,
         IDownstreamUpdateService downstreamUpdates,
-        ILifecycleAuditService audit,
+        IBookingLifecycleRecorder lifecycle,
         IUnitOfWork uow,
         IClock clock,
         IClientDirectory? clients = null)
@@ -46,7 +46,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         _notificationStep = notificationStep;
         _clients = clients;
         _downstreamUpdates = downstreamUpdates;
-        _audit = audit;
+        _lifecycle = lifecycle;
         _uow = uow;
         _clock = clock;
     }
@@ -180,7 +180,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         var holdResult = await _create.HandleAsync(new CreateHoldCommand
         {
             SlotId = cmd.NewSlotId.Trim(),
-            TransactionRef = transactionRef
+            TransactionRef = transactionRef,
+            ActorContext = cmd.ActorContext
         }, ct);
 
         if (!holdResult.IsSuccess || holdResult.Value is null)
@@ -192,7 +193,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         var confirmResult = await _confirm.HandleAsync(new ConfirmBookingCommand
         {
             HoldId = holdResult.Value.BookingId,
-            Notes = "Rearranged"
+            Notes = "Rearranged",
+            ActorContext = cmd.ActorContext
         }, ct);
 
         if (!confirmResult.IsSuccess || confirmResult.Value is null)
@@ -220,6 +222,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         var cancelResult = await _cancel.CancelAsync(new CancelBookingCommand
         {
             BookingId = previousBookingId,
+            ActorContext = cmd.ActorContext,
             RequestedBy = cmd.RequestedBy,
             ReasonCode = string.IsNullOrWhiteSpace(cmd.ReasonCode) ? "Rearranged" : cmd.ReasonCode,
             ReasonDetail = cmd.ReasonDetail,
@@ -242,10 +245,11 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         object before,
         CancellationToken ct)
     {
-        var eventId = await _audit.RecordEventAsync(new LifecycleAuditEntry(
+        var eventId = await _lifecycle.RecordEventAsync(new BookingLifecycleEventRecord(
             BookingId: newBooking.Hold.Id,
             TransactionId: existingBooking.Transaction.Id,
             EventType: LifecycleEventTypes.Rearranged,
+            ActorContext: cmd.ActorContext,
             ActorType: string.IsNullOrWhiteSpace(cmd.RequestedBy) ? LifecycleActors.Unknown : cmd.RequestedBy,
             ActorId: cmd.ActorId,
             ReasonCode: cmd.ReasonCode,
@@ -267,8 +271,22 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             NewState: LifecycleStates.Rearranged), ct);
 
         var now = _clock.UtcNow;
-        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(eventId, LifecycleStepNames.Outlook, 1, LifecycleStepStatuses.Succeeded, now, now, null, null, cmd.CorrelationId), ct);
-        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(eventId, LifecycleStepNames.SqlAudit, 2, LifecycleStepStatuses.Succeeded, now, now, null, null, cmd.CorrelationId), ct);
+        await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
+            LifecycleStepNames.Outlook,
+            1,
+            LifecycleStepStatuses.Succeeded,
+            now,
+            now,
+            CorrelationId: cmd.CorrelationId,
+            ActorContext: cmd.ActorContext), ct);
+        await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
+            LifecycleStepNames.SqlAudit,
+            2,
+            LifecycleStepStatuses.Succeeded,
+            now,
+            now,
+            CorrelationId: cmd.CorrelationId,
+            ActorContext: cmd.ActorContext), ct);
 
         return eventId;
     }
@@ -312,8 +330,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             notificationErrorDetails = ex.Message;
         }
 
-        await _audit.RecordStepAsync(new LifecycleAuditStepEntry(
-            eventId,
+        await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.Notifications,
             3,
             notificationStatus,
@@ -321,7 +338,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             _clock.UtcNow,
             notificationErrorCode,
             notificationErrorDetails,
-            cmd.CorrelationId), ct);
+            cmd.CorrelationId,
+            cmd.ActorContext), ct);
     }
 
     private static IReadOnlyList<BookingNotificationRecipient> BuildBookingRescheduledRecipients(

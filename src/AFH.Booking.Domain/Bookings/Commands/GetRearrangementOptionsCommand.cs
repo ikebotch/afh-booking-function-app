@@ -3,6 +3,7 @@ namespace AFH.Booking.Domain.Bookings.Commands;
 public sealed class GetRearrangementOptionsCommand
 {
     public string BookingId { get; set; } = default!;
+    public BookingActorContext? ActorContext { get; set; }
     public string? PreferredStartUtc { get; set; }
     public int? Duration { get; set; }
     public bool? IsRemote { get; set; }

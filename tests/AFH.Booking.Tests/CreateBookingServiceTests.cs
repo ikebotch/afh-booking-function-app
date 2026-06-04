@@ -22,6 +22,8 @@ public class CreateBookingServiceTests
     private readonly Mock<IBookingCalendarService> _calendarService;
     private readonly Mock<IUnitOfWork> _uow;
     private readonly Mock<IClock> _clock;
+    private readonly Mock<IBookingLifecycleRecorder> _lifecycle;
+    private readonly Mock<IBookingNotificationStep> _notificationStep;
     private readonly CreateBookingService _sut;
 
     private static readonly DateTime FixedNow = new DateTime(2026, 03, 25, 10, 0, 0, DateTimeKind.Utc);
@@ -33,8 +35,20 @@ public class CreateBookingServiceTests
         _calendarService = new Mock<IBookingCalendarService>();
         _uow = new Mock<IUnitOfWork>();
         _clock = new Mock<IClock>();
+        _lifecycle = new Mock<IBookingLifecycleRecorder>();
+        _notificationStep = new Mock<IBookingNotificationStep>();
 
         _clock.Setup(c => c.UtcNow).Returns(FixedNow);
+        _lifecycle.Setup(x => x.RecordEventAsync(It.IsAny<BookingLifecycleEventRecord>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("hold-created-event-id");
+        _notificationStep.Setup(x => x.ExecuteAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LifecycleStepStatuses.Succeeded, null, null));
 
         _sut = new CreateBookingService(
             _loader.Object,
@@ -42,7 +56,8 @@ public class CreateBookingServiceTests
             _calendarService.Object,
             _uow.Object,
             _clock.Object,
-            Mock.Of<IBookingNotificationStep>(),
+            _lifecycle.Object,
+            _notificationStep.Object,
             NullLogger<CreateBookingService>.Instance);
     }
 
@@ -91,7 +106,143 @@ public class CreateBookingServiceTests
         _loader.Verify(l => l.LoadAsync(cmd, It.IsAny<CancellationToken>()), Times.Once);
         _holdService.Verify(h => h.CreateOrReplaceAsync(context, FixedNow, It.IsAny<CancellationToken>()), Times.Once);
         _calendarService.Verify(c => c.CreateHoldEventAsync(context, hold, It.IsAny<CancellationToken>()), Times.Once);
-        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+        _uow.Verify(u => u.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public async Task HandleAsync_Success_RecordsHoldCreatedLifecycleEventAndOrderedSteps()
+    {
+        var actor = BookingActorContext.SelfServiceClient("client-1", "corr-1");
+        var cmd = new CreateHoldCommand
+        {
+            SlotId = "slot-1",
+            TransactionRef = "tx-1",
+            ActorContext = actor
+        };
+        var context = MakeContext();
+        var hold = MakeHold();
+        BookingLifecycleEventRecord? lifecycleEvent = null;
+        var lifecycleSteps = new List<BookingLifecycleStepRecord>();
+
+        _loader.Setup(l => l.LoadAsync(cmd, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingContext>.Ok(context));
+        _holdService.Setup(h => h.CreateOrReplaceAsync(context, FixedNow, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingHold>.Ok(hold));
+        _calendarService.Setup(c => c.CreateHoldEventAsync(context, hold, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<Unit>.Ok(Unit.Value));
+        _notificationStep.Setup(x => x.ExecuteAsync(
+                LifecycleEventTypes.HoldCreated,
+                hold.Id,
+                LifecycleActors.System,
+                It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((LifecycleStepStatuses.Skipped, null, "Policy disabled"));
+        _lifecycle.Setup(x => x.RecordEventAsync(It.IsAny<BookingLifecycleEventRecord>(), It.IsAny<CancellationToken>()))
+            .Callback<BookingLifecycleEventRecord, CancellationToken>((entry, _) => lifecycleEvent = entry)
+            .ReturnsAsync("hold-created-event-id");
+        _lifecycle.Setup(x => x.RecordStepAsync(
+                "hold-created-event-id",
+                It.IsAny<BookingLifecycleStepRecord>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, BookingLifecycleStepRecord, CancellationToken>((_, step, _) => lifecycleSteps.Add(step))
+            .Returns(Task.CompletedTask);
+
+        var result = await _sut.HandleAsync(cmd, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("hold-1", result.Value!.BookingId);
+        Assert.Equal(LifecycleEventTypes.HoldCreated, lifecycleEvent?.EventType);
+        Assert.Equal("hold-1", lifecycleEvent?.BookingId);
+        Assert.Equal("tx-1", lifecycleEvent?.TransactionId);
+        Assert.Same(actor, lifecycleEvent?.ActorContext);
+        Assert.Null(lifecycleEvent?.NewState);
+
+        Assert.Collection(lifecycleSteps,
+            step =>
+            {
+                Assert.Equal(LifecycleStepNames.Outlook, step.StepName);
+                Assert.Equal(1, step.Sequence);
+                Assert.Equal(LifecycleStepStatuses.Succeeded, step.Status);
+                Assert.Same(actor, step.ActorContext);
+            },
+            step =>
+            {
+                Assert.Equal(LifecycleStepNames.SqlAudit, step.StepName);
+                Assert.Equal(2, step.Sequence);
+                Assert.Equal(LifecycleStepStatuses.Succeeded, step.Status);
+                Assert.Same(actor, step.ActorContext);
+            },
+            step =>
+            {
+                Assert.Equal(LifecycleStepNames.Notifications, step.StepName);
+                Assert.Equal(3, step.Sequence);
+                Assert.Equal(LifecycleStepStatuses.Skipped, step.Status);
+                Assert.Same(actor, step.ActorContext);
+            });
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenActorContextIsNull_RecordsLegacySystemFallback()
+    {
+        var cmd = new CreateHoldCommand { SlotId = "slot-1", TransactionRef = "tx-1" };
+        var context = MakeContext();
+        var hold = MakeHold();
+        BookingLifecycleEventRecord? lifecycleEvent = null;
+
+        _loader.Setup(l => l.LoadAsync(cmd, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingContext>.Ok(context));
+        _holdService.Setup(h => h.CreateOrReplaceAsync(context, FixedNow, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingHold>.Ok(hold));
+        _calendarService.Setup(c => c.CreateHoldEventAsync(context, hold, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<Unit>.Ok(Unit.Value));
+        _lifecycle.Setup(x => x.RecordEventAsync(It.IsAny<BookingLifecycleEventRecord>(), It.IsAny<CancellationToken>()))
+            .Callback<BookingLifecycleEventRecord, CancellationToken>((entry, _) => lifecycleEvent = entry)
+            .ReturnsAsync("hold-created-event-id");
+
+        var result = await _sut.HandleAsync(cmd, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Null(lifecycleEvent?.ActorContext);
+        Assert.Equal(LifecycleActors.System, lifecycleEvent?.ActorType);
+        Assert.Equal("BookingService", lifecycleEvent?.SourceSystem);
+    }
+
+    [Fact]
+    public async Task HandleAsync_WhenHoldCreatedNotificationFails_StillSucceedsAndRecordsFailedNotificationStep()
+    {
+        var cmd = new CreateHoldCommand { SlotId = "slot-1", TransactionRef = "tx-1" };
+        var context = MakeContext();
+        var hold = MakeHold();
+        var lifecycleSteps = new List<BookingLifecycleStepRecord>();
+
+        _loader.Setup(l => l.LoadAsync(cmd, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingContext>.Ok(context));
+        _holdService.Setup(h => h.CreateOrReplaceAsync(context, FixedNow, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<BookingHold>.Ok(hold));
+        _calendarService.Setup(c => c.CreateHoldEventAsync(context, hold, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<Unit>.Ok(Unit.Value));
+        _notificationStep.Setup(x => x.ExecuteAsync(
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
+                It.IsAny<IReadOnlyDictionary<string, string>>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("notification policy unavailable"));
+        _lifecycle.Setup(x => x.RecordStepAsync(
+                "hold-created-event-id",
+                It.IsAny<BookingLifecycleStepRecord>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<string, BookingLifecycleStepRecord, CancellationToken>((_, step, _) => lifecycleSteps.Add(step))
+            .Returns(Task.CompletedTask);
+
+        var result = await _sut.HandleAsync(cmd, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        var notificationStep = Assert.Single(lifecycleSteps, x => x.StepName == LifecycleStepNames.Notifications);
+        Assert.Equal(LifecycleStepStatuses.Failed, notificationStep.Status);
+        Assert.Equal(LifecycleErrorCodes.NotificationFailed, notificationStep.ErrorCode);
     }
 
     // -------------------------------------------------------------------------

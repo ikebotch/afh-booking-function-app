@@ -57,13 +57,23 @@ public static class BookingLifecycleStateMachine
 
     public static string ResolveStateForEventType(string eventType)
     {
-        return eventType switch
+        if (TryResolveStateForEventType(eventType, out var state))
+            return state!;
+
+        throw new InvalidOperationException($"Lifecycle event type '{eventType}' does not map to a valid lifecycle state.");
+    }
+
+    public static bool TryResolveStateForEventType(string eventType, out string? state)
+    {
+        state = eventType switch
         {
             LifecycleEventTypes.Booked => LifecycleStates.Booked,
             LifecycleEventTypes.Rearranged => LifecycleStates.Rearranged,
             LifecycleEventTypes.Cancelled => LifecycleStates.Cancelled,
             LifecycleEventTypes.NoShow => LifecycleStates.NoShow,
-            _ => throw new InvalidOperationException($"Lifecycle event type '{eventType}' does not map to a valid lifecycle state.")
+            _ => null
         };
+
+        return !string.IsNullOrWhiteSpace(state);
     }
 }

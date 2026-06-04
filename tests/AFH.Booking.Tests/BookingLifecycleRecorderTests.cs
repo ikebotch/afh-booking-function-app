@@ -87,6 +87,42 @@ public sealed class BookingLifecycleRecorderTests
     }
 
     [Fact]
+    public async Task RecordEventAsync_PreservesNullStateForAuditStyleEvent()
+    {
+        LifecycleAuditEntry? captured = null;
+        var audit = new Mock<ILifecycleAuditService>();
+        audit.Setup(x => x.RecordEventAsync(It.IsAny<LifecycleAuditEntry>(), It.IsAny<CancellationToken>()))
+            .Callback<LifecycleAuditEntry, CancellationToken>((entry, _) => captured = entry)
+            .ReturnsAsync("event-1");
+        var recorder = new BookingLifecycleRecorder(audit.Object);
+        var actor = BookingActorContext.SelfServiceClient("client-1", "ctx-corr");
+
+        await recorder.RecordEventAsync(new BookingLifecycleEventRecord(
+            BookingId: "hold-1",
+            TransactionId: "tx-1",
+            EventType: LifecycleEventTypes.HoldCreated,
+            ActorContext: actor,
+            ActorType: LifecycleActors.System,
+            ActorId: null,
+            ReasonCode: null,
+            ReasonNotes: null,
+            Before: null,
+            After: new { status = "Held" },
+            OccurredUtc: new DateTime(2026, 06, 04, 10, 0, 0, DateTimeKind.Utc),
+            CorrelationId: null,
+            SourceSystem: "BookingService",
+            TriggerReason: "CreateHold"), CancellationToken.None);
+
+        Assert.NotNull(captured);
+        Assert.Equal(LifecycleEventTypes.HoldCreated, captured!.EventType);
+        Assert.Null(captured.NewState);
+        Assert.Equal(LifecycleActors.Client, captured.ActorType);
+        Assert.Equal("client-1", captured.ActorId);
+        Assert.Equal("ctx-corr", captured.CorrelationId);
+        Assert.Equal(BookingActorContext.SourceSelfService, captured.SourceSystem);
+    }
+
+    [Fact]
     public async Task RecordStepAsync_UsesActorContextCorrelationWhenAvailable()
     {
         LifecycleAuditStepEntry? captured = null;

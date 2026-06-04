@@ -3,6 +3,7 @@ using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Common;
 using AFH.Booking.Application.Lifecycle;
+using AFH.Booking.Domain.Bookings.Commands;
 
 namespace AFH.Booking.Tests;
 
@@ -103,6 +104,39 @@ public sealed class LifecycleAuditServiceTests
         var persisted = Assert.Single(events);
         Assert.Equal(LifecycleActors.System, persisted.ActorType);
         Assert.Equal("MissedAppointmentSweep", persisted.TriggerReason);
+    }
+
+    [Fact]
+    public async Task RecordEventAsync_AllowsAuditStyleEventWithoutLifecycleState()
+    {
+        var events = new List<LifecycleEventRecord>();
+        var service = new LifecycleAuditService(
+            new InMemoryLifecycleEventRepository(events),
+            new InMemoryLifecycleStepRepository(new List<LifecycleStepRecord>()),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        await service.RecordEventAsync(
+            new LifecycleAuditEntry(
+                BookingId: "hold-1",
+                TransactionId: "tx-1",
+                EventType: LifecycleEventTypes.HoldCreated,
+                ActorType: LifecycleActors.Client,
+                ActorId: "client-1",
+                ReasonCode: null,
+                ReasonNotes: null,
+                Before: null,
+                After: new { status = "Held" },
+                OccurredUtc: DateTime.UtcNow,
+                CorrelationId: "corr-1",
+                SourceSystem: BookingActorContext.SourceSelfService,
+                NewState: null,
+                TriggerReason: "CreateHold"),
+            CancellationToken.None);
+
+        var persisted = Assert.Single(events);
+        Assert.Equal(LifecycleEventTypes.HoldCreated, persisted.EventType);
+        Assert.Null(persisted.NewState);
+        Assert.Equal("CreateHold", persisted.TriggerReason);
     }
 
     [Fact]

@@ -2,11 +2,12 @@
 
 using AFH.Booking.Application.Abstractions.Bookings.Holds;
 using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Domain.Bookings.Commands;
 using Microsoft.Extensions.Logging;
-using AFH.Booking.Application.Abstractions.Lifecycle;
 
 namespace AFH.Booking.Application.Holds;
 
@@ -17,6 +18,7 @@ public sealed class CreateBookingService : ICreateBookingService
     private readonly IBookingCalendarService _calendarService;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
+    private readonly IBookingLifecycleRecorder _lifecycle;
     private readonly IBookingNotificationStep _notificationStep;
     private readonly IClientDirectory? _clients;
     private readonly ILogger<CreateBookingService> _logger;
@@ -27,6 +29,7 @@ public sealed class CreateBookingService : ICreateBookingService
         IBookingCalendarService calendarService,
         IUnitOfWork uow,
         IClock clock,
+        IBookingLifecycleRecorder lifecycle,
         IBookingNotificationStep notificationStep,
         ILogger<CreateBookingService> logger,
         IClientDirectory? clients = null)
@@ -36,6 +39,7 @@ public sealed class CreateBookingService : ICreateBookingService
         _calendarService = calendarService;
         _uow = uow;
         _clock = clock;
+        _lifecycle = lifecycle;
         _notificationStep = notificationStep;
         _logger = logger;
         _clients = clients;
@@ -87,9 +91,13 @@ public sealed class CreateBookingService : ICreateBookingService
                 calendarResult.ErrorMessage,
                 calendarResult.ErrorCode);
 
+        var lifecycleEventId = await RecordHoldCreatedEventAsync(cmd, hold, context, utcNow, ct);
+
         await _uow.SaveChangesAsync(ct);
 
-        await PublishHoldCreatedNotificationAsync(hold, context, ct);
+        await PublishHoldCreatedNotificationAsync(lifecycleEventId, cmd, hold, context, ct);
+
+        await _uow.SaveChangesAsync(ct);
 
         return Result<CreateBookingResponse>.Ok(CreateResponse(
             hold,
@@ -97,18 +105,78 @@ public sealed class CreateBookingService : ICreateBookingService
             context.Slot));
     }
 
+    private async Task<string> RecordHoldCreatedEventAsync(
+        CreateHoldCommand cmd,
+        BookingHold hold,
+        BookingContext context,
+        DateTime utcNow,
+        CancellationToken ct)
+    {
+        var eventId = await _lifecycle.RecordEventAsync(new BookingLifecycleEventRecord(
+            BookingId: hold.Id,
+            TransactionId: context.Transaction.TransactionRef,
+            EventType: LifecycleEventTypes.HoldCreated,
+            ActorContext: cmd.ActorContext,
+            ActorType: LifecycleActors.System,
+            ActorId: null,
+            ReasonCode: null,
+            ReasonNotes: null,
+            Before: null,
+            After: new
+            {
+                hold.Id,
+                hold.SlotId,
+                context.Slot.AdviserId,
+                hold.ExpiresUtc,
+                context.Transaction.TransactionRef,
+                context.Slot.StartUtc,
+                context.Slot.EndUtc
+            },
+            OccurredUtc: utcNow,
+            CorrelationId: null,
+            SourceSystem: "BookingService",
+            PreviousState: null,
+            NewState: null,
+            TriggerReason: "CreateHold"), ct);
+
+        await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
+            LifecycleStepNames.Outlook,
+            1,
+            LifecycleStepStatuses.Succeeded,
+            utcNow,
+            _clock.UtcNow,
+            ActorContext: cmd.ActorContext), ct);
+
+        await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
+            LifecycleStepNames.SqlAudit,
+            2,
+            LifecycleStepStatuses.Succeeded,
+            utcNow,
+            _clock.UtcNow,
+            ActorContext: cmd.ActorContext), ct);
+
+        return eventId;
+    }
+
     private async Task PublishHoldCreatedNotificationAsync(
+        string lifecycleEventId,
+        CreateHoldCommand cmd,
         BookingHold hold,
         BookingContext context,
         CancellationToken ct)
     {
+        var notificationStatus = LifecycleStepStatuses.Succeeded;
+        string? notificationErrorCode = null;
+        string? notificationErrorDetails = null;
+        var startedUtc = _clock.UtcNow;
+
         try
         {
             var client = _clients is null
                 ? null
                 : await _clients.GetAsync(context.Transaction.TransactionRef, ct);
 
-            await _notificationStep.ExecuteAsync(
+            (notificationStatus, notificationErrorCode, notificationErrorDetails) = await _notificationStep.ExecuteAsync(
                 LifecycleEventTypes.HoldCreated,
                 hold.Id,
                 LifecycleActors.System,
@@ -118,8 +186,21 @@ public sealed class CreateBookingService : ICreateBookingService
         }
         catch (Exception ex)
         {
+            notificationStatus = LifecycleStepStatuses.Failed;
+            notificationErrorCode = LifecycleErrorCodes.NotificationFailed;
+            notificationErrorDetails = ex.Message;
             _logger.LogWarning(ex, "Hold notification publish failed for HoldId={HoldId}. Hold creation succeeded.", hold.Id);
         }
+
+        await _lifecycle.RecordStepAsync(lifecycleEventId, new BookingLifecycleStepRecord(
+            LifecycleStepNames.Notifications,
+            3,
+            notificationStatus,
+            startedUtc,
+            _clock.UtcNow,
+            notificationErrorCode,
+            notificationErrorDetails,
+            ActorContext: cmd.ActorContext), ct);
     }
 
     private static IReadOnlyList<BookingNotificationRecipient> BuildHoldCreatedRecipients(

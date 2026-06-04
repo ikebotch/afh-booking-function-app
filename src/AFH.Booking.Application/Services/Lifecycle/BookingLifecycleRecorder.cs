@@ -15,8 +15,9 @@ public sealed class BookingLifecycleRecorder : IBookingLifecycleRecorder
     public Task<string> RecordEventAsync(BookingLifecycleEventRecord entry, CancellationToken ct)
     {
         var actor = entry.ActorContext;
-        var newState = string.IsNullOrWhiteSpace(entry.NewState)
-            ? BookingLifecycleStateMachine.ResolveStateForEventType(entry.EventType)
+        var newState = string.IsNullOrWhiteSpace(entry.NewState) &&
+                       BookingLifecycleStateMachine.TryResolveStateForEventType(entry.EventType, out var resolvedState)
+            ? resolvedState
             : entry.NewState;
 
         return _audit.RecordEventAsync(new LifecycleAuditEntry(

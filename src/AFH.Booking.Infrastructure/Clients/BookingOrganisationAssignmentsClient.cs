@@ -49,6 +49,12 @@ public sealed class BookingOrganisationAssignmentsClient : IBookingOrganisationA
         if (search.AssignmentTypes.Count == 0)
             return [];
 
+        if (string.IsNullOrWhiteSpace(search.AdviserId))
+        {
+            _logger.LogWarning("Location adviser-scoped organisation assignment lookup skipped because AdviserId is missing.");
+            return [];
+        }
+
         var requestedAssignmentTypes = search.AssignmentTypes
             .Select(x => x.Trim())
             .Where(x => x.Length > 0)
@@ -61,12 +67,8 @@ public sealed class BookingOrganisationAssignmentsClient : IBookingOrganisationA
             ["assignmentTypes"] = string.Join(',', requestedAssignmentTypes)
         };
 
-        AddIfPresent(query, "adviserId", search.AdviserId);
-        AddIfPresent(query, "region", search.Region);
-        AddIfPresent(query, "organisationId", search.OrganisationId);
-        AddIfPresent(query, "clientId", search.ClientId);
-
-        var path = AddQueryString("/api/v1/admin/organisation-assignments", query);
+        var adviserId = Uri.EscapeDataString(search.AdviserId.Trim());
+        var path = AddQueryString($"/api/v1/admin/advisers/{adviserId}/organisation-assignments", query);
         using var request = new HttpRequestMessage(HttpMethod.Get, path);
 
         if (!string.IsNullOrWhiteSpace(_options.FunctionKey))

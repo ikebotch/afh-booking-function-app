@@ -177,7 +177,7 @@ public class InternalOutboundAuthTests
     }
 
     [Fact]
-    public async Task BookingOrganisationAssignmentsClient_UsesNeutralLocationEndpointAndInternalAuth()
+    public async Task BookingOrganisationAssignmentsClient_UsesAdviserScopedLocationEndpointAndInternalAuth()
     {
         HttpRequestMessage? captured = null;
         var handler = new StubHandler(request =>
@@ -221,7 +221,7 @@ public class InternalOutboundAuthTests
         var assignments = await sut.GetAssignmentsAsync(
             new BookingOrganisationAssignmentSearch(
                 ["Manager", "ContactCentre"],
-                AdviserId: "adv-1",
+                AdviserId: "adv/1",
                 Region: "South",
                 OrganisationId: "org-1",
                 ClientId: "client-1"),
@@ -231,13 +231,13 @@ public class InternalOutboundAuthTests
         Assert.Equal("Manager", assignment.AssignmentType);
         Assert.Equal("manager@example.com", assignment.Email);
         Assert.NotNull(captured);
-        Assert.Equal("/api/v1/admin/organisation-assignments", captured!.RequestUri!.AbsolutePath);
+        Assert.Equal("/api/v1/admin/advisers/adv%2F1/organisation-assignments", captured!.RequestUri!.AbsolutePath);
         Assert.Contains("context=Booking", captured.RequestUri.Query);
         Assert.Contains("assignmentTypes=Manager%2CContactCentre", captured.RequestUri.Query);
-        Assert.Contains("adviserId=adv-1", captured.RequestUri.Query);
-        Assert.Contains("region=South", captured.RequestUri.Query);
-        Assert.Contains("organisationId=org-1", captured.RequestUri.Query);
-        Assert.Contains("clientId=client-1", captured.RequestUri.Query);
+        Assert.DoesNotContain("adviserId=", captured.RequestUri.Query);
+        Assert.DoesNotContain("region=", captured.RequestUri.Query);
+        Assert.DoesNotContain("organisationId=", captured.RequestUri.Query);
+        Assert.DoesNotContain("clientId=", captured.RequestUri.Query);
         Assert.True(captured.Headers.TryGetValues("x-functions-key", out var functionKeyValues));
         Assert.Equal("location-function-key", functionKeyValues!.Single());
         Assert.Equal("Bearer", captured.Headers.Authorization?.Scheme);

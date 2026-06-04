@@ -10,7 +10,40 @@ Scope:
 - Calendar infrastructure boundary under `src/AFH.Booking.Infrastructure/Calendar`
 - Relevant regression tests under `tests/AFH.Booking.Tests`
 
-This is an audit-only report. It documents the current architecture and a staged implementation plan; it does not perform the refactor.
+This report was originally produced as an audit-only baseline. It documents the architecture found at the time of audit and the staged implementation plan that followed.
+
+## Implementation Progress
+
+Since this audit was produced, the following staged refactor commits have been implemented locally:
+
+- `refactor(booking): introduce booking actor workflow context`
+- `refactor(booking): standardise lifecycle event recording`
+- `refactor(booking): align hold creation lifecycle workflow`
+- `refactor(booking): centralise hold release and expiry workflow`
+- `refactor(booking): centralise cancellation workflow context`
+- `refactor(booking): centralise rearrangement workflow context`
+- `refactor(booking): standardise workflow notification adapter`
+- `refactor(booking): add workflow idempotency guard`
+- `test(booking): cover shared workflow behaviour across actors`
+
+The audit remains useful as the baseline and rationale for the refactor. Some findings below describe the original state before these commits were applied.
+
+Resolved or largely addressed:
+
+- Standard `BookingActorContext` added.
+- Lifecycle event recording centralised through `IBookingLifecycleRecorder`.
+- `HoldCreated`, `HoldReleased`, and `HoldExpired` now have lifecycle/audit visibility.
+- Cancellation actor/source context is now centralised.
+- Rearrangement actor/source context is now centralised.
+- Workflow notification handoff outcomes are now recorded safely.
+- Workflow-level idempotency guard has been added.
+- Cross-actor workflow regression coverage has been added.
+
+Still remaining:
+
+- Public self-service error-shaping review.
+- Formal decision on whether approval events remain booking lifecycle events or move to a governance event category.
+- Final manual smoke testing across create, confirm, cancel, rearrange, hold cleanup, and notification paths.
 
 ## Executive Summary
 

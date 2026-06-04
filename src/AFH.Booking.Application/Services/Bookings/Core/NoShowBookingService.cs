@@ -2,6 +2,7 @@
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Domain.Bookings.Commands;
 
 namespace AFH.Booking.Application.Bookings;
@@ -21,6 +22,7 @@ public sealed class NoShowBookingService : INoShowBookingService
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
     private readonly IBookingLifecycleRecorder _lifecycle;
+    private readonly IBookingWorkflowIdempotencyGuard _idempotency;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
 
@@ -29,6 +31,7 @@ public sealed class NoShowBookingService : INoShowBookingService
         IBookingSlotRepository slots,
         IBookingTransactionRepository transactions,
         IBookingLifecycleRecorder lifecycle,
+        IBookingWorkflowIdempotencyGuard idempotency,
         IUnitOfWork uow,
         IClock clock)
     {
@@ -36,6 +39,7 @@ public sealed class NoShowBookingService : INoShowBookingService
         _slots = slots;
         _transactions = transactions;
         _lifecycle = lifecycle;
+        _idempotency = idempotency;
         _uow = uow;
         _clock = clock;
     }
@@ -54,6 +58,21 @@ public sealed class NoShowBookingService : INoShowBookingService
 
         if (!string.IsNullOrWhiteSpace(cmd.ReasonDetail) && cmd.ReasonDetail.Trim().Length > 1000)
             return Result<RecordNoShowResponse>.Fail(HttpStatusCode.BadRequest, "reasonDetail must be 1000 characters or fewer.", Errors.Validation);
+
+        var workflowKey = BookingWorkflowIdempotencyKeys.NoShow(cmd.BookingId, actor);
+        var existing = await _idempotency.FindCompletedAsync(workflowKey, ct);
+        if (existing is not null)
+        {
+            return Result<RecordNoShowResponse>.Ok(new RecordNoShowResponse
+            {
+                BookingId = existing.BookingId,
+                TransactionId = existing.TransactionId ?? string.Empty,
+                LifecycleEventId = existing.Id,
+                PreviousState = existing.PreviousState ?? LifecycleStates.Booked,
+                NewState = existing.NewState ?? LifecycleStates.NoShow,
+                RecordedUtc = existing.OccurredUtc
+            });
+        }
 
         var hold = await _holds.GetAsync(cmd.BookingId.Trim(), ct);
         if (hold is null)
@@ -96,9 +115,7 @@ public sealed class NoShowBookingService : INoShowBookingService
             RelatedBookingId: null,
             PreviousState: LifecycleStates.Booked,
             NewState: LifecycleStates.NoShow,
-            TriggerReason: string.IsNullOrWhiteSpace(cmd.ReasonCode)
-                ? "ConfirmedBookingMarkedNoShow"
-                : cmd.ReasonCode.Trim()), ct);
+            TriggerReason: workflowKey), ct);
 
         await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.SqlAudit,

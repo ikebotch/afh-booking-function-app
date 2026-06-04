@@ -87,6 +87,7 @@ public sealed class ReleaseHoldService : IReleaseHoldService
                 "conflict");
 
         var utcNow = _clock.UtcNow;
+        var workflowKey = BookingWorkflowIdempotencyKeys.HoldRelease(hold.Id, command.ReleaseKind.ToString());
         var before = BuildAuditSnapshot(hold);
         var outlookStep = await CancelCalendarEventIfPresentAsync(hold, ct);
         var reasonCode = ResolveReasonCode(command);
@@ -120,8 +121,8 @@ public sealed class ReleaseHoldService : IReleaseHoldService
             PreviousState: null,
             NewState: null,
             TriggerReason: command.ReleaseKind == ReleaseHoldKind.Expiry
-                ? "HoldExpiry"
-                : "ManualRelease"), ct);
+                ? workflowKey
+                : workflowKey), ct);
 
         await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.Outlook,

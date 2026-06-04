@@ -82,6 +82,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             return FailLike<ConfirmationContext, ConfirmBookingResponse>(contextResult);
 
         var context = contextResult.Value;
+        var workflowKey = BookingWorkflowIdempotencyKeys.Confirmation(context.Hold.Id);
 
         var routeTimeResult = await ApplyRouteTimeSnapshotIfRequiredAsync(context, utcNow, ct);
         if (!routeTimeResult.IsSuccess)
@@ -98,7 +99,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         var selfServiceLinks = await BuildSelfServiceLinksAsync(context.Hold.Id, ct);
         await UpdateConfirmedCalendarEventAsync(context, calendarUserIdResult.Value, joinUrl, selfServiceLinks, ct);
 
-        var eventId = await RecordBookedLifecycleAsync(cmd, context, before, utcNow, ct);
+        var eventId = await RecordBookedLifecycleAsync(cmd, context, before, workflowKey, utcNow, ct);
         await _uow.SaveChangesAsync(ct);
 
         await SendBookedNotificationAsync(context, eventId, joinUrl, selfServiceLinks, ct);
@@ -297,6 +298,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         ConfirmBookingCommand cmd,
         ConfirmationContext context,
         object before,
+        string workflowKey,
         DateTime utcNow,
         CancellationToken ct)
     {
@@ -317,7 +319,8 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 SourceSystem: "BookingService",
                 RelatedBookingId: null,
                 PreviousState: null,
-                NewState: LifecycleStates.Booked),
+                NewState: LifecycleStates.Booked,
+                TriggerReason: workflowKey),
             ct);
 
         await _lifecycle.RecordStepAsync(
@@ -509,6 +512,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             ["endUtc"] = context.Slot.EndUtc.ToString("O"),
             ["transactionRef"] = context.Transaction.TransactionRef,
             ["bookingId"] = context.Hold.Id,
+            ["IdempotencyKey"] = BookingWorkflowIdempotencyKeys.Notification("booking-confirmed", context.Hold.Id),
             ["meetingType"] = dataByPrefix.GetValueOrDefault("Meeting type", "N/A"),
             ["when"] = dataByPrefix.GetValueOrDefault("When", string.Empty),
             ["whereLine"] = lines.FirstOrDefault(line =>

@@ -2,6 +2,7 @@
 using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using Moq;
@@ -74,6 +75,7 @@ public sealed class NoShowBookingServiceTests
             slots.Object,
             transactions.Object,
             new BookingLifecycleRecorder(audit.Object),
+            Mock.Of<IBookingWorkflowIdempotencyGuard>(),
             uow.Object,
             new StubClock(now));
 
@@ -97,6 +99,48 @@ public sealed class NoShowBookingServiceTests
             It.Is<LifecycleAuditStepEntry>(step => step.LifecycleEventId == "event-id-1" && step.StepName == LifecycleStepNames.SqlAudit),
             It.IsAny<CancellationToken>()), Times.Once);
         uow.Verify(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task HandleAsync_DuplicateNoShow_ReturnsExistingLifecycleEventWithoutRecordingAgain()
+    {
+        var now = new DateTime(2026, 05, 05, 10, 30, 00, DateTimeKind.Utc);
+        var existing = new LifecycleEventRecord
+        {
+            Id = "event-existing",
+            BookingId = "booking-1",
+            TransactionId = "tx-1",
+            EventType = LifecycleEventTypes.NoShow,
+            PreviousState = LifecycleStates.Booked,
+            NewState = LifecycleStates.NoShow,
+            OccurredUtc = now.AddMinutes(-2),
+            TriggerReason = BookingWorkflowIdempotencyKeys.NoShow("booking-1", LifecycleActors.System)
+        };
+        var idempotency = new Mock<IBookingWorkflowIdempotencyGuard>();
+        idempotency.Setup(x => x.FindCompletedAsync(existing.TriggerReason!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        var holds = new Mock<IBookingHoldRepository>();
+        var audit = new Mock<ILifecycleAuditService>();
+
+        INoShowBookingService sut = new NoShowBookingService(
+            holds.Object,
+            Mock.Of<IBookingSlotRepository>(),
+            Mock.Of<IBookingTransactionRepository>(),
+            new BookingLifecycleRecorder(audit.Object),
+            idempotency.Object,
+            Mock.Of<IUnitOfWork>(),
+            new StubClock(now));
+
+        var result = await sut.HandleAsync(new RecordNoShowCommand
+        {
+            BookingId = "booking-1",
+            RequestedBy = LifecycleActors.System
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("event-existing", result.Value?.LifecycleEventId);
+        holds.Verify(x => x.GetAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        audit.Verify(x => x.RecordEventAsync(It.IsAny<LifecycleAuditEntry>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
@@ -124,6 +168,7 @@ public sealed class NoShowBookingServiceTests
             Mock.Of<IBookingSlotRepository>(),
             Mock.Of<IBookingTransactionRepository>(),
             new BookingLifecycleRecorder(audit.Object),
+            Mock.Of<IBookingWorkflowIdempotencyGuard>(),
             Mock.Of<IUnitOfWork>(),
             new StubClock(now));
 

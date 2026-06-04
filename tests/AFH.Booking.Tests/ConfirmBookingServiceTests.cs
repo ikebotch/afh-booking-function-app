@@ -281,6 +281,7 @@ public class ConfirmBookingServiceTests
         Assert.Equal(hold.Id, notificationStep.LastCorrelationId);
         Assert.Equal(LifecycleActors.Client, notificationStep.LastActorType);
         Assert.Equal("client-token-1", notificationStep.LastData?["viewBookingUrl"].Split("token=", StringSplitOptions.None)[1]);
+        Assert.Equal("booking-confirmed:hold-test", notificationStep.LastData?["IdempotencyKey"]);
         Assert.Equal("lifecycle-event-1", notificationStep.LastData?["eventId"]);
         Assert.Equal(slot.Id, notificationStep.LastData?["slotId"]);
         var recipient = Assert.Single(notificationStep.LastRecipients ?? Array.Empty<BookingNotificationRecipient>());

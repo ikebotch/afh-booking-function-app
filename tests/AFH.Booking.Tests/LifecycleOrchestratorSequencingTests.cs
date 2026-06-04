@@ -108,6 +108,7 @@ public sealed class LifecycleOrchestratorSequencingTests
         Assert.Equal(LifecycleActors.Client, publishedCancelNotificationActorType);
         Assert.Equal("evt-1", publishedCancelNotificationData?["eventId"]);
         Assert.Equal("booking-1", publishedCancelNotificationData?["bookingId"]);
+        Assert.Equal("booking-cancelled:booking-1", publishedCancelNotificationData?["IdempotencyKey"]);
     }
 
     [Fact]
@@ -243,6 +244,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             notificationStep.Object,
             downstream.Object,
             new BookingLifecycleRecorder(audit.Object),
+            Mock.Of<IBookingWorkflowIdempotencyGuard>(),
             uow.Object,
             new StubClock(DateTime.UtcNow));
 
@@ -268,6 +270,7 @@ public sealed class LifecycleOrchestratorSequencingTests
         Assert.Equal("evt-1", publishedNotificationData?["eventId"]);
         Assert.Equal("booking-old", publishedNotificationData?["previousBookingId"]);
         Assert.Equal("booking-new", publishedNotificationData?["newBookingId"]);
+        Assert.Equal("booking-rescheduled:booking-new", publishedNotificationData?["IdempotencyKey"]);
     }
 
     [Fact]
@@ -321,6 +324,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             Mock.Of<IBookingWorkflowNotificationAdapter>(),
             downstream.Object,
             new BookingLifecycleRecorder(audit.Object),
+            Mock.Of<IBookingWorkflowIdempotencyGuard>(),
             uow.Object,
             new StubClock(DateTime.UtcNow));
 
@@ -371,6 +375,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             Mock.Of<IBookingWorkflowNotificationAdapter>(),
             Mock.Of<IDownstreamUpdateService>(),
             new BookingLifecycleRecorder(Mock.Of<ILifecycleAuditService>()),
+            Mock.Of<IBookingWorkflowIdempotencyGuard>(),
             Mock.Of<IUnitOfWork>(),
             new StubClock(DateTime.UtcNow));
 
@@ -421,6 +426,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             Mock.Of<IBookingWorkflowNotificationAdapter>(),
             Mock.Of<IDownstreamUpdateService>(),
             new BookingLifecycleRecorder(Mock.Of<ILifecycleAuditService>()),
+            Mock.Of<IBookingWorkflowIdempotencyGuard>(),
             Mock.Of<IUnitOfWork>(),
             new StubClock(DateTime.UtcNow));
 
@@ -471,6 +477,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             Mock.Of<IBookingWorkflowNotificationAdapter>(),
             Mock.Of<IDownstreamUpdateService>(),
             new BookingLifecycleRecorder(Mock.Of<ILifecycleAuditService>()),
+            Mock.Of<IBookingWorkflowIdempotencyGuard>(),
             Mock.Of<IUnitOfWork>(),
             new StubClock(DateTime.UtcNow));
 
@@ -527,6 +534,7 @@ public sealed class LifecycleOrchestratorSequencingTests
             Mock.Of<IBookingWorkflowNotificationAdapter>(),
             downstream.Object,
             new BookingLifecycleRecorder(audit.Object),
+            Mock.Of<IBookingWorkflowIdempotencyGuard>(),
             uow.Object,
             new StubClock(DateTime.UtcNow));
 

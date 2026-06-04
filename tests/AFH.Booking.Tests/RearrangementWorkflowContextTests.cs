@@ -164,6 +164,62 @@ public sealed class RearrangementWorkflowContextTests
     }
 
     [Fact]
+    public async Task RearrangeAsync_DuplicateSubmit_ReturnsExistingResultWithoutCreatingReplacementBooking()
+    {
+        var afterJson = JsonSerializer.Serialize(new
+        {
+            previousBookingId = "booking-old",
+            newBookingId = "booking-new",
+            newSlotId = "slot-assigned",
+            previousAdviserId = "adviser-old",
+            previousAdviserName = "Old Adviser",
+            previousStartUtc = FixedNow.AddDays(1),
+            previousEndUtc = FixedNow.AddDays(1).AddHours(1),
+            newAdviserId = "adviser-old",
+            newAdviserName = "Old Adviser",
+            newStartUtc = FixedNow.AddDays(2),
+            newEndUtc = FixedNow.AddDays(2).AddHours(1),
+            notificationSummary = "Existing rearrangement result."
+        });
+        var existing = new LifecycleEventRecord
+        {
+            Id = "event-existing",
+            BookingId = "booking-new",
+            RelatedBookingId = "booking-old",
+            EventType = LifecycleEventTypes.Rearranged,
+            AfterJson = afterJson,
+            OccurredUtc = FixedNow,
+            TriggerReason = BookingWorkflowIdempotencyKeys.Rearrangement("booking-old", "slot-assigned", LifecycleActors.Client)
+        };
+        var harness = RearrangementHarness.Create("slot-assigned", "adviser-old", existingWorkflow: existing);
+
+        var result = await harness.Sut.RearrangeAsync(new RearrangeBookingCommand
+        {
+            BookingId = "booking-old",
+            NewSlotId = "slot-assigned",
+            RequestedBy = LifecycleActors.Client,
+            ReasonCode = "CLIENT_RESCHEDULE"
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("booking-new", result.Value!.NewBookingId);
+        Assert.Equal("slot-assigned", result.Value.NewSlotId);
+        Assert.Equal("Existing rearrangement result.", result.Value.NotificationSummary);
+        Assert.Null(harness.LastCreateHoldCommand);
+        harness.Cancel.Verify(x => x.CancelAsync(
+            It.IsAny<CancelBookingCommand>(),
+            It.IsAny<bool>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        harness.Downstream.Verify(x => x.PublishBookingChangeAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Empty(harness.Events);
+    }
+
+    [Fact]
     public async Task RearrangeAsync_NotificationAndDownstreamBehaviour_RemainsUnchanged()
     {
         var harness = RearrangementHarness.Create("slot-assigned", "adviser-old");
@@ -188,6 +244,10 @@ public sealed class RearrangementWorkflowContextTests
             "Rearrange",
             "txn-ref",
             It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        harness.Notifications.Verify(x => x.RequestAsync(
+            It.Is<BookingWorkflowNotificationRequest>(request =>
+                request.Data["IdempotencyKey"] == "booking-rescheduled:booking-new"),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -343,7 +403,8 @@ public sealed class RearrangementWorkflowContextTests
         public static RearrangementHarness Create(
             string newSlotId,
             string newAdviserId,
-            Result<CreateBookingResponse>? createResult = null)
+            Result<CreateBookingResponse>? createResult = null,
+            LifecycleEventRecord? existingWorkflow = null)
         {
             var events = new List<BookingLifecycleEventRecord>();
             var oldHold = BookingHold.Rehydrate(
@@ -503,6 +564,14 @@ public sealed class RearrangementWorkflowContextTests
             var uow = new Mock<IUnitOfWork>();
             uow.Setup(x => x.SaveChangesAsync(It.IsAny<CancellationToken>()))
                 .ReturnsAsync(1);
+            var idempotency = new Mock<IBookingWorkflowIdempotencyGuard>();
+            idempotency.Setup(x => x.FindCompletedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync((LifecycleEventRecord?)null);
+            if (existingWorkflow is not null)
+            {
+                idempotency.Setup(x => x.FindCompletedAsync(existingWorkflow.TriggerReason!, It.IsAny<CancellationToken>()))
+                    .ReturnsAsync(existingWorkflow);
+            }
             var sut = new RearrangementOrchestrator(
                 holds.Object,
                 slots.Object,
@@ -513,6 +582,7 @@ public sealed class RearrangementWorkflowContextTests
                 notifications.Object,
                 downstream.Object,
                 lifecycle.Object,
+                idempotency.Object,
                 uow.Object,
                 new StubClock(FixedNow));
 

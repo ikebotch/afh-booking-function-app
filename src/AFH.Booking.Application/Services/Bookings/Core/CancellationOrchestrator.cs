@@ -59,6 +59,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         CancellationToken ct)
     {
         var utcNow = _clock.UtcNow;
+        var workflowKey = BookingWorkflowIdempotencyKeys.Cancellation(cmd.BookingId, cmd.RequestedBy, cmd.ReasonCode);
 
         var holdResult = await LoadCancellationHoldAsync(cmd, ct);
         if (!holdResult.IsSuccess || holdResult.Value is null)
@@ -99,6 +100,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             context,
             before,
             outlookStep,
+            workflowKey,
             utcNow,
             ct);
 
@@ -193,6 +195,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         CancellationContext context,
         object before,
         LifecycleStepOutcome outlookStep,
+        string workflowKey,
         DateTime utcNow,
         CancellationToken ct)
     {
@@ -212,7 +215,8 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             SourceSystem: cmd.ActorContext?.SourceApplication ?? "BookingService",
             RelatedBookingId: null,
             PreviousState: ResolveLifecycleStateBeforeCancellation(before),
-            NewState: LifecycleStates.Cancelled), ct);
+            NewState: LifecycleStates.Cancelled,
+            TriggerReason: workflowKey), ct);
 
         await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.Outlook,
@@ -428,6 +432,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             ["startUtc"] = context.Slot.StartUtc.ToString("O"),
             ["endUtc"] = context.Slot.EndUtc.ToString("O"),
             ["transactionRef"] = context.Transaction.TransactionRef,
+            ["IdempotencyKey"] = BookingWorkflowIdempotencyKeys.Notification("booking-cancelled", context.Hold.Id),
             ["greetingName"] = "there",
             ["whenLine"] = dataByPrefix.GetValueOrDefault("When", string.Empty),
             ["locationLine"] = dataByPrefix.GetValueOrDefault("Meeting type", string.Empty),

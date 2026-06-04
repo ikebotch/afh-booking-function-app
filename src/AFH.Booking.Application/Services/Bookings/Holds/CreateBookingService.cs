@@ -277,6 +277,7 @@ public sealed class CreateBookingService : ICreateBookingService
         {
             ["transactionRef"] = context.Transaction.TransactionRef,
             ["holdId"] = hold.Id,
+            ["IdempotencyKey"] = BookingWorkflowIdempotencyKeys.Notification("booking-hold-created", hold.Id),
             ["adviserName"] = context.Slot.AdviserName,
             ["meetingType"] = meetingType,
             ["when"] = whenLine,

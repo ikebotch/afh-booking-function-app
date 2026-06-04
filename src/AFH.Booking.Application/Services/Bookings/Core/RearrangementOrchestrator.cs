@@ -21,6 +21,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private readonly IClientDirectory? _clients;
     private readonly IDownstreamUpdateService _downstreamUpdates;
     private readonly IBookingLifecycleRecorder _lifecycle;
+    private readonly IBookingWorkflowIdempotencyGuard _idempotency;
     private readonly IUnitOfWork _uow;
     private readonly IClock _clock;
 
@@ -34,6 +35,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         IBookingWorkflowNotificationAdapter notifications,
         IDownstreamUpdateService downstreamUpdates,
         IBookingLifecycleRecorder lifecycle,
+        IBookingWorkflowIdempotencyGuard idempotency,
         IUnitOfWork uow,
         IClock clock,
         IClientDirectory? clients = null)
@@ -48,6 +50,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         _clients = clients;
         _downstreamUpdates = downstreamUpdates;
         _lifecycle = lifecycle;
+        _idempotency = idempotency;
         _uow = uow;
         _clock = clock;
     }
@@ -56,6 +59,21 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         RearrangeBookingCommand cmd,
         CancellationToken ct)
     {
+        var validation = BookingChangeValidation.Validate(cmd);
+        if (!validation.IsSuccess)
+            return FailLike<RearrangeBookingResponse>(validation);
+
+        if (string.IsNullOrWhiteSpace(cmd.BookingId))
+            return Result<RearrangeBookingResponse>.Fail(HttpStatusCode.BadRequest, "bookingId is required.", Errors.Validation);
+
+        if (string.IsNullOrWhiteSpace(cmd.NewSlotId))
+            return Result<RearrangeBookingResponse>.Fail(HttpStatusCode.BadRequest, "newSlotId is required.", Errors.Validation);
+
+        var workflowKey = BookingWorkflowIdempotencyKeys.Rearrangement(cmd.BookingId, cmd.NewSlotId, cmd.RequestedBy);
+        var existing = await _idempotency.FindCompletedAsync(workflowKey, ct);
+        if (existing is not null)
+            return TryBuildIdempotentRearrangeResponse(existing);
+
         var existingBookingResult = await LoadExistingBookingAsync(cmd, ct);
         if (!existingBookingResult.IsSuccess || existingBookingResult.Value is null)
             return FailLike<ExistingBookingContext, RearrangeBookingResponse>(existingBookingResult);
@@ -79,10 +97,10 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             return FailLike<RearrangeBookingResponse>(cancelResult);
 
         var newBooking = newBookingResult.Value;
-        var eventId = await RecordRearrangedLifecycleAsync(cmd, existingBooking, newBooking, before, ct);
+        var notificationSummary = BuildNotificationSummary(existingBooking.Slot, newBooking.Slot);
+        var eventId = await RecordRearrangedLifecycleAsync(cmd, existingBooking, newBooking, before, workflowKey, notificationSummary, ct);
         await _uow.SaveChangesAsync(ct);
 
-        var notificationSummary = BuildNotificationSummary(existingBooking.Slot, newBooking.Slot);
         await RecordRearrangedNotificationStepAsync(
             cmd,
             existingBooking,
@@ -102,16 +120,6 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         RearrangeBookingCommand cmd,
         CancellationToken ct)
     {
-        var validation = BookingChangeValidation.Validate(cmd);
-        if (!validation.IsSuccess)
-            return FailLike<ExistingBookingContext>(validation);
-
-        if (string.IsNullOrWhiteSpace(cmd.BookingId))
-            return Result<ExistingBookingContext>.Fail(HttpStatusCode.BadRequest, "bookingId is required.", Errors.Validation);
-
-        if (string.IsNullOrWhiteSpace(cmd.NewSlotId))
-            return Result<ExistingBookingContext>.Fail(HttpStatusCode.BadRequest, "newSlotId is required.", Errors.Validation);
-
         var hold = await _holds.GetAsync(cmd.BookingId.Trim(), ct);
         if (hold is null)
             return Result<ExistingBookingContext>.NotFound($"Booking '{cmd.BookingId}' was not found.");
@@ -244,6 +252,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         ExistingBookingContext existingBooking,
         ConfirmedBookingContext newBooking,
         object before,
+        string workflowKey,
+        string notificationSummary,
         CancellationToken ct)
     {
         var eventId = await _lifecycle.RecordEventAsync(new BookingLifecycleEventRecord(
@@ -261,15 +271,23 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
                 previousBookingId = existingBooking.Hold.Id,
                 newBookingId = newBooking.Hold.Id,
                 newSlotId = newBooking.Slot.Id,
+                previousAdviserId = existingBooking.Slot.AdviserId,
+                previousAdviserName = existingBooking.Slot.AdviserName,
+                previousStartUtc = existingBooking.Slot.StartUtc,
+                previousEndUtc = existingBooking.Slot.EndUtc,
                 newAdviserId = newBooking.Slot.AdviserId,
-                newStartUtc = newBooking.Slot.StartUtc
+                newAdviserName = newBooking.Slot.AdviserName,
+                newStartUtc = newBooking.Slot.StartUtc,
+                newEndUtc = newBooking.Slot.EndUtc,
+                notificationSummary
             },
             OccurredUtc: _clock.UtcNow,
             CorrelationId: cmd.CorrelationId,
             SourceSystem: cmd.ActorContext?.SourceApplication ?? "BookingService",
             RelatedBookingId: existingBooking.Hold.Id,
             PreviousState: LifecycleStates.Booked,
-            NewState: LifecycleStates.Rearranged), ct);
+            NewState: LifecycleStates.Rearranged,
+            TriggerReason: workflowKey), ct);
 
         var now = _clock.UtcNow;
         await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
@@ -399,6 +417,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             ["newBookingId"] = newBooking.Hold.Id,
             ["previousSlotId"] = existingBooking.Slot.Id,
             ["newSlotId"] = newBooking.Slot.Id,
+            ["IdempotencyKey"] = BookingWorkflowIdempotencyKeys.Notification("booking-rescheduled", newBooking.Hold.Id),
             ["adviserName"] = newBooking.Slot.AdviserName,
             ["startUtc"] = newBooking.Slot.StartUtc.ToString("O"),
             ["endUtc"] = newBooking.Slot.EndUtc.ToString("O"),
@@ -455,6 +474,55 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             NewEndUtc = newBooking.Slot.EndUtc,
             NotificationSummary = notificationSummary
         });
+    }
+
+    private static Result<RearrangeBookingResponse> TryBuildIdempotentRearrangeResponse(LifecycleEventRecord existing)
+    {
+        if (string.IsNullOrWhiteSpace(existing.AfterJson))
+        {
+            return Result<RearrangeBookingResponse>.Fail(
+                HttpStatusCode.Conflict,
+                "A previous rearrangement was found, but its result could not be reconstructed.",
+                Errors.Conflict);
+        }
+
+        try
+        {
+            var snapshot = JsonSerializer.Deserialize<RearrangedSnapshot>(existing.AfterJson);
+            if (snapshot is null ||
+                string.IsNullOrWhiteSpace(snapshot.previousBookingId) ||
+                string.IsNullOrWhiteSpace(snapshot.newBookingId) ||
+                string.IsNullOrWhiteSpace(snapshot.newSlotId))
+            {
+                return Result<RearrangeBookingResponse>.Fail(
+                    HttpStatusCode.Conflict,
+                    "A previous rearrangement was found, but its result could not be reconstructed.",
+                    Errors.Conflict);
+            }
+
+            return Result<RearrangeBookingResponse>.Ok(new RearrangeBookingResponse
+            {
+                PreviousBookingId = snapshot.previousBookingId,
+                NewBookingId = snapshot.newBookingId,
+                NewSlotId = snapshot.newSlotId,
+                PreviousAdviserId = snapshot.previousAdviserId ?? string.Empty,
+                PreviousAdviserName = snapshot.previousAdviserName ?? string.Empty,
+                PreviousStartUtc = snapshot.previousStartUtc,
+                PreviousEndUtc = snapshot.previousEndUtc,
+                NewAdviserId = snapshot.newAdviserId ?? string.Empty,
+                NewAdviserName = snapshot.newAdviserName ?? string.Empty,
+                NewStartUtc = snapshot.newStartUtc,
+                NewEndUtc = snapshot.newEndUtc,
+                NotificationSummary = snapshot.notificationSummary ?? string.Empty
+            });
+        }
+        catch (JsonException)
+        {
+            return Result<RearrangeBookingResponse>.Fail(
+                HttpStatusCode.Conflict,
+                "A previous rearrangement was found, but its result could not be reconstructed.",
+                Errors.Conflict);
+        }
     }
 
     private static object CreateBeforeSnapshot(ExistingBookingContext existingBooking)
@@ -547,4 +615,18 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
     private sealed record ConfirmedBookingContext(
         BookingHold Hold,
         BookingSlot Slot);
+
+    private sealed record RearrangedSnapshot(
+        string? previousBookingId,
+        string? newBookingId,
+        string? newSlotId,
+        string? previousAdviserId,
+        string? previousAdviserName,
+        DateTime previousStartUtc,
+        DateTime previousEndUtc,
+        string? newAdviserId,
+        string? newAdviserName,
+        DateTime newStartUtc,
+        DateTime newEndUtc,
+        string? notificationSummary);
 }

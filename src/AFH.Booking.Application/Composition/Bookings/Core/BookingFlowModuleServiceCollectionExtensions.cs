@@ -34,6 +34,7 @@ internal static class BookingFlowModuleServiceCollectionExtensions
         services.AddScoped<ISelectedSlotRouteTimeGuard, SelectedSlotRouteTimeGuard>();
         services.AddScoped<ILifecycleAuditService, LifecycleAuditService>();
         services.AddScoped<IBookingLifecycleRecorder, BookingLifecycleRecorder>();
+        services.AddScoped<IBookingWorkflowIdempotencyGuard, BookingWorkflowIdempotencyGuard>();
         services.AddScoped<IAvailabilityRulesService, AvailabilityRulesService>();
         services.AddScoped<IApprovalWorkflowService, ApprovalWorkflowService>();
         services.AddScoped<IBookingNotificationStep, BookingNotificationStep>();

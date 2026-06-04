@@ -183,6 +183,12 @@ public sealed class LifecycleAuditServiceTests
             _items.Add(record);
             return Task.CompletedTask;
         }
+
+        public Task<LifecycleEventRecord?> FindLatestByTriggerReasonAsync(string triggerReason, CancellationToken ct)
+            => Task.FromResult(_items
+                .Where(x => x.TriggerReason == triggerReason)
+                .OrderByDescending(x => x.OccurredUtc)
+                .FirstOrDefault());
     }
 
     private sealed class InMemoryLifecycleStepRepository : ILifecycleStepRepository

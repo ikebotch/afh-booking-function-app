@@ -182,7 +182,7 @@ public sealed class CreateBookingService : ICreateBookingService
                 new BookingWorkflowNotificationRequest(
                     LifecycleEventTypes.HoldCreated,
                     hold.Id,
-                    LifecycleActors.System,
+                    ResolveNotificationActorType(cmd),
                     BuildHoldCreatedRecipients(client),
                     BuildHoldCreatedNotificationData(hold, context)),
                 ct);
@@ -213,6 +213,11 @@ public sealed class CreateBookingService : ICreateBookingService
             notificationErrorDetails,
             ActorContext: cmd.ActorContext), ct);
     }
+
+    private static string ResolveNotificationActorType(CreateHoldCommand cmd)
+        => string.IsNullOrWhiteSpace(cmd.ActorContext?.ActorType)
+            ? LifecycleActors.System
+            : cmd.ActorContext.ActorType;
 
     private static IReadOnlyList<BookingNotificationRecipient> BuildHoldCreatedRecipients(
         Domain.Client.ClientDirectoryItem? client)

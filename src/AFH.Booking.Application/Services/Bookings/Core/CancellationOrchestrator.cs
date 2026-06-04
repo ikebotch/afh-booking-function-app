@@ -24,6 +24,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
     private readonly IDownstreamUpdateService _downstreamUpdates;
     private readonly IBookingLifecycleRecorder _lifecycle;
     private readonly ILogger<CancellationOrchestrator> _logger;
+    private readonly IBookingWorkflowIdempotencyGuard? _idempotency;
 
     public CancellationOrchestrator(
         IBookingHoldRepository holds,
@@ -37,7 +38,8 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         IDownstreamUpdateService downstreamUpdates,
         IBookingLifecycleRecorder lifecycle,
         ILogger<CancellationOrchestrator> logger,
-        IClientDirectory? clients = null)
+        IClientDirectory? clients = null,
+        IBookingWorkflowIdempotencyGuard? idempotency = null)
     {
         _holds = holds;
         _slots = slots;
@@ -51,6 +53,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         _downstreamUpdates = downstreamUpdates;
         _lifecycle = lifecycle;
         _logger = logger;
+        _idempotency = idempotency;
     }
 
     public async Task<Result<CancelBookingResponse>> CancelAsync(
@@ -60,6 +63,9 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
     {
         var utcNow = _clock.UtcNow;
         var workflowKey = BookingWorkflowIdempotencyKeys.Cancellation(cmd.BookingId, cmd.RequestedBy, cmd.ReasonCode);
+        var existing = await FindCompletedCancellationAsync(workflowKey, cmd, ct);
+        if (existing is not null)
+            return OkResponse(existing, utcNow);
 
         var holdResult = await LoadCancellationHoldAsync(cmd, ct);
         if (!holdResult.IsSuccess || holdResult.Value is null)
@@ -333,6 +339,30 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             BookingId = hold.Id,
             Status = hold.Status.ToString(),
             CancelledUtc = hold.CancelledUtc ?? utcNow
+        });
+    }
+
+    private async Task<LifecycleEventRecord?> FindCompletedCancellationAsync(
+        string workflowKey,
+        CancelBookingCommand cmd,
+        CancellationToken ct)
+    {
+        if (_idempotency is null ||
+            string.Equals(cmd.RequestedBy, LifecycleActors.Client, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return await _idempotency.FindCompletedAsync(workflowKey, ct);
+    }
+
+    private static Result<CancelBookingResponse> OkResponse(LifecycleEventRecord existing, DateTime utcNow)
+    {
+        return Result<CancelBookingResponse>.Ok(new CancelBookingResponse
+        {
+            BookingId = existing.BookingId,
+            Status = BookingHoldStatus.Cancelled.ToString(),
+            CancelledUtc = existing.OccurredUtc == default ? utcNow : existing.OccurredUtc
         });
     }
 

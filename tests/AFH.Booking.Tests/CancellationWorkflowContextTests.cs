@@ -139,6 +139,65 @@ public sealed class CancellationWorkflowContextTests
     }
 
     [Fact]
+    public async Task CancelAsync_CompletedNonClientWorkflowKey_ReturnsIdempotentSuccessWithoutSideEffects()
+    {
+        var existing = new LifecycleEventRecord
+        {
+            Id = "event-existing",
+            BookingId = "booking-1",
+            EventType = LifecycleEventTypes.Cancelled,
+            OccurredUtc = FixedNow.AddMinutes(-5),
+            TriggerReason = BookingWorkflowIdempotencyKeys.Cancellation(
+                "booking-1",
+                BookingActorContext.ActorInternalAdmin,
+                "ADMIN_REQUEST")
+        };
+        var idempotency = new Mock<IBookingWorkflowIdempotencyGuard>();
+        idempotency.Setup(x => x.FindCompletedAsync(existing.TriggerReason!, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(existing);
+        var harness = CancellationHarness.Create(idempotency: idempotency.Object);
+
+        var result = await harness.Sut.CancelAsync(new CancelBookingCommand
+        {
+            BookingId = "booking-1",
+            ActorContext = BookingActorContext.InternalAdmin("admin-1"),
+            ReasonCode = "ADMIN_REQUEST"
+        }, sendClientNotification: true, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal("booking-1", result.Value!.BookingId);
+        Assert.Equal("Cancelled", result.Value.Status);
+        Assert.Equal(existing.OccurredUtc, result.Value.CancelledUtc);
+        Assert.Empty(harness.Events);
+        harness.Calendar.Verify(x => x.CancelBookingEventAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Notifications.Verify(x => x.RequestAsync(It.IsAny<BookingWorkflowNotificationRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        harness.Downstream.Verify(x => x.PublishBookingChangeAsync(
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CancelAsync_SelfServiceRepeatStillUsesStateBasedConflictInsteadOfCompletedEventLookup()
+    {
+        var idempotency = new Mock<IBookingWorkflowIdempotencyGuard>();
+        var harness = CancellationHarness.Create(BookingHoldStatus.Cancelled, idempotency: idempotency.Object);
+
+        var result = await harness.Sut.CancelAsync(new CancelBookingCommand
+        {
+            BookingId = "booking-1",
+            ActorContext = BookingActorContext.SelfServiceClient("client-1", "corr-client"),
+            ReasonCode = "CLIENT_REQUEST"
+        }, sendClientNotification: true, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(Errors.Conflict, result.ErrorCode);
+        idempotency.Verify(x => x.FindCompletedAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
     public async Task CancelAsync_CalendarFailure_RecordsFailedOutlookStepAndStillCancels()
     {
         var harness = CancellationHarness.Create(providerEventId: "provider-1");
@@ -323,7 +382,8 @@ public sealed class CancellationWorkflowContextTests
 
         public static CancellationHarness Create(
             BookingHoldStatus holdStatus = BookingHoldStatus.Confirmed,
-            string? providerEventId = null)
+            string? providerEventId = null,
+            IBookingWorkflowIdempotencyGuard? idempotency = null)
         {
             var events = new List<BookingLifecycleEventRecord>();
             var steps = new List<BookingLifecycleStepRecord>();
@@ -425,7 +485,8 @@ public sealed class CancellationWorkflowContextTests
                 notifications.Object,
                 downstream.Object,
                 lifecycle.Object,
-                Mock.Of<ILogger<CancellationOrchestrator>>());
+                Mock.Of<ILogger<CancellationOrchestrator>>(),
+                idempotency: idempotency);
 
             return new CancellationHarness(sut, calendar, downstream, notifications, events, steps);
         }

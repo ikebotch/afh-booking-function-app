@@ -292,6 +292,46 @@ public class ConfirmBookingServiceTests
     }
 
     [Fact]
+    public async Task HandleAsync_BookedNotificationUsesActorContextWhenAvailable()
+    {
+        var now = DateTime.UtcNow.AddHours(1);
+        var hold = ActiveHold(now, providerEventId: null);
+        var slot = InPersonSlot(now);
+        var tx = InPersonTransaction(now);
+        var notificationStep = new StubBookingWorkflowNotificationAdapter();
+        var actor = BookingActorContext.InternalAdmin(
+            actorId: "admin-1",
+            displayName: "Admin One",
+            correlationId: "corr-admin");
+        var sut = new ConfirmBookingService(
+            new StubHoldRepository(hold),
+            new StubSlotRepository(slot),
+            new StubTransactionRepository(tx),
+            new StubUnitOfWork(),
+            new StubClock(now),
+            new StubCalendarGateway(),
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            new StubMeetingLinkFactory(),
+            new StubConflictService(new BookingConflictCheckResult(false, null, null, Array.Empty<BookingConflictDetail>())),
+            new StubRouteTimeGuard(),
+            new BookingLifecycleRecorder(new StubLifecycleAuditService()),
+            notificationStep,
+            new StubHoldWindowFactory(),
+            new StubBookingTokenService("client-token-1"),
+            TestNotificationOptions(),
+            new StubClientDirectory());
+
+        var result = await sut.HandleAsync(new ConfirmBookingCommand
+        {
+            HoldId = hold.Id,
+            ActorContext = actor
+        }, CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(BookingActorContext.ActorInternalAdmin, notificationStep.LastActorType);
+    }
+
+    [Fact]
     public async Task HandleAsync_ResolvesCalendarUserIdOnlyAfterTransactionLookupCompletes()
     {
         var now = DateTime.UtcNow.AddHours(1);

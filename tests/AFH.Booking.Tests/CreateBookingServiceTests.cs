@@ -131,7 +131,7 @@ public class CreateBookingServiceTests
                 It.Is<BookingWorkflowNotificationRequest>(request =>
                     request.LifecycleEventType == LifecycleEventTypes.HoldCreated &&
                     request.CorrelationId == hold.Id &&
-                    request.ActorType == LifecycleActors.System),
+                    request.ActorType == LifecycleActors.Client),
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(BookingWorkflowNotificationOutcome.Skipped(
                 "BookingHoldCreated",

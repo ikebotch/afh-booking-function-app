@@ -82,6 +82,9 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             return FailLike<ConfirmationContext, ConfirmBookingResponse>(contextResult);
 
         var context = contextResult.Value;
+        // Confirmation idempotency is state-based: GetForUpdateAsync plus hold status validation
+        // prevents duplicate side effects. The workflow key is recorded for audit/notification lookup,
+        // not used as a lock.
         var workflowKey = BookingWorkflowIdempotencyKeys.Confirmation(context.Hold.Id);
 
         var routeTimeResult = await ApplyRouteTimeSnapshotIfRequiredAsync(context, utcNow, ct);
@@ -373,7 +376,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 new BookingWorkflowNotificationRequest(
                     LifecycleEventTypes.Booked,
                     context.Hold.Id,
-                    LifecycleActors.Client,
+                    ResolveNotificationActorType(context),
                     BuildBookingConfirmedRecipients(client),
                     BuildBookingConfirmedNotificationData(
                         context,
@@ -411,6 +414,11 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 ActorContext: context.CommandActorContext),
             ct);
     }
+
+    private static string ResolveNotificationActorType(ConfirmationContext context)
+        => string.IsNullOrWhiteSpace(context.CommandActorContext?.ActorType)
+            ? LifecycleActors.Client
+            : context.CommandActorContext.ActorType;
 
     private async Task<BookingSelfServiceLinks?> BuildSelfServiceLinksAsync(string bookingId, CancellationToken ct)
     {

@@ -1,11 +1,15 @@
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Common.Clock;
+using AFH.Booking.Application.Models.Auth;
+using AFH.Booking.Domain.Auth;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Functions.V1.Bookings;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using System.Net;
+using System.Security.Claims;
 using System.Text;
 
 namespace AFH.Booking.Tests;
@@ -131,8 +135,9 @@ public sealed class BookingActorContextTests
         var service = new StubCancelBookingService();
         var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
         var request = CreateJsonRequest("""{"reasonCode":"ADMIN_REQUEST"}""");
+        SetDomainUser(request, "admin-1", "Ada Admin", [BookingPermissionNames.CancelDirect], ["Admin"]);
 
-        var response = await sut.Run(request, "booking-1", CancellationToken.None);
+        var response = await sut.Run(request, request.FunctionContext, "booking-1", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal(BookingActorContext.SourceInternalAdmin, service.LastCommand?.ActorContext?.SourceApplication);
@@ -183,6 +188,31 @@ public sealed class BookingActorContextTests
         writer.Flush();
         request.Body.Position = 0;
         return request;
+    }
+
+    private static void SetDomainUser(
+        TestHttpRequestData request,
+        string userId,
+        string displayName,
+        IReadOnlyList<string> permissions,
+        IReadOnlyList<string> roles)
+    {
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim("oid", userId),
+            new Claim("name", displayName)
+        ], "Test"));
+
+        request.FunctionContext.SetDomainUserPrincipal(
+            principal,
+            new AdviserUserContext
+            {
+                UserId = userId,
+                DisplayName = displayName,
+                Email = $"{userId}@example.test",
+                Permissions = permissions,
+                Roles = roles
+            });
     }
 
     private sealed class StubCancelBookingService : ICancelBookingService

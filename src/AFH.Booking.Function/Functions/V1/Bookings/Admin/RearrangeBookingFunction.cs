@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Domain.Auth;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -25,8 +26,9 @@ public sealed class RearrangeBookingFunction
         RequestBodyType = typeof(RearrangeBookingRequest),
         ResponseType = typeof(RearrangeBookingResponse))]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/{bookingId}/rearrange")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/bookings/{bookingId}/rearrange")]
         HttpRequestData req,
+        FunctionContext context,
         string bookingId,
         CancellationToken ct)
     {
@@ -37,23 +39,32 @@ public sealed class RearrangeBookingFunction
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, "Validation");
 
-        var requestedBy = ResolveInternalRequestedBy(body.RequestedBy);
-        var correlationId = req.Headers.TryGetValues("x-correlation-id", out var values)
-            ? values.FirstOrDefault()
-            : null;
+        var authResult = await BookingFunctionActorContext.BuildManagerOrAdminAsync(
+            req,
+            context,
+            BookingPermissionNames.RearrangeDirect,
+            ct);
+        if (!authResult.IsSuccess)
+            return authResult.Response!;
+
+        if (string.IsNullOrWhiteSpace(body.NewSlotId))
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, "newSlotId is required.", ct, Errors.Validation);
+
+        if (string.IsNullOrWhiteSpace(body.ReasonCode))
+            return await req.ProblemAsync(HttpStatusCode.BadRequest, "reasonCode is required for manager/admin booking rearrangement.", ct, Errors.ReasonCodeRequired);
+
+        var actor = authResult.ActorContext!;
 
         var cmd = new RearrangeBookingCommand
         {
             BookingId = bookingId.Trim(),
             NewSlotId = body.NewSlotId,
-            ActorContext = BookingActorContext.InternalAdmin(
-                correlationId: correlationId,
-                actorType: requestedBy),
-            RequestedBy = requestedBy,
+            ActorContext = actor,
+            RequestedBy = actor.ActorType,
             ReasonCode = body.ReasonCode,
             ReasonDetail = body.ReasonDetail,
             ApprovalRequestId = body.ApprovalRequestId,
-            CorrelationId = correlationId
+            CorrelationId = actor.CorrelationId
         };
 
         var result = await _service.HandleAsync(cmd, ct);
@@ -68,16 +79,5 @@ public sealed class RearrangeBookingFunction
         }
 
         return await req.OkJsonAsync(result.Value!.ToContract(), ct);
-    }
-
-    private static string ResolveInternalRequestedBy(string? requestedBy)
-    {
-        if (string.IsNullOrWhiteSpace(requestedBy) ||
-            string.Equals(requestedBy.Trim(), LifecycleActors.Client, StringComparison.OrdinalIgnoreCase))
-        {
-            return BookingActorContext.ActorInternalAdmin;
-        }
-
-        return requestedBy.Trim();
     }
 }

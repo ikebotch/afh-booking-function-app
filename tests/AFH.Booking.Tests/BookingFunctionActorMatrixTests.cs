@@ -1,8 +1,12 @@
 using System.Net;
+using System.Security.Claims;
 using System.Text;
 using AFH.Booking.Application.Abstractions.Bookings;
+using AFH.Booking.Application.Models.Auth;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Domain.Auth;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Functions.V1.Bookings;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -30,22 +34,82 @@ public sealed class BookingFunctionActorMatrixTests
     }
 
     [Fact]
-    public async Task InternalCancel_DefaultsToInternalAdminActorAndUsesSharedCancelService()
+    public async Task ManagerCancel_MapsAuthenticatedManagerActorAndUsesSharedCancelService()
+    {
+        var service = new CapturingCancelBookingService();
+        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var request = CreateJsonRequest("""{"requestedBy":"Client","reasonCode":"ADMIN_REQUEST","reasonDetail":"Back office change"}""");
+        request.Headers.Add("x-correlation-id", "corr-admin");
+        SetDomainUser(request, "manager-1", "Mina Manager", [BookingPermissionNames.CancelDirect], ["Manager"]);
+
+        var response = await sut.Run(request, request.FunctionContext, " booking-1 ", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("booking-1", service.LastCommand?.BookingId);
+        Assert.Equal(BookingActorContext.ActorManager, service.LastCommand?.RequestedBy);
+        Assert.NotEqual(LifecycleActors.Client, service.LastCommand?.RequestedBy);
+        Assert.Equal("manager-1", service.LastCommand?.ActorContext?.ActorId);
+        Assert.Equal(BookingActorContext.SourceManagerPortal, service.LastCommand?.ActorContext?.SourceApplication);
+        Assert.Equal(BookingActorContext.ActorManager, service.LastCommand?.ActorContext?.ActorType);
+        Assert.Equal("corr-admin", service.LastCommand?.CorrelationId);
+    }
+
+    [Fact]
+    public async Task AdminCancel_MapsAuthenticatedAdminActorAndUsesSharedCancelService()
     {
         var service = new CapturingCancelBookingService();
         var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
         var request = CreateJsonRequest("""{"reasonCode":"ADMIN_REQUEST","reasonDetail":"Back office change"}""");
-        request.Headers.Add("x-correlation-id", "corr-admin");
+        SetDomainUser(request, "admin-1", "Ada Admin", [BookingPermissionNames.CancelDirect], ["Admin"]);
 
-        var response = await sut.Run(request, " booking-1 ", CancellationToken.None);
+        var response = await sut.Run(request, request.FunctionContext, "booking-1", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal("booking-1", service.LastCommand?.BookingId);
         Assert.Equal(BookingActorContext.ActorInternalAdmin, service.LastCommand?.RequestedBy);
-        Assert.NotEqual(LifecycleActors.Client, service.LastCommand?.RequestedBy);
+        Assert.Equal("admin-1", service.LastCommand?.ActorContext?.ActorId);
         Assert.Equal(BookingActorContext.SourceInternalAdmin, service.LastCommand?.ActorContext?.SourceApplication);
         Assert.Equal(BookingActorContext.ActorInternalAdmin, service.LastCommand?.ActorContext?.ActorType);
-        Assert.Equal("corr-admin", service.LastCommand?.CorrelationId);
+    }
+
+    [Fact]
+    public async Task ManagerCancel_RequiresReasonCode()
+    {
+        var service = new CapturingCancelBookingService();
+        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var request = CreateJsonRequest("""{"reasonDetail":"Back office change"}""");
+        SetDomainUser(request, "manager-1", "Mina Manager", [BookingPermissionNames.CancelDirect], ["Manager"]);
+
+        var response = await sut.Run(request, request.FunctionContext, "booking-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(service.LastCommand);
+    }
+
+    [Fact]
+    public async Task AdviserWithoutDirectCancelPermission_IsRejected()
+    {
+        var service = new CapturingCancelBookingService();
+        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var request = CreateJsonRequest("""{"reasonCode":"ADMIN_REQUEST"}""");
+        SetDomainUser(request, "adviser-1", "Ava Adviser", [BookingPermissionNames.ApprovalRequestsCreate], ["Adviser"]);
+
+        var response = await sut.Run(request, request.FunctionContext, "booking-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(service.LastCommand);
+    }
+
+    [Fact]
+    public async Task UnauthenticatedDirectCancel_IsRejected()
+    {
+        var service = new CapturingCancelBookingService();
+        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var request = CreateJsonRequest("""{"reasonCode":"ADMIN_REQUEST"}""");
+
+        var response = await sut.Run(request, request.FunctionContext, "booking-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(service.LastCommand);
     }
 
     [Fact]
@@ -68,23 +132,83 @@ public sealed class BookingFunctionActorMatrixTests
     }
 
     [Fact]
-    public async Task InternalRearrange_DefaultsToInternalAdminActorAndUsesSharedRearrangeService()
+    public async Task ManagerRearrange_MapsAuthenticatedManagerActorAndUsesSharedRearrangeService()
     {
         var service = new CapturingRearrangeBookingService();
         var sut = new RearrangeBookingFunction(service);
-        var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"ADMIN_RESCHEDULE"}""");
+        var request = CreateJsonRequest("""{"newSlotId":"slot-new","requestedBy":"Client","reasonCode":"ADMIN_RESCHEDULE"}""");
         request.Headers.Add("x-correlation-id", "corr-admin");
+        SetDomainUser(request, "manager-1", "Mina Manager", [BookingPermissionNames.RearrangeDirect], ["Manager"]);
 
-        var response = await sut.Run(request, " booking-old ", CancellationToken.None);
+        var response = await sut.Run(request, request.FunctionContext, " booking-old ", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("booking-old", service.LastCommand?.BookingId);
         Assert.Equal("slot-new", service.LastCommand?.NewSlotId);
-        Assert.Equal(BookingActorContext.ActorInternalAdmin, service.LastCommand?.RequestedBy);
+        Assert.Equal(BookingActorContext.ActorManager, service.LastCommand?.RequestedBy);
         Assert.NotEqual(LifecycleActors.Client, service.LastCommand?.RequestedBy);
+        Assert.Equal("manager-1", service.LastCommand?.ActorContext?.ActorId);
+        Assert.Equal(BookingActorContext.SourceManagerPortal, service.LastCommand?.ActorContext?.SourceApplication);
+        Assert.Equal(BookingActorContext.ActorManager, service.LastCommand?.ActorContext?.ActorType);
+        Assert.Equal("corr-admin", service.LastCommand?.CorrelationId);
+    }
+
+    [Fact]
+    public async Task AdminRearrange_MapsAuthenticatedAdminActorAndUsesSharedRearrangeService()
+    {
+        var service = new CapturingRearrangeBookingService();
+        var sut = new RearrangeBookingFunction(service);
+        var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"ADMIN_RESCHEDULE"}""");
+        SetDomainUser(request, "admin-1", "Ada Admin", [BookingPermissionNames.RearrangeDirect], ["Admin"]);
+
+        var response = await sut.Run(request, request.FunctionContext, "booking-old", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(BookingActorContext.ActorInternalAdmin, service.LastCommand?.RequestedBy);
+        Assert.Equal("admin-1", service.LastCommand?.ActorContext?.ActorId);
         Assert.Equal(BookingActorContext.SourceInternalAdmin, service.LastCommand?.ActorContext?.SourceApplication);
         Assert.Equal(BookingActorContext.ActorInternalAdmin, service.LastCommand?.ActorContext?.ActorType);
-        Assert.Equal("corr-admin", service.LastCommand?.CorrelationId);
+    }
+
+    [Fact]
+    public async Task ManagerRearrange_RequiresReasonCode()
+    {
+        var service = new CapturingRearrangeBookingService();
+        var sut = new RearrangeBookingFunction(service);
+        var request = CreateJsonRequest("""{"newSlotId":"slot-new"}""");
+        SetDomainUser(request, "manager-1", "Mina Manager", [BookingPermissionNames.RearrangeDirect], ["Manager"]);
+
+        var response = await sut.Run(request, request.FunctionContext, "booking-old", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(service.LastCommand);
+    }
+
+    [Fact]
+    public async Task AdviserWithoutDirectRearrangePermission_IsRejected()
+    {
+        var service = new CapturingRearrangeBookingService();
+        var sut = new RearrangeBookingFunction(service);
+        var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"ADMIN_RESCHEDULE"}""");
+        SetDomainUser(request, "adviser-1", "Ava Adviser", [BookingPermissionNames.ApprovalRequestsCreate], ["Adviser"]);
+
+        var response = await sut.Run(request, request.FunctionContext, "booking-old", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Null(service.LastCommand);
+    }
+
+    [Fact]
+    public async Task UnauthenticatedDirectRearrange_IsRejected()
+    {
+        var service = new CapturingRearrangeBookingService();
+        var sut = new RearrangeBookingFunction(service);
+        var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"ADMIN_RESCHEDULE"}""");
+
+        var response = await sut.Run(request, request.FunctionContext, "booking-old", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Null(service.LastCommand);
     }
 
     private static TestHttpRequestData CreateJsonRequest(string json)
@@ -95,6 +219,31 @@ public sealed class BookingFunctionActorMatrixTests
         writer.Flush();
         request.Body.Position = 0;
         return request;
+    }
+
+    private static void SetDomainUser(
+        TestHttpRequestData request,
+        string userId,
+        string displayName,
+        IReadOnlyList<string> permissions,
+        IReadOnlyList<string> roles)
+    {
+        var principal = new ClaimsPrincipal(new ClaimsIdentity(
+        [
+            new Claim("oid", userId),
+            new Claim("name", displayName)
+        ], "Test"));
+
+        request.FunctionContext.SetDomainUserPrincipal(
+            principal,
+            new AdviserUserContext
+            {
+                UserId = userId,
+                DisplayName = displayName,
+                Email = $"{userId}@example.test",
+                Permissions = permissions,
+                Roles = roles
+            });
     }
 
     private sealed class CapturingCancelBookingService : ICancelBookingService

@@ -17,6 +17,8 @@ public static class OutlookIssueCodes
     public const string DeletionAttemptDetected = "DeletionAttemptDetected";
     public const string EventTamperingDetected = "EventTamperingDetected";
     public const string ControlledReconciliationRequired = "ControlledReconciliationRequired";
+    public const string CalendarEventMissingRestored = "CalendarEventMissingRestored";
+    public const string CalendarEventMissingRestoreFailed = "CalendarEventMissingRestoreFailed";
 }
 
 public static class OperationalIssueStatuses

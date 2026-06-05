@@ -9,6 +9,23 @@ namespace AFH.Booking.Application.Services.Lifecycle;
 
 public sealed class BookingNotificationStep : IBookingNotificationStep
 {
+    private static readonly string[] ClientOnlyDataKeys =
+    [
+        "token",
+        "selfServiceToken",
+        "viewUrl",
+        "cancelUrl",
+        "rearrangeUrl",
+        "rescheduleUrl",
+        "bookingSelfServiceToken",
+        "bookingChangeToken",
+        "viewBookingUrl",
+        "cancelBookingUrl",
+        "rescheduleBookingUrl",
+        "rearrangeBookingUrl",
+        "manageBookingLinks"
+    ];
+
     private readonly IBookingNotificationPublisher _publisher;
     private readonly IBookingNotificationPolicyProvider _policyProvider;
     private readonly IBookingNotificationRecipientResolver _recipientResolver;
@@ -120,14 +137,18 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
                 notificationType.Name,
                 _publisher.GetType().Name);
 
-            await _publisher.PublishAsync(
-                new BookingNotificationRequest(
-                    notificationType,
-                    correlationId,
-                    new BookingNotificationActor(actorType, "Booking", null, null, null),
-                    resolvedRecipients,
-                    BuildPolicyData(data, policy)),
-                ct);
+            foreach (var recipientGroup in resolvedRecipients.GroupBy(x => x.RecipientType, StringComparer.OrdinalIgnoreCase))
+            {
+                var recipientType = recipientGroup.Key;
+                await _publisher.PublishAsync(
+                    new BookingNotificationRequest(
+                        notificationType,
+                        correlationId,
+                        new BookingNotificationActor(actorType, "Booking", null, null, null),
+                        recipientGroup.ToArray(),
+                        BuildPolicyData(data, policy, notificationType, recipientType)),
+                    ct);
+            }
 
             _logger.LogInformation(
                 "Booking notification publish succeeded. NotificationType={NotificationType} PublisherTransport={PublisherTransport}",
@@ -158,15 +179,62 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
 
     private static IReadOnlyDictionary<string, string> BuildPolicyData(
         IReadOnlyDictionary<string, string> data,
-        BookingNotificationPolicy policy)
+        BookingNotificationPolicy policy,
+        BookingNotificationType notificationType,
+        string recipientType)
     {
-        var enriched = data.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        var includeClientLinks = IsClientRecipient(recipientType);
+        var enriched = data
+            .Where(kvp => includeClientLinks || !IsClientOnlyDataKey(kvp.Key))
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+
+        enriched["RecipientType"] = recipientType;
+        enriched["recipientType"] = recipientType;
+
         foreach (var channel in policy.Channels.Where(x => x.Enabled))
         {
-            enriched[$"TemplateKey:{channel.Channel}"] = channel.TemplateKey;
+            enriched[$"TemplateKey:{channel.Channel}"] = ResolveRecipientTemplateKey(channel.TemplateKey, notificationType, recipientType);
             enriched[$"TemplateVersion:{channel.Channel}"] = channel.TemplateVersion;
         }
 
         return enriched;
+    }
+
+    private static string ResolveRecipientTemplateKey(
+        string templateKey,
+        BookingNotificationType notificationType,
+        string recipientType)
+    {
+        if (IsClientRecipient(recipientType))
+            return templateKey;
+
+        var suffix = NormalizeRecipientType(recipientType);
+        return string.IsNullOrWhiteSpace(suffix)
+            ? templateKey
+            : $"{templateKey}-{suffix}";
+    }
+
+    private static bool IsClientRecipient(string recipientType)
+        => recipientType.Equals(BookingNotificationRecipientTypes.Client, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsClientOnlyDataKey(string key)
+        => key.Contains("token", StringComparison.OrdinalIgnoreCase)
+           || ClientOnlyDataKeys.Contains(key, StringComparer.OrdinalIgnoreCase);
+
+    private static string NormalizeRecipientType(string recipientType)
+    {
+        var normalized = new string(recipientType
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+
+        return normalized switch
+        {
+            "contactcentre" => "contact-centre",
+            "operationsmanager" => "operations-manager",
+            "reportingmanager" => "reporting-manager",
+            "orgadmin" => "admin",
+            _ => normalized
+        };
     }
 }

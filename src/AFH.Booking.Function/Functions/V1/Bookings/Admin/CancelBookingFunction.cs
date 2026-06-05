@@ -3,6 +3,7 @@ using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
+using AFH.Booking.Domain.Auth;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
@@ -32,8 +33,9 @@ public sealed class CancelBookingFunction
         RequestBodyType = typeof(CancelBookingRequest),
         ResponseType = typeof(CancelBookingResponse))]
     public async Task<HttpResponseData> Run(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/{bookingId}/cancel")]
+        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/bookings/{bookingId}/cancel")]
         HttpRequestData req,
+        FunctionContext context,
         string bookingId,
         CancellationToken ct)
     {
@@ -43,25 +45,29 @@ public sealed class CancelBookingFunction
                 return await req.ProblemAsync(HttpStatusCode.BadRequest, "bookingId is required.", ct, "Validation");
 
             var body = await req.ReadJsonAsync<CancelBookingRequest>(ct);
-            var requestedBy = string.IsNullOrWhiteSpace(body?.RequestedBy)
-                ? BookingActorContext.ActorInternalAdmin
-                : body!.RequestedBy!.Trim();
-            var correlationId = req.Headers.TryGetValues("x-correlation-id", out var values)
-                ? values.FirstOrDefault()
-                : null;
+            var authResult = await BookingFunctionActorContext.BuildManagerOrAdminAsync(
+                req,
+                context,
+                BookingPermissionNames.CancelDirect,
+                ct);
+            if (!authResult.IsSuccess)
+                return authResult.Response!;
+
+            if (string.IsNullOrWhiteSpace(body?.ReasonCode))
+                return await req.ProblemAsync(HttpStatusCode.BadRequest, "reasonCode is required for manager/admin booking cancellation.", ct, Errors.ReasonCodeRequired);
+
+            var actor = authResult.ActorContext!;
 
             var cmd = new CancelBookingCommand
             {
                 BookingId = bookingId.Trim(),
-                ActorContext = BookingActorContext.InternalAdmin(
-                    correlationId: correlationId,
-                    actorType: requestedBy),
-                Reason = BuildReason(body),
-                RequestedBy = requestedBy,
+                ActorContext = actor,
+                Reason = BuildReason(body, actor.ActorType),
+                RequestedBy = actor.ActorType,
                 ReasonCode = body?.ReasonCode,
                 ReasonDetail = body?.ReasonDetail,
                 ApprovalRequestId = body?.ApprovalRequestId,
-                CorrelationId = correlationId
+                CorrelationId = actor.CorrelationId
             };
 
             var result = await _service.HandleAsync(cmd, ct);
@@ -87,7 +93,7 @@ public sealed class CancelBookingFunction
         }
     }
 
-    private static string BuildReason(CancelBookingRequest? request)
+    private static string BuildReason(CancelBookingRequest? request, string actorType)
     {
         if (request is null)
             return "Cancelled";
@@ -99,14 +105,10 @@ public sealed class CancelBookingFunction
             ? "Unspecified"
             : request.ReasonCode.Trim();
 
-        var requestedBy = string.IsNullOrWhiteSpace(request.RequestedBy)
-            ? BookingActorContext.ActorInternalAdmin
-            : request.RequestedBy.Trim();
-
         var detail = string.IsNullOrWhiteSpace(request.ReasonDetail)
             ? string.Empty
             : $": {request.ReasonDetail.Trim()}";
 
-        return $"{requestedBy} - {reasonCode}{detail}";
+        return $"{actorType} - {reasonCode}{detail}";
     }
 }

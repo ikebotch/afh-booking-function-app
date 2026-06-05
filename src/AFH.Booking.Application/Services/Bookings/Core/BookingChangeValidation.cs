@@ -10,6 +10,7 @@ internal static class BookingChangeValidation
         LifecycleActors.LeadTech,
         LifecycleActors.Adviser,
         LifecycleActors.System,
+        BookingActorContext.ActorManager,
         BookingActorContext.ActorInternalAdmin
     };
 
@@ -41,5 +42,6 @@ internal static class BookingChangeValidation
     private static bool IsHumanActor(string actorType) =>
         actorType.Equals(LifecycleActors.Client, StringComparison.OrdinalIgnoreCase) ||
         actorType.Equals(LifecycleActors.LeadTech, StringComparison.OrdinalIgnoreCase) ||
-        actorType.Equals(LifecycleActors.Adviser, StringComparison.OrdinalIgnoreCase);
+        actorType.Equals(LifecycleActors.Adviser, StringComparison.OrdinalIgnoreCase) ||
+        actorType.Equals(BookingActorContext.ActorManager, StringComparison.OrdinalIgnoreCase);
 }

@@ -121,10 +121,17 @@ public sealed class BookingNotificationPolicyTests
             CancellationToken.None);
 
         Assert.Equal(LifecycleStepStatuses.Succeeded, result.Status);
-        Assert.NotNull(publisher.Request);
+        Assert.Equal(3, publisher.Requests.Count);
         Assert.Equal(
             [BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.ContactCentre],
-            publisher.Request!.Recipients.Select(x => x.RecipientType).OrderBy(x => x, StringComparer.Ordinal).ToArray());
+            publisher.Requests.SelectMany(x => x.Recipients).Select(x => x.RecipientType).OrderBy(x => x, StringComparer.Ordinal).ToArray());
+
+        var clientRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Client);
+        var adviserRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Adviser);
+        var contactCentreRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.ContactCentre);
+        Assert.Equal("booking-confirmed", clientRequest.Data["TemplateKey:Email"]);
+        Assert.Equal("booking-confirmed-adviser", adviserRequest.Data["TemplateKey:Email"]);
+        Assert.Equal("booking-confirmed-contact-centre", contactCentreRequest.Data["TemplateKey:Email"]);
     }
 
     [Fact]
@@ -150,7 +157,7 @@ public sealed class BookingNotificationPolicyTests
             CancellationToken.None);
 
         Assert.Equal(LifecycleStepStatuses.Skipped, result.Status);
-        Assert.Null(publisher.Request);
+        Assert.Empty(publisher.Requests);
     }
 
     [Fact]
@@ -364,7 +371,50 @@ public sealed class BookingNotificationPolicyTests
             CancellationToken.None);
 
         Assert.Equal(LifecycleStepStatuses.Skipped, result.Status);
-        Assert.Null(publisher.Request);
+        Assert.Empty(publisher.Requests);
+    }
+
+    [Fact]
+    public async Task Step_RemovesClientTokenLinksFromNonClientRecipientPayloads()
+    {
+        var publisher = new CapturingPublisher();
+        var step = new BookingNotificationStep(
+            publisher,
+            new StubPolicyProvider(DefaultPolicy(BookingNotificationTypes.BookingCancelled)),
+            CreateRecipientResolver(adviserEmail: "adviser@example.com"),
+            NullLogger<BookingNotificationStep>.Instance);
+
+        var result = await step.ExecuteAsync(
+            LifecycleEventTypes.Cancelled,
+            "booking-1",
+            LifecycleActors.Client,
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+            new Dictionary<string, string>
+            {
+                ["bookingId"] = "booking-1",
+                ["adviserId"] = "adv-1",
+                ["viewBookingUrl"] = "https://client.example/bookings/booking-1?token=secret",
+                ["cancelBookingUrl"] = "https://client.example/bookings/booking-1/cancel?token=secret",
+                ["rescheduleBookingUrl"] = "https://client.example/bookings/booking-1/reschedule?token=secret",
+                ["bookingChangeToken"] = "secret",
+                ["manageBookingLinks"] = "View booking: https://client.example/bookings/booking-1?token=secret"
+            },
+            CancellationToken.None);
+
+        Assert.Equal(LifecycleStepStatuses.Succeeded, result.Status);
+
+        var clientRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Client);
+        Assert.Contains("token=secret", clientRequest.Data["viewBookingUrl"]);
+
+        foreach (var request in publisher.Requests.Where(x => x.Recipients.Single().RecipientType != BookingNotificationRecipientTypes.Client))
+        {
+            Assert.DoesNotContain(request.Data, kvp => kvp.Key.Contains("token", StringComparison.OrdinalIgnoreCase));
+            Assert.DoesNotContain("viewBookingUrl", request.Data.Keys);
+            Assert.DoesNotContain("cancelBookingUrl", request.Data.Keys);
+            Assert.DoesNotContain("rescheduleBookingUrl", request.Data.Keys);
+            Assert.DoesNotContain("manageBookingLinks", request.Data.Keys);
+            Assert.DoesNotContain("token=secret", string.Join('\n', request.Data.Values), StringComparison.OrdinalIgnoreCase);
+        }
     }
 
     private static BookingDbContext CreateDbContext()
@@ -429,11 +479,11 @@ public sealed class BookingNotificationPolicyTests
 
     private sealed class CapturingPublisher : IBookingNotificationPublisher
     {
-        public BookingNotificationRequest? Request { get; private set; }
+        public List<BookingNotificationRequest> Requests { get; } = [];
 
         public Task PublishAsync(BookingNotificationRequest notification, CancellationToken ct)
         {
-            Request = notification;
+            Requests.Add(notification);
             return Task.CompletedTask;
         }
     }

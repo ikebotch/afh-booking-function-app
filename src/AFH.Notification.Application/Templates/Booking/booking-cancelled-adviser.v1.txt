@@ -1,0 +1,12 @@
+Subject: AFH Booking update
+Content-Type: text/plain
+
+Booking update: {{RecipientType}}
+
+Booking ID: {{bookingId}}
+Transaction reference: {{transactionRef}}
+Adviser: {{adviserName}}
+When: {{when}}{{whenLine}}
+Meeting type: {{meetingType}}{{locationLine}}
+
+This is an operational notification. Use the authenticated Control Centre booking record for details.

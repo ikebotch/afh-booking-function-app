@@ -78,8 +78,14 @@ public class BookingOpenApiDocumentFactoryTests
         var schemas = document["components"]!["schemas"]!.AsObject();
 
         var availabilityPost = paths["/v1/transactions/{transactionId}/availability"]!["post"]!.AsObject();
+        var availabilityV2Post = paths["/v2/transactions/{transactionId}/availability"]!["post"]!.AsObject();
         var requestBodySchemaRef = availabilityPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>();
         var successSchemaRef = availabilityPost["responses"]!["200"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>();
+        var description = availabilityPost["description"]!.GetValue<string>();
+        var v2Description = availabilityV2Post["description"]!.GetValue<string>();
+        var requestExample = availabilityPost["requestBody"]!["content"]!["application/json"]!["example"]!.AsObject();
+        var responseExampleSlot = availabilityPost["responses"]!["200"]!["content"]!["application/json"]!["example"]!["data"]!["advisers"]![0]!["slots"]![0]!.AsObject();
+        var v2ResponseExampleSlot = availabilityV2Post["responses"]!["200"]!["content"]!["application/json"]!["example"]!["data"]!["items"]![0]!["slots"]![0]!.AsObject();
 
         var availabilityRequest = schemas["GetAvailabilityRequest"]!.AsObject();
         var availabilityRequestProperties = availabilityRequest["properties"]!.AsObject();
@@ -95,6 +101,18 @@ public class BookingOpenApiDocumentFactoryTests
 
         Assert.Equal("#/components/schemas/GetAvailabilityRequest", requestBodySchemaRef);
         Assert.Equal("#/components/schemas/ApiResponseOfGetAvailabilityResponse", successSchemaRef);
+        Assert.Contains("Sprint 5 availability governance", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("working pattern", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("minimum duration", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("capacity", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("revalidated again during hold creation", description, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Sprint 5 availability governance", v2Description, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("S1 2HH", requestExample["destinationAddress"]!["postcode"]!.GetValue<string>());
+        Assert.Equal("Pensions", requestExample["requiredSkills"]![0]!.GetValue<string>());
+        Assert.Equal(1, responseExampleSlot["scoreBreakdown"]!["rule.workingPatternAllowed"]!.GetValue<int>());
+        Assert.Equal(1, responseExampleSlot["scoreBreakdown"]!["rule.capacityAllowed"]!.GetValue<int>());
+        Assert.Equal(1, responseExampleSlot["scoreBreakdown"]!["rule.minimumDurationAllowed"]!.GetValue<int>());
+        Assert.Equal(1, v2ResponseExampleSlot["scoreBreakdown"]!["rule.capacityAllowed"]!.GetValue<int>());
         Assert.Equal("object", windowSchema["type"]!.GetValue<string>());
         Assert.True(windowSchema["properties"]!["startUtc"] is not null);
         Assert.True(windowSchema["properties"]!["endUtc"] is not null);

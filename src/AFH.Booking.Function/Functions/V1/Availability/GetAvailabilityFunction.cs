@@ -29,8 +29,68 @@ public sealed class GetAvailabilityFunction
     [BookingOpenApiOperation(
         "Availability",
         "Get availability",
+        Description = "Returns adviser availability for the transaction. Sprint 5 availability governance is applied for both remote and in-person bookings: only active/skilled advisers are considered, preferred adviser ids do not create synthetic adviser profiles, working pattern, minimum duration and adviser capacity rules are enforced, and selected slots are revalidated again during hold creation. Available slots include `scoreBreakdown` rule audit keys such as `rule.workingPatternAllowed`, `rule.capacityAllowed`, and `rule.minimumDurationAllowed`. In-person requests should include `destinationAddress` so travel and proximity checks can be evaluated.",
         RequestBodyType = typeof(GetAvailabilityRequest),
-        ResponseType = typeof(GetAvailabilityResponse))]
+        ResponseType = typeof(GetAvailabilityResponse),
+        RequestExampleJson = """
+                             {
+                               "clientId": "client-123",
+                               "preferredStartUtc": "2026-06-20T10:00:00Z",
+                               "duration": 60,
+                               "isRemote": false,
+                               "meetingType": "Review",
+                               "destinationAddress": {
+                                 "line1": "1 High Street",
+                                 "town": "Sheffield",
+                                 "postcode": "S1 2HH",
+                                 "country": "UK"
+                               },
+                               "preferredAdviserIds": [ "adviser-123" ],
+                               "regions": [ "South Yorkshire" ],
+                               "requiredSkills": [ "Pensions" ],
+                               "excludeAdviserIds": [],
+                               "searchHorizonMinutes": 180,
+                               "maxCandidates": 100,
+                               "limit": 10
+                             }
+                             """,
+        ResponseExampleJson = """
+                              {
+                                "data": {
+                                  "transactionId": "transaction-123",
+                                  "advisers": [
+                                    {
+                                      "id": "adviser-123",
+                                      "name": "Alex Adviser",
+                                      "goldStar": true,
+                                      "slots": [
+                                        {
+                                          "slotId": "slot-123",
+                                          "startUtc": "2026-06-20T10:00:00Z",
+                                          "endUtc": "2026-06-20T11:00:00Z",
+                                          "rating": 96,
+                                          "scoreBreakdown": {
+                                            "rule.workingPatternAllowed": 1,
+                                            "rule.capacityAllowed": 1,
+                                            "rule.minimumDurationAllowed": 1
+                                          },
+                                          "travelMinutes": 8,
+                                          "companyBufferMinutes": 15,
+                                          "distanceMiles": 1.2,
+                                          "travelStatus": "Ok"
+                                        }
+                                      ]
+                                    }
+                                  ],
+                                  "paging": {
+                                    "items": [],
+                                    "total": 1,
+                                    "pageSize": 10,
+                                    "nextCursor": null
+                                  }
+                                }
+                              }
+                              """)]
     public async Task<HttpResponseData> Run(
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/transactions/{transactionId}/availability")]
         HttpRequestData req,

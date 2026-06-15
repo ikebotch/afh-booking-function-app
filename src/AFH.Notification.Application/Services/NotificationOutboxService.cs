@@ -97,23 +97,5 @@ public sealed class NotificationOutboxService : INotificationPublisher
         NotificationRequested notification,
         NotificationRecipient recipient,
         NotificationChannel channel)
-    {
-        var data = notification.Data.ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
-        if (data.TryGetValue($"TemplateKey:{channel}", out var templateKey))
-            data["TemplateKey"] = templateKey;
-        if (data.TryGetValue($"TemplateVersion:{channel}", out var templateVersion))
-            data["TemplateVersion"] = templateVersion;
-
-        return notification with
-        {
-            Recipients =
-            [
-                recipient with
-                {
-                    PreferredChannels = [channel]
-                }
-            ],
-            Data = data
-        };
-    }
+        => NotificationRecipientDataSafety.ForRecipientChannel(notification, recipient, channel);
 }

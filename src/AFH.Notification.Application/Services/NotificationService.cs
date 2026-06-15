@@ -41,14 +41,21 @@ public sealed class NotificationService : INotificationService, INotificationPub
     public async Task PublishAsync(NotificationRequested notification, Guid? notificationOutboxId, CancellationToken ct)
     {
         var route = await _recipientResolver.ResolveAsync(notification, ct);
-        var rendered = await _templateRenderer.RenderAsync(notification, ct);
         await _auditStore.RecordRequestedAsync(notification, ct);
 
-        foreach (var content in rendered.ChannelContent)
+        var sentTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var activeDeliveries = route.Recipients
+            .SelectMany(recipient => recipient.PreferredChannels ?? Array.Empty<NotificationChannel>(), (recipient, channel) => new { Recipient = recipient, Channel = channel })
+            .Where(x => x.Channel != NotificationChannel.Unknown)
+            .ToList();
+
+        foreach (var delivery in activeDeliveries)
         {
-            var sentTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (!sentTargets.Add(GetTargetKey(delivery.Recipient, delivery.Channel)))
+                continue;
+
             var gateways = _deliveryGateways
-                .Where(gateway => gateway.CanSend(content.Channel))
+                .Where(gateway => gateway.CanSend(delivery.Channel))
                 .ToArray();
 
             if (gateways.Length == 0)
@@ -57,69 +64,70 @@ public sealed class NotificationService : INotificationService, INotificationPub
                     "No notification delivery gateway registered. Type={NotificationType} CorrelationId={CorrelationId} Channel={NotificationChannel}",
                     notification.Type,
                     notification.CorrelationId,
-                    content.Channel);
+                    delivery.Channel);
                 continue;
             }
 
-            var activeRecipients = route.Recipients.Where(x => x.PreferredChannels?.Contains(content.Channel) == true).ToList();
+            var recipientNotification = NotificationRecipientDataSafety.ForRecipientChannel(
+                notification,
+                delivery.Recipient,
+                delivery.Channel);
+            var rendered = await _templateRenderer.RenderAsync(recipientNotification, ct);
+            var content = rendered.ChannelContent.SingleOrDefault(x => x.Channel == delivery.Channel);
+            if (content is null)
+                continue;
 
-            foreach (var recipient in activeRecipients)
-            {
-                if (!sentTargets.Add(GetTargetKey(recipient, content.Channel)))
-                    continue;
-
-                var request = new NotificationDeliveryRequest(
-                    notification.CorrelationId,
-                    content.Channel,
-                    recipient,
-                    content.Subject,
-                    content.HtmlBody,
-                    content.TextBody,
-                    new Dictionary<string, string>
-                    {
-                        ["sourceSystem"] = notification.SourceSystem,
-                        ["notificationType"] = notification.Type.Name,
-                        ["actorType"] = notification.Actor.ActorType,
-                        ["actorSourceApplication"] = notification.Actor.SourceApplication
-                    });
-
-                foreach (var gateway in gateways)
+            var request = new NotificationDeliveryRequest(
+                notification.CorrelationId,
+                content.Channel,
+                delivery.Recipient,
+                content.Subject,
+                content.HtmlBody,
+                content.TextBody,
+                new Dictionary<string, string>
                 {
-                    var now = DateTime.UtcNow;
-                    try
-                    {
-                        var result = await gateway.SendAsync(request, ct);
-                        await _deliveryAuditStore.RecordAttemptAsync(
-                            BuildAuditRecord(
-                                notification,
-                                notificationOutboxId,
-                                content.Channel,
-                                recipient,
-                                result.ProviderName ?? ResolveProviderName(gateway),
-                                result.Status,
-                                result.ProviderMessageId,
-                                result.FailureDetails,
-                                now,
-                                content),
-                            ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        await _deliveryAuditStore.RecordAttemptAsync(
-                            BuildAuditRecord(
-                                notification,
-                                notificationOutboxId,
-                                content.Channel,
-                                recipient,
-                                ResolveProviderName(gateway),
-                                "Failed",
-                                null,
-                                ex.Message,
-                                now,
-                                content),
-                            ct);
-                        throw;
-                    }
+                    ["sourceSystem"] = notification.SourceSystem,
+                    ["notificationType"] = notification.Type.Name,
+                    ["actorType"] = notification.Actor.ActorType,
+                    ["actorSourceApplication"] = notification.Actor.SourceApplication
+                });
+
+            foreach (var gateway in gateways)
+            {
+                var now = DateTime.UtcNow;
+                try
+                {
+                    var result = await gateway.SendAsync(request, ct);
+                    await _deliveryAuditStore.RecordAttemptAsync(
+                        BuildAuditRecord(
+                            recipientNotification,
+                            notificationOutboxId,
+                            content.Channel,
+                            delivery.Recipient,
+                            result.ProviderName ?? ResolveProviderName(gateway),
+                            result.Status,
+                            result.ProviderMessageId,
+                            result.FailureDetails,
+                            now,
+                            content),
+                        ct);
+                }
+                catch (Exception ex)
+                {
+                    await _deliveryAuditStore.RecordAttemptAsync(
+                        BuildAuditRecord(
+                            recipientNotification,
+                            notificationOutboxId,
+                            content.Channel,
+                            delivery.Recipient,
+                            ResolveProviderName(gateway),
+                            "Failed",
+                            null,
+                            ex.Message,
+                            now,
+                            content),
+                        ct);
+                    throw;
                 }
             }
         }

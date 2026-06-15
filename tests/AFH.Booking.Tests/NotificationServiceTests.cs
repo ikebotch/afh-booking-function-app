@@ -93,6 +93,78 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
+    public async Task PublishAsync_BookingConfirmed_MixedRecipientsDoesNotSendClientTokenLinksToAdviser()
+    {
+        var deliveryAudit = new StubNotificationDeliveryAuditStore();
+        var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
+        var service = new NotificationService(
+            new StubNotificationAuditStore(),
+            deliveryAudit,
+            CreateRecipientResolver(),
+            CreateTemplateRenderer(),
+            [delivery],
+            NullLogger<NotificationService>.Instance);
+
+        await service.PublishAsync(
+            new NotificationRequested(
+                new NotificationType("Booking", "BookingConfirmed"),
+                "booking-1",
+                new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
+                [
+                    new NotificationRecipient(
+                        BookingNotificationRecipientTypes.Client,
+                        "Jane Client",
+                        "jane@example.test",
+                        PreferredChannels: [NotificationChannel.Email]),
+                    new NotificationRecipient(
+                        BookingNotificationRecipientTypes.Adviser,
+                        "Alex Adviser",
+                        "adviser@example.test",
+                        PreferredChannels: [NotificationChannel.Email])
+                ],
+                new Dictionary<string, string>
+                {
+                    ["transactionRef"] = "TRX-1",
+                    ["bookingId"] = "booking-1",
+                    ["adviserName"] = "Alex Adviser",
+                    ["meetingType"] = "Review",
+                    ["when"] = "2026-03-26 12:00 (Europe/London) -> 2026-03-26 13:00 (Europe/London)",
+                    ["whereLine"] = "Join link: https://meeting.example/join",
+                    ["travelLine"] = "Travel: N/A (remote meeting)",
+                    ["manageBookingLinks"] = "View: https://client.example/bookings/booking-1?token=secret",
+                    ["viewBookingUrl"] = "https://client.example/bookings/booking-1?token=secret",
+                    ["cancelBookingUrl"] = "https://client.example/bookings/booking-1/cancel?token=secret",
+                    ["rescheduleBookingUrl"] = "https://client.example/bookings/booking-1/reschedule?token=secret",
+                    ["bookingChangeToken"] = "secret",
+                    ["TemplateKey"] = "booking-confirmed",
+                    ["TemplateVersion"] = "v1"
+                }),
+            CancellationToken.None);
+
+        Assert.Equal(2, delivery.Requests.Count);
+        var clientRequest = delivery.Requests.Single(x => x.Recipient.RecipientType == BookingNotificationRecipientTypes.Client);
+        var adviserRequest = delivery.Requests.Single(x => x.Recipient.RecipientType == BookingNotificationRecipientTypes.Adviser);
+
+        Assert.Equal("AFH Booking: Booking Confirmed", clientRequest.Subject);
+        Assert.Contains("token=secret", clientRequest.TextBody, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal("AFH Booking: Booking Confirmed (Adviser)", adviserRequest.Subject);
+        Assert.Contains("authenticated Control Centre booking record", adviserRequest.TextBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("token=secret", adviserRequest.TextBody, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("client.example", adviserRequest.TextBody, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(adviserRequest.HtmlBody);
+
+        var adviserLog = Assert.Single(deliveryAudit.Records
+            .Select(x => x.MessageLog)
+            .Where(x => x?.RecipientType == BookingNotificationRecipientTypes.Adviser));
+        Assert.NotNull(adviserLog);
+        Assert.Equal("booking-confirmed-adviser", adviserLog!.TemplateKey);
+        Assert.DoesNotContain("token=secret", adviserLog.Body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("viewBookingUrl", adviserLog.RenderDataJson, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("bookingChangeToken", adviserLog.RenderDataJson, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task PublishAsync_BookingRescheduled_RendersTemplateAndSendsDeliveryRequest()
     {
         var audit = new StubNotificationAuditStore();

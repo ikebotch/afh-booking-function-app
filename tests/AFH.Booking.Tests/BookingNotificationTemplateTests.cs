@@ -311,16 +311,74 @@ public sealed class BookingNotificationTemplateTests
     }
 
     [Fact]
-    public async Task RenderAsync_MissingDbAndFileTemplateFailsClearly()
+    public async Task RenderAsync_MissingExplicitTemplateFallsBackToNotificationTypeTemplate()
     {
         var renderer = new NotificationTemplateRenderer(
             [new BookingNotificationTemplatePolicy()],
             new StubTemplateStore((NotificationTemplateDefinition?)null));
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            renderer.RenderAsync(CreateExplicitTemplateRequest("missing-template", "v9"), CancellationToken.None));
+        var rendered = await renderer.RenderAsync(
+            CreateExplicitTemplateRequest("missing-template", "v9"),
+            CancellationToken.None);
 
-        Assert.Contains("missing-template", ex.Message);
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal(NotificationChannel.Email, content.Channel);
+        Assert.Equal("AFH Booking: Booking Confirmed", content.Subject);
+        Assert.Contains("Your booking is now confirmed.", content.TextBody);
+    }
+
+    [Theory]
+    [InlineData("BookingConfirmed", "booking-confirmed", "AFH Booking: Booking Confirmed", "Your booking is now confirmed.")]
+    [InlineData("BookingCancelled", "booking-cancelled", "AFH Booking: Appointment Cancelled", "Appointment Cancelled")]
+    [InlineData("BookingRescheduled", "booking-rescheduled", "AFH Booking: Appointment Rescheduled", "Appointment Rescheduled")]
+    public async Task RenderAsync_ChannelSpecificEmailTemplateKeyIsHonoured(
+        string notificationType,
+        string templateKey,
+        string expectedSubject,
+        string expectedBodyText)
+    {
+        var renderer = CreateRenderer();
+
+        var rendered = await renderer.RenderAsync(
+            CreateChannelSpecificTemplateRequest(notificationType, templateKey),
+            CancellationToken.None);
+
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal(NotificationChannel.Email, content.Channel);
+        Assert.Equal(expectedSubject, content.Subject);
+        Assert.Contains(expectedBodyText, content.TextBody);
+        Assert.DoesNotContain("AFH Booking update", content.Subject, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RenderAsync_AdviserRequestOutcomeResolvesOutcomeTemplate()
+    {
+        var renderer = CreateRenderer();
+
+        var rendered = await renderer.RenderAsync(
+            new NotificationRequested(
+                new NotificationType("Booking", "AdviserRequestOutcome"),
+                "request-1",
+                new NotificationActor("Manager", "ApprovalWorkflow", "manager-1", "Manager One", null),
+                [new NotificationRecipient("Adviser", "Alex Adviser", "alex@example.test", null, null, [NotificationChannel.Email])],
+                new Dictionary<string, string>
+                {
+                    ["TemplateKey:Email"] = "adviser-request-outcome",
+                    ["TemplateVersion:Email"] = "v1",
+                    ["greetingName"] = "Alex",
+                    ["bookingId"] = "booking-1",
+                    ["changeType"] = "Cancellation",
+                    ["outcome"] = "Approved",
+                    ["decisionNotes"] = "Approved by manager."
+                }),
+            CancellationToken.None);
+
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal(NotificationChannel.Email, content.Channel);
+        Assert.Equal("AFH Booking: Adviser request Approved", content.Subject);
+        Assert.Contains("Your booking change request has been reviewed.", content.TextBody);
+        Assert.Contains("Approved by manager.", content.TextBody);
+        Assert.DoesNotContain("AFH Booking update", content.Subject, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -395,6 +453,50 @@ public sealed class BookingNotificationTemplateTests
         Assert.Contains(rendered.ChannelContent, x => x.Channel == NotificationChannel.Sms && x.Subject is null && x.TextBody == "SMS body booking-1");
     }
 
+    [Fact]
+    public async Task RenderAsync_ChannelSpecificEmailAndSmsKeysResolveIndependentTemplates()
+    {
+        var renderer = CreateRenderer();
+
+        var rendered = await renderer.RenderAsync(
+            new NotificationRequested(
+                new NotificationType("Booking", "BookingConfirmed"),
+                "booking-1",
+                new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
+                [
+                    new NotificationRecipient("Client", "Jane Client", "jane@example.com", null, null, [NotificationChannel.Email]),
+                    new NotificationRecipient("Client", "Jane Client", null, "+447700900000", null, [NotificationChannel.Sms])
+                ],
+                new Dictionary<string, string>
+                {
+                    ["TemplateKey:Email"] = "booking-confirmed",
+                    ["TemplateVersion:Email"] = "v1",
+                    ["TemplateKey:Sms"] = "booking-confirmed-sms",
+                    ["TemplateVersion:Sms"] = "v1",
+                    ["bookingId"] = "booking-1",
+                    ["transactionRef"] = "TRX-1",
+                    ["adviserName"] = "Alex Adviser",
+                    ["meetingType"] = "Review",
+                    ["when"] = "Thu 26 Mar 2026",
+                    ["whereLine"] = "",
+                    ["travelLine"] = "",
+                    ["manageBookingLinks"] = "",
+                    ["viewBookingUrl"] = "https://client.example/bookings/booking-1?token=token",
+                    ["cancelBookingUrl"] = "https://client.example/bookings/booking-1/cancel?token=token",
+                    ["rescheduleBookingUrl"] = "https://client.example/bookings/booking-1/reschedule?token=token"
+                }),
+            CancellationToken.None);
+
+        Assert.Equal(2, rendered.ChannelContent.Count);
+        Assert.Contains(rendered.ChannelContent, content =>
+            content.Channel == NotificationChannel.Email &&
+            content.Subject == "AFH Booking: Booking Confirmed" &&
+            content.TextBody.Contains("Your booking is now confirmed.", StringComparison.Ordinal));
+        Assert.Contains(rendered.ChannelContent, content =>
+            content.Channel == NotificationChannel.Sms &&
+            content.TextBody.Contains("Your AFH booking is confirmed.", StringComparison.Ordinal));
+    }
+
     private static BookingSelfServiceLinks CreateLinks()
         => new(
             "https://client.example/bookings/booking-1?token=token",
@@ -440,6 +542,35 @@ Manage your booking:
                 ["when"] = "Thu 26 Mar 2026",
                 ["whereLine"] = "",
                 ["travelLine"] = "",
+                ["manageBookingLinks"] = "",
+                ["viewBookingUrl"] = "https://client.example/bookings/booking-1?token=token",
+                ["cancelBookingUrl"] = "https://client.example/bookings/booking-1/cancel?token=token",
+                ["rescheduleBookingUrl"] = "https://client.example/bookings/booking-1/reschedule?token=token"
+            });
+
+    private static NotificationRequested CreateChannelSpecificTemplateRequest(
+        string notificationType,
+        string templateKey)
+        => new(
+            new NotificationType("Booking", notificationType),
+            "booking-1",
+            new NotificationActor(LifecycleActors.Client, "Booking", null, null, null),
+            [new NotificationRecipient("Client", "Jane Client", "jane@example.com", null, null, [NotificationChannel.Email])],
+            new Dictionary<string, string>
+            {
+                ["TemplateKey:Email"] = templateKey,
+                ["TemplateVersion:Email"] = "v1",
+                ["bookingId"] = "booking-1",
+                ["transactionRef"] = "TRX-1",
+                ["adviserName"] = "Alex Adviser",
+                ["meetingType"] = "Review",
+                ["when"] = "Thu 26 Mar 2026",
+                ["whenLine"] = "Thu 26 Mar 2026",
+                ["whereLine"] = "",
+                ["locationLine"] = "Remote meeting",
+                ["travelLine"] = "",
+                ["note"] = "Notification body note.",
+                ["greetingName"] = "Jane Client",
                 ["manageBookingLinks"] = "",
                 ["viewBookingUrl"] = "https://client.example/bookings/booking-1?token=token",
                 ["cancelBookingUrl"] = "https://client.example/bookings/booking-1/cancel?token=token",

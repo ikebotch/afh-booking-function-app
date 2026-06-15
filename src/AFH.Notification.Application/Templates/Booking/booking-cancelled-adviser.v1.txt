@@ -1,7 +1,8 @@
-Subject: AFH Booking update
-Content-Type: text/plain
-
-Booking update: {{RecipientType}}
+subject=AFH Booking: Booking Cancelled (Adviser)
+channel=Email
+contentType=text/plain
+---
+Booking cancelled for adviser action.
 
 Booking ID: {{bookingId}}
 Transaction reference: {{transactionRef}}
@@ -9,4 +10,4 @@ Adviser: {{adviserName}}
 When: {{when}}{{whenLine}}
 Meeting type: {{meetingType}}{{locationLine}}
 
-This is an operational notification. Use the authenticated Control Centre booking record for details.
+Use the authenticated Control Centre booking record for details.

@@ -154,12 +154,12 @@ public sealed class NotificationService : INotificationService, INotificationPub
                 ? "Booking"
                 : null;
         var dispatchUid = Guid.NewGuid();
-        var templateKey = data.TryGetValue("TemplateKey", out var resolvedTemplateKey)
-            ? resolvedTemplateKey
-            : $"{notification.SourceSystem}.{notification.Type.Name}";
-        var templateVersion = data.TryGetValue("TemplateVersion", out var resolvedTemplateVersion)
-            ? resolvedTemplateVersion
-            : "v1";
+        var templateKey = ResolveTemplateDataValue(data, $"TemplateKey:{channel}") ??
+                          ResolveTemplateDataValue(data, "TemplateKey") ??
+                          $"{notification.SourceSystem}.{notification.Type.Name}";
+        var templateVersion = ResolveTemplateDataValue(data, $"TemplateVersion:{channel}") ??
+                              ResolveTemplateDataValue(data, "TemplateVersion") ??
+                              "v1";
         var body = content.HtmlBody ?? content.TextBody;
 
         return new NotificationDeliveryAuditRecord(
@@ -210,6 +210,9 @@ public sealed class NotificationService : INotificationService, INotificationPub
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
+
+    private static string? ResolveTemplateDataValue(IReadOnlyDictionary<string, string> data, string key)
+        => data.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value : null;
 
     private static string GetTargetKey(NotificationRecipient recipient, NotificationChannel channel)
         => channel switch

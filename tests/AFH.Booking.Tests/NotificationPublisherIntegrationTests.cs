@@ -110,6 +110,22 @@ public sealed class NotificationPublisherIntegrationTests
     }
 
     [Fact]
+    public void AddBookingInfrastructure_DoesNotRequireNotificationHttpConfigUntilPublish()
+    {
+        var config = CreateConfig();
+        var services = new ServiceCollection();
+
+        services.AddLogging();
+        services.AddBookingInfrastructure(config);
+
+        using var provider = services.BuildServiceProvider();
+
+        var publisher = provider.GetRequiredService<IBookingNotificationPublisher>();
+
+        Assert.IsType<NotificationApiPublisher>(publisher);
+    }
+
+    [Fact]
     public void ServiceBusNotificationPublisher_CreatesMessage_WithCorrelationAndIdempotency()
     {
         var notification = new NotificationRequested(

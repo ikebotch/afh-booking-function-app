@@ -193,9 +193,6 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IBookingNotificationPublisher, NotificationApiPublisher>((sp, http) =>
         {
             var options = sp.GetRequiredService<IOptions<NotificationApiPublisherOptions>>().Value;
-            if (string.IsNullOrWhiteSpace(options.BaseUrl))
-                throw new InvalidOperationException($"{NotificationApiPublisherOptions.SectionName}:BaseUrl is required for booking notification HTTP publishing.");
-
             http.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds <= 0 ? 30 : options.TimeoutSeconds);
         });
         services.AddScoped<IOperationalIssueRepository, OperationalIssueRepository>();

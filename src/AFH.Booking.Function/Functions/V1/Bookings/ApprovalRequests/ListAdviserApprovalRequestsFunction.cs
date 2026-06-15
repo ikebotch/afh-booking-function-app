@@ -5,6 +5,7 @@ using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using System.Security.Claims;
+using ContractApprovalRequestResponse = AFH.Booking.Contracts.V1.Responses.ApprovalRequestResponse;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
 
@@ -19,6 +20,14 @@ public sealed class ListAdviserApprovalRequestsFunction
     }
 
     [Function("Approvals_ListAdviserRequests")]
+    [BookingOpenApiOperation(
+        "Approvals",
+        "List adviser booking change requests",
+        Description = "Returns approval/change requests scoped to the authenticated adviser. The requester id is resolved from the domain user token, not from query string or request body.",
+        ResponseType = typeof(ContractApprovalRequestResponse[]))]
+    [BookingOpenApiQueryParameter("bookingId", "string", Description = "Optional booking id filter.", Example = "booking-123")]
+    [BookingOpenApiQueryParameter("status", "string", Description = "Optional status filter such as Pending, Approved or Rejected.", Example = "Pending")]
+    [BookingOpenApiQueryParameter("changeType", "string", Description = "Optional change type filter: Cancel or Rearrange.", Example = "Rearrange")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/adviser/booking-change-requests")]
         HttpRequestData req,

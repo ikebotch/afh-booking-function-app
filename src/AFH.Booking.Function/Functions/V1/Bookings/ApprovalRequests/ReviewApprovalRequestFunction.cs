@@ -7,6 +7,7 @@ using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using System.Security.Claims;
+using ContractApprovalRequestResponse = AFH.Booking.Contracts.V1.Responses.ApprovalRequestResponse;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
 
@@ -21,6 +22,19 @@ public sealed class ReviewApprovalRequestFunction
     }
 
     [Function("Approvals_Review")]
+    [BookingOpenApiOperation(
+        "Approvals",
+        "Review approval request",
+        Description = "Approves or rejects an adviser booking change request. The authenticated manager/reviewer domain user is used as the reviewer. If approved, cancellation or rearrangement is executed through the shared booking lifecycle workflow. selectedSlotId is used for rearrangement approvals when the reviewer chooses one proposed option.",
+        RequestBodyType = typeof(ReviewApprovalRequest),
+        ResponseType = typeof(ContractApprovalRequestResponse),
+        RequestExampleJson = """
+        {
+          "approved": true,
+          "notes": "Approved by manager.",
+          "selectedSlotId": "slot-456"
+        }
+        """)]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/approval-requests/{requestId}/review")]
         HttpRequestData req,

@@ -177,4 +177,80 @@ public class BookingOpenApiDocumentFactoryTests
         Assert.True(bookingDetailsProperties.ContainsKey("cancelBookingUrl"));
         Assert.True(bookingDetailsProperties.ContainsKey("rescheduleBookingUrl"));
     }
+
+    [Fact]
+    public void CreateOpenApiJson_SprintThreeApprovalRoutesIncludeTypedContractsAndExamples()
+    {
+        var json = BookingOpenApiDocumentFactory.CreateOpenApiJson(new Uri("https://localhost/api/openapi/v1.json"));
+        var document = JsonNode.Parse(json)!.AsObject();
+        var paths = document["paths"]!.AsObject();
+        var schemas = document["components"]!["schemas"]!.AsObject();
+
+        var createPost = paths["/v1/bookings/{bookingId}/approval-requests"]!["post"]!.AsObject();
+        var adviserListGet = paths["/v1/adviser/booking-change-requests"]!["get"]!.AsObject();
+        var pendingGet = paths["/v1/approval-requests/pending"]!["get"]!.AsObject();
+        var reviewPost = paths["/v1/approval-requests/{requestId}/review"]!["post"]!.AsObject();
+
+        Assert.Equal("Approvals", createPost["tags"]![0]!.GetValue<string>());
+        Assert.Equal("Create adviser approval request", createPost["summary"]!.GetValue<string>());
+        Assert.Contains("authenticated domain user", createPost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ignored for security", createPost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("#/components/schemas/CreateApprovalRequest", createPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+        Assert.Equal("#/components/schemas/ApiResponseOfApprovalRequestResponse", createPost["responses"]!["201"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+        Assert.Equal("Rearrange", createPost["requestBody"]!["content"]!["application/json"]!["example"]!["changeType"]!.GetValue<string>());
+
+        var createSchemaProperties = schemas["CreateApprovalRequest"]!["properties"]!.AsObject();
+        Assert.True(createSchemaProperties.ContainsKey("adviserNote"));
+        Assert.True(createSchemaProperties.ContainsKey("proposedAlternativeTimes"));
+
+        Assert.Equal("List adviser booking change requests", adviserListGet["summary"]!.GetValue<string>());
+        Assert.Contains("authenticated adviser", adviserListGet["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(adviserListGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "bookingId");
+        Assert.Contains(adviserListGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "status");
+        Assert.Contains(adviserListGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "changeType");
+        Assert.StartsWith("#/components/schemas/ApiResponseOf", adviserListGet["responses"]!["200"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>(), StringComparison.Ordinal);
+
+        Assert.Equal("List pending approval requests", pendingGet["summary"]!.GetValue<string>());
+        Assert.Equal("Review approval request", reviewPost["summary"]!.GetValue<string>());
+        Assert.Contains("shared booking lifecycle workflow", reviewPost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("#/components/schemas/ReviewApprovalRequest", reviewPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+        Assert.Equal("slot-456", reviewPost["requestBody"]!["content"]!["application/json"]!["example"]!["selectedSlotId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void CreateOpenApiJson_SprintFourAdminRoutesDocumentDirectActionsAndCalendarRestore()
+    {
+        var json = BookingOpenApiDocumentFactory.CreateOpenApiJson(new Uri("https://localhost/api/openapi/v1.json"));
+        var document = JsonNode.Parse(json)!.AsObject();
+        var paths = document["paths"]!.AsObject();
+        var schemas = document["components"]!["schemas"]!.AsObject();
+
+        var cancelPost = paths["/v1/bookings/{bookingId}/cancel"]!["post"]!.AsObject();
+        var optionsPost = paths["/v1/bookings/{bookingId}/rearrangement/options"]!["post"]!.AsObject();
+        var rearrangePost = paths["/v1/bookings/{bookingId}/rearrange"]!["post"]!.AsObject();
+        var calendarPost = paths["/v1/bookings/{bookingId}/calendar/remediate-showas"]!["post"]!.AsObject();
+
+        Assert.Contains("Manager/admin direct cancellation", cancelPost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("reasonCode is required", cancelPost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("#/components/schemas/CancelBookingRequest", cancelPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+        Assert.Equal("ManagerApprovedCancellation", cancelPost["requestBody"]!["content"]!["application/json"]!["example"]!["reasonCode"]!.GetValue<string>());
+
+        Assert.Contains("availability transactionId", optionsPost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("#/components/schemas/RearrangementOptionsRequest", optionsPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+
+        Assert.Contains("current existing booking", rearrangePost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("newSlotId and reasonCode are required", rearrangePost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("#/components/schemas/RearrangeBookingRequest", rearrangePost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+        Assert.Equal("slot-456", rearrangePost["requestBody"]!["content"]!["application/json"]!["example"]!["newSlotId"]!.GetValue<string>());
+
+        Assert.Equal("Internal/Admin", calendarPost["tags"]![0]!.GetValue<string>());
+        Assert.Equal("Remediate booking calendar event", calendarPost["summary"]!.GetValue<string>());
+        Assert.Contains("recreates the confirmed Busy calendar event", calendarPost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("does not cancel the booking", calendarPost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("#/components/schemas/ApiResponseOfCalendarShowAsRemediationResult", calendarPost["responses"]!["200"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+
+        var calendarProperties = schemas["CalendarShowAsRemediationResult"]!["properties"]!.AsObject();
+        Assert.True(calendarProperties.ContainsKey("previousEventId"));
+        Assert.True(calendarProperties.ContainsKey("restoredMissingEvent"));
+    }
 }

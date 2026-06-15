@@ -22,8 +22,18 @@ public sealed class GetRearrangementOptionsFunction
     [BookingOpenApiOperation(
         "Bookings",
         "Get rearrangement options",
+        Description = "Internal/admin rearrangement options endpoint for the current existing booking. Returns replacement slot options and the availability transactionId used for option context.",
         RequestBodyType = typeof(RearrangementOptionsRequest),
-        ResponseType = typeof(RearrangementOptionsResponse))]
+        ResponseType = typeof(RearrangementOptionsResponse),
+        RequestExampleJson = """
+        {
+          "preferredStartUtc": "2026-06-20T09:00:00Z",
+          "duration": 60,
+          "isRemote": true,
+          "meetingType": "AnnualReview",
+          "limit": 5
+        }
+        """)]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/{bookingId}/rearrangement/options")]
         HttpRequestData req,

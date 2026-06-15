@@ -9,6 +9,7 @@ using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using System.Security.Claims;
+using ContractApprovalRequestResponse = AFH.Booking.Contracts.V1.Responses.ApprovalRequestResponse;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
 
@@ -23,6 +24,32 @@ public sealed class CreateApprovalRequestFunction
     }
 
     [Function("Bookings_CreateApprovalRequest")]
+    [BookingOpenApiOperation(
+        "Approvals",
+        "Create adviser approval request",
+        Description = "Creates an adviser booking change approval request for the current booking. The route bookingId is the existing booking. The authenticated domain user is used as the adviser/requester; request body actor fields are ignored for security. changeType must be Cancel or Rearrange. reasonCode is required. Rearrangement requests require either newSlotId or proposedAlternativeTimes.",
+        RequestBodyType = typeof(CreateApprovalRequest),
+        ResponseType = typeof(ContractApprovalRequestResponse),
+        SuccessStatusCode = HttpStatusCode.Created,
+        RequestExampleJson = """
+        {
+          "changeType": "Rearrange",
+          "reasonCode": "AdviserUnavailable",
+          "reasonDetail": "Adviser cannot attend the current slot.",
+          "newSlotId": "slot-123",
+          "adviserNote": "Preferred afternoon slot.",
+          "proposedAlternativeTimes": [
+            {
+              "slotId": "slot-456",
+              "adviserId": "adv-123",
+              "startUtc": "2026-06-20T10:00:00Z",
+              "endUtc": "2026-06-20T11:00:00Z",
+              "note": "Best alternative",
+              "preferenceOrder": 1
+            }
+          ]
+        }
+        """)]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/bookings/{bookingId}/approval-requests")]
         HttpRequestData req,

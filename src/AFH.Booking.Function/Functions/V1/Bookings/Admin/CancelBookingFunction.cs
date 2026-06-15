@@ -30,8 +30,16 @@ public sealed class CancelBookingFunction
     [BookingOpenApiOperation(
         "Bookings",
         "Cancel booking",
+        Description = "Manager/admin direct cancellation endpoint. Requires an authenticated domain user with direct cancellation permission. The route bookingId is the existing booking. reasonCode is required. approvalRequestId is optional and links execution back to an approved adviser request when applicable.",
         RequestBodyType = typeof(CancelBookingRequest),
-        ResponseType = typeof(CancelBookingResponse))]
+        ResponseType = typeof(CancelBookingResponse),
+        RequestExampleJson = """
+        {
+          "reasonCode": "ManagerApprovedCancellation",
+          "reasonDetail": "Cancellation approved by manager.",
+          "approvalRequestId": "approval-123"
+        }
+        """)]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/bookings/{bookingId}/cancel")]
         HttpRequestData req,

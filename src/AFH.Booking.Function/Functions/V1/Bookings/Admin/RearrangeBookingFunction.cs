@@ -23,8 +23,17 @@ public sealed class RearrangeBookingFunction
     [BookingOpenApiOperation(
         "Bookings",
         "Rearrange booking",
+        Description = "Manager/admin direct rearrangement endpoint. Requires an authenticated domain user with direct rearrangement permission. The route bookingId is the current existing booking. newSlotId and reasonCode are required. approvalRequestId is optional and links execution back to an approved adviser request when applicable.",
         RequestBodyType = typeof(RearrangeBookingRequest),
-        ResponseType = typeof(RearrangeBookingResponse))]
+        ResponseType = typeof(RearrangeBookingResponse),
+        RequestExampleJson = """
+        {
+          "newSlotId": "slot-456",
+          "reasonCode": "ManagerApprovedRearrangement",
+          "reasonDetail": "Manager approved adviser proposed slot.",
+          "approvalRequestId": "approval-123"
+        }
+        """)]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "v1/bookings/{bookingId}/rearrange")]
         HttpRequestData req,

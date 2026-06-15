@@ -77,35 +77,28 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
                 if (string.IsNullOrWhiteSpace(adviserId))
                     continue;
 
-                IReadOnlyDictionary<string, int>? ruleAudit = null;
+                var rules = await _availabilityRules.EvaluateAsync(
+                    adviser,
+                    start,
+                    end,
+                    query.Duration,
+                    utcNow,
+                    ct);
 
-                // Keep in-person behaviour aligned with the working version:
-                // travel + calendar decide in-person availability.
-                if (query.IsRemote)
+                var ruleAudit = rules.Audit;
+
+                if (!rules.IsAllowed)
                 {
-                    var rules = await _availabilityRules.EvaluateAsync(
-                        adviser,
-                        start,
-                        end,
-                        query.Duration,
-                        utcNow,
-                        ct);
+                    if (!rules.WorkingPatternAllowed)
+                        workingPatternFailCount++;
 
-                    ruleAudit = rules.Audit;
+                    if (!rules.CapacityAllowed)
+                        capacityFailCount++;
 
-                    if (!rules.IsAllowed)
-                    {
-                        if (!rules.WorkingPatternAllowed)
-                            workingPatternFailCount++;
+                    if (!rules.MinimumDurationAllowed)
+                        minimumDurationFailCount++;
 
-                        if (!rules.CapacityAllowed)
-                            capacityFailCount++;
-
-                        if (!rules.MinimumDurationAllowed)
-                            minimumDurationFailCount++;
-
-                        continue;
-                    }
+                    continue;
                 }
 
                 var travelCandidate = travel?.Candidates

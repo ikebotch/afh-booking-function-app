@@ -56,15 +56,9 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
 
         IEnumerable<AdviserProfileProjectionRecord> remoteProfiles = preferredIds.Count > 0
             ? preferredIds
-                .Select(id => profileById.TryGetValue(id, out var profile)
-                    ? profile
-                    : new AdviserProfileProjectionRecord
-                    {
-                        AdviserId = id,
-                        DisplayName = id,
-                        MailboxUserId = id,
-                        IsActive = true
-                    })
+                .Select(id => profileById.TryGetValue(id, out var profile) ? profile : null)
+                .Where(profile => profile is not null)
+                .Cast<AdviserProfileProjectionRecord>()
             : activeProfiles.Where(x => !query.ExcludeAdviserIds.Contains(x.AdviserId, StringComparer.OrdinalIgnoreCase));
 
         var remoteProfilesList = remoteProfiles.ToList();
@@ -118,6 +112,7 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
                 AdviserId = c.AdviserId,
                 Name = string.IsNullOrWhiteSpace(c.AdviserName) ? c.AdviserId : c.AdviserName,
                 Email = string.IsNullOrWhiteSpace(c.MailboxUserId) ? c.AdviserId : c.MailboxUserId,
+                Region = c.Region,
                 HomePostcode = c.TravelSnapshot?.SourcePostcode
             })
             .DistinctBy(x => x.AdviserId, StringComparer.OrdinalIgnoreCase)

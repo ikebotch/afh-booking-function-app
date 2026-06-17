@@ -12,7 +12,6 @@ public static class DomainUserAccessAuthorizer
     public static async Task<DomainUserAccessResult> AuthorizeAsync(
         HttpRequestData request,
         EndpointAccessRequirement requirement,
-        IEntraTokenValidator validator,
         ICurrentUserPermissionClient permissions,
         CancellationToken ct)
     {
@@ -43,27 +42,9 @@ public static class DomainUserAccessAuthorizer
         }
 
         var token = authHeader["Bearer ".Length..].Trim();
-        var validation = await validator.ValidateAsync(token, ct);
-
-        if (!validation.IsSuccess || validation.Principal is null)
-        {
-            var statusCode = string.Equals(validation.ErrorCode, "Forbidden", StringComparison.OrdinalIgnoreCase)
-                ? HttpStatusCode.Forbidden
-                : string.Equals(validation.ErrorCode, "ServerError", StringComparison.OrdinalIgnoreCase)
-                    ? HttpStatusCode.InternalServerError
-                    : HttpStatusCode.Unauthorized;
-
-            return DomainUserAccessResult.Denied(await request.ProblemAsync(
-                statusCode,
-                validation.ErrorMessage ?? "Request failed.",
-                ct,
-                validation.ErrorCode),
-                requiredPermission: requirement.RequiredPermission,
-                authorised: false);
-        }
 
         if (string.IsNullOrWhiteSpace(requirement.RequiredPermission))
-            return DomainUserAccessResult.Allowed(validation.Principal, null);
+            return DomainUserAccessResult.Allowed(null, null);
 
         var authorisation = await permissions.AuthorizeAsync(token, requirement.RequiredPermission, ct);
         if (!authorisation.IsAuthorised)
@@ -74,13 +55,13 @@ public static class DomainUserAccessAuthorizer
                     authorisation.FailureMessage ?? $"Permission '{requirement.RequiredPermission}' is required.",
                     ct,
                     Errors.Forbidden),
-                validation.Principal,
+                null,
                 authorisation.User,
                 requirement.RequiredPermission,
                 authorised: false);
         }
 
-        return DomainUserAccessResult.Allowed(validation.Principal, authorisation.User, requirement.RequiredPermission);
+        return DomainUserAccessResult.Allowed(null, authorisation.User, requirement.RequiredPermission);
     }
 }
 

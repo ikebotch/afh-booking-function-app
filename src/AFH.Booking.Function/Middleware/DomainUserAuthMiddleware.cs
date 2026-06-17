@@ -40,12 +40,10 @@ public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        var validator = context.InstanceServices.GetRequiredService<IEntraTokenValidator>();
         var permissions = context.InstanceServices.GetRequiredService<ICurrentUserPermissionClient>();
         var access = await DomainUserAccessAuthorizer.AuthorizeAsync(
             request,
             requirement,
-            validator,
             permissions,
             CancellationToken.None);
 
@@ -66,7 +64,7 @@ public sealed class DomainUserAuthMiddleware : IFunctionsWorkerMiddleware
             return;
         }
 
-        context.SetDomainUserPrincipal(access.Principal!, access.User);
+        context.SetDomainUserPrincipal(access.Principal, access.User);
 
         if (!string.IsNullOrWhiteSpace(access.RequiredPermission))
         {

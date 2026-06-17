@@ -47,7 +47,7 @@ public sealed class BookingRbacAuthorisationTests
     }
 
     [Fact]
-    public async Task AdviserUserContextClient_CallsAdviserBackedCurrentUserEndpointWithBearerToken()
+    public async Task AdviserUserContextClient_CallsLocationIdentityEndpointWithInternalAndUserTokens()
     {
         HttpRequestMessage? captured = null;
         var handler = new StubHandler(request =>
@@ -72,7 +72,13 @@ public sealed class BookingRbacAuthorisationTests
 
         var sut = new AdviserUserContextClient(
             new HttpClient(handler) { BaseAddress = new Uri("https://location.example") },
-            Options.Create(new LocationServiceOptions { BaseUrl = "https://location.example" }),
+            Options.Create(new LocationServiceOptions
+            {
+                BaseUrl = "https://location.example",
+                FunctionKey = "location-key",
+                InternalToken = "internal-token"
+            }),
+            new InternalBearerServiceAuthenticator(),
             NullLogger<AdviserUserContextClient>.Instance);
 
         var user = await sut.GetCurrentUserAsync("entra-token", CancellationToken.None);
@@ -82,9 +88,13 @@ public sealed class BookingRbacAuthorisationTests
         Assert.Equal("alex@afh.co.uk", user.Email);
         Assert.Contains(BookingPermissionNames.CancelAsLeadTech, user.Permissions);
         Assert.NotNull(captured);
-        Assert.Equal("/api/v1/me", captured!.RequestUri!.AbsolutePath);
+        Assert.Equal("/api/internal/identity/v1/me", captured!.RequestUri!.AbsolutePath);
         Assert.Equal("Bearer", captured.Headers.Authorization?.Scheme);
-        Assert.Equal("entra-token", captured.Headers.Authorization?.Parameter);
+        Assert.Equal("internal-token", captured.Headers.Authorization?.Parameter);
+        Assert.True(captured.Headers.TryGetValues("x-afh-user-token", out var userTokens));
+        Assert.Equal("entra-token", Assert.Single(userTokens));
+        Assert.True(captured.Headers.TryGetValues("x-functions-key", out var functionKeys));
+        Assert.Equal("location-key", Assert.Single(functionKeys));
     }
 
     [Fact]
@@ -103,7 +113,6 @@ public sealed class BookingRbacAuthorisationTests
         var result = await DomainUserAccessAuthorizer.AuthorizeAsync(
             request,
             new EndpointAccessRequirement(EndpointAccessPolicy.UserAuthenticated, BookingPermissionNames.ApprovalsRead),
-            new StubTokenValidator(DomainUserTokenValidationResult.Success(CreatePrincipal())),
             new StubPermissionClient(true),
             CancellationToken.None);
 
@@ -112,20 +121,21 @@ public sealed class BookingRbacAuthorisationTests
     }
 
     [Fact]
-    public async Task DomainUserAccessAuthorizer_InvalidBearerTokenReturnsUnauthorized()
+    public async Task DomainUserAccessAuthorizer_ForwardsBearerTokenToLocationIdentityForPermissionDecision()
     {
         var request = TestHttpRequestData.Create();
-        request.Headers.Add("Authorization", "Bearer bad-token");
+        request.Headers.Add("Authorization", "Bearer opaque-token");
+        var permissions = new CapturingPermissionClient(false);
 
         var result = await DomainUserAccessAuthorizer.AuthorizeAsync(
             request,
             new EndpointAccessRequirement(EndpointAccessPolicy.UserAuthenticated, BookingPermissionNames.ApprovalsRead),
-            new StubTokenValidator(DomainUserTokenValidationResult.Fail("Token is invalid.")),
-            new StubPermissionClient(true),
+            permissions,
             CancellationToken.None);
 
         Assert.False(result.IsAllowed);
-        Assert.Equal(HttpStatusCode.Unauthorized, result.FailureResponse?.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, result.FailureResponse?.StatusCode);
+        Assert.Equal("opaque-token", permissions.LastBearerToken);
     }
 
     [Fact]
@@ -137,7 +147,6 @@ public sealed class BookingRbacAuthorisationTests
         var result = await DomainUserAccessAuthorizer.AuthorizeAsync(
             request,
             new EndpointAccessRequirement(EndpointAccessPolicy.UserAuthenticated, BookingPermissionNames.ApprovalsReview),
-            new StubTokenValidator(DomainUserTokenValidationResult.Success(CreatePrincipal())),
             new StubPermissionClient(false),
             CancellationToken.None);
 
@@ -154,7 +163,6 @@ public sealed class BookingRbacAuthorisationTests
         var result = await DomainUserAccessAuthorizer.AuthorizeAsync(
             request,
             new EndpointAccessRequirement(EndpointAccessPolicy.UserAuthenticated, BookingPermissionNames.ApprovalsReview),
-            new StubTokenValidator(DomainUserTokenValidationResult.Success(CreatePrincipal())),
             new StubPermissionClient(true),
             CancellationToken.None);
 
@@ -178,7 +186,6 @@ public sealed class BookingRbacAuthorisationTests
         var result = await DomainUserAccessAuthorizer.AuthorizeAsync(
             request,
             new EndpointAccessRequirement(EndpointAccessPolicy.UserAuthenticated, BookingPermissionNames.ApprovalsRead),
-            new StubTokenValidator(DomainUserTokenValidationResult.Success(CreatePrincipal())),
             permissions,
             CancellationToken.None);
 
@@ -230,14 +237,6 @@ public sealed class BookingRbacAuthorisationTests
         Assert.Equal(1, adviser.CallCount);
     }
 
-    private static ClaimsPrincipal CreatePrincipal() =>
-        new(new ClaimsIdentity(
-        [
-            new Claim("oid", "user-1"),
-            new Claim("preferred_username", "alex@afh.co.uk"),
-            new Claim("name", "Alex Example")
-        ], "Test"));
-
     private sealed class StubAdviserUserContextClient(AdviserUserContext? user) : IAdviserUserContextClient
     {
         public Task<AdviserUserContext?> GetCurrentUserAsync(string bearerToken, CancellationToken ct)
@@ -257,16 +256,30 @@ public sealed class BookingRbacAuthorisationTests
         }
     }
 
-    private sealed class StubTokenValidator(DomainUserTokenValidationResult result) : IEntraTokenValidator
-    {
-        public Task<DomainUserTokenValidationResult> ValidateAsync(string token, CancellationToken ct)
-            => Task.FromResult(result);
-    }
-
     private sealed class StubPermissionClient(bool allow) : ICurrentUserPermissionClient
     {
         public Task<CurrentUserPermissionResult> AuthorizeAsync(string bearerToken, string requiredPermission, CancellationToken ct)
         {
+            var user = new AdviserUserContext
+            {
+                UserId = "user-1",
+                Email = "alex@afh.co.uk",
+                Permissions = allow ? [requiredPermission] : []
+            };
+
+            return Task.FromResult(allow
+                ? CurrentUserPermissionResult.Authorised(user)
+                : CurrentUserPermissionResult.Forbidden(user, requiredPermission));
+        }
+    }
+
+    private sealed class CapturingPermissionClient(bool allow) : ICurrentUserPermissionClient
+    {
+        public string? LastBearerToken { get; private set; }
+
+        public Task<CurrentUserPermissionResult> AuthorizeAsync(string bearerToken, string requiredPermission, CancellationToken ct)
+        {
+            LastBearerToken = bearerToken;
             var user = new AdviserUserContext
             {
                 UserId = "user-1",

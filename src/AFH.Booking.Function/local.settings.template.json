@@ -108,12 +108,6 @@
     "InternalApiAuth:AllowAnonymousInDevelopment": "true",
     "XPlan:Enabled": "false",
     "XPlan:BaseUrl": "https://xplan.example",
-    "XPlan:ApiKey": "<xplan-api-key>",
-    "DomainUserAuth:Enabled": "true",
-    "DomainUserAuth:TenantId": "<entra-tenant-id>",
-    "DomainUserAuth:Authority": "https://login.microsoftonline.com/<entra-tenant-id>/v2.0",
-    "DomainUserAuth:Audience": "api://<booking-api-app-id>",
-    "DomainUserAuth:AllowedTenantIds:0": "<entra-tenant-id>",
-    "DomainUserAuth:AllowedEmailDomains:0": "afh.co.uk"
+    "XPlan:ApiKey": "<xplan-api-key>"
   }
 }

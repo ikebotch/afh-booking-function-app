@@ -120,14 +120,8 @@ static void AddSharedErrorHandling(
 static void AddValidatedSecurityOptions(IServiceCollection services, IConfiguration configuration)
 {
     services.AddSingleton<IValidateOptions<InternalApiAuthOptions>, InternalApiAuthOptionsValidator>();
-    services.AddSingleton<IValidateOptions<DomainUserAuthOptions>, DomainUserAuthOptionsValidator>();
-
     services.AddOptions<InternalApiAuthOptions>()
         .Bind(configuration.GetSection(InternalApiAuthOptions.SectionName))
-        .ValidateOnStart();
-
-    services.AddOptions<DomainUserAuthOptions>()
-        .Bind(configuration.GetSection(DomainUserAuthOptions.SectionName))
         .ValidateOnStart();
 
     services.AddOptions<NotificationInboundServiceBusOptions>()

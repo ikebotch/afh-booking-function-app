@@ -9,9 +9,10 @@ public static class FunctionContextUserExtensions
     private const string DomainUserPrincipalKey = "DomainUserPrincipal";
     private const string DomainUserContextKey = "DomainUserContext";
 
-    public static void SetDomainUserPrincipal(this FunctionContext context, ClaimsPrincipal principal, AdviserUserContext? user = null)
+    public static void SetDomainUserPrincipal(this FunctionContext context, ClaimsPrincipal? principal, AdviserUserContext? user = null)
     {
-        context.Items[DomainUserPrincipalKey] = principal;
+        if (principal is not null)
+            context.Items[DomainUserPrincipalKey] = principal;
         if (user is not null)
             context.Items[DomainUserContextKey] = user;
     }

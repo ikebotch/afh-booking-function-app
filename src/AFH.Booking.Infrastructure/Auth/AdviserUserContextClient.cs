@@ -4,7 +4,6 @@ using AFH.Booking.Infrastructure.Clients;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 
@@ -12,19 +11,23 @@ namespace AFH.Booking.Infrastructure.Auth;
 
 public sealed class AdviserUserContextClient : IAdviserUserContextClient
 {
+    private const string UserBearerTokenHeaderName = "x-afh-user-token";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _http;
     private readonly LocationServiceOptions _options;
+    private readonly IInternalServiceAuthenticator _authenticator;
     private readonly ILogger<AdviserUserContextClient> _logger;
 
     public AdviserUserContextClient(
         HttpClient http,
         IOptions<LocationServiceOptions> options,
+        IInternalServiceAuthenticator authenticator,
         ILogger<AdviserUserContextClient> logger)
     {
         _http = http;
         _options = options.Value;
+        _authenticator = authenticator;
         _logger = logger;
     }
 
@@ -33,8 +36,15 @@ public sealed class AdviserUserContextClient : IAdviserUserContextClient
         if (string.IsNullOrWhiteSpace(_options.BaseUrl))
             throw new InvalidOperationException($"{LocationServiceOptions.SectionName}:BaseUrl is required.");
 
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/me");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", bearerToken.Trim());
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{_options.BaseUrl.TrimEnd('/')}/api/internal/identity/v1/me");
+
+        if (!string.IsNullOrWhiteSpace(_options.FunctionKey))
+            request.Headers.TryAddWithoutValidation("x-functions-key", _options.FunctionKey.Trim());
+
+        request.Headers.TryAddWithoutValidation(UserBearerTokenHeaderName, bearerToken.Trim());
+        _authenticator.Apply(request, _options.InternalToken);
 
         using var response = await _http.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode)

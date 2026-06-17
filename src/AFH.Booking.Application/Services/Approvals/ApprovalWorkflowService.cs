@@ -52,6 +52,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         var correlationId = actor?.CorrelationId ?? request.CorrelationId;
         var requestedUtc = DateTime.UtcNow;
         var booking = await _store.LoadBookingAsync(request.BookingId, ct);
+        EnsureAdviserOwnsBooking(requestedBy, requesterId, booking);
         var lifecycleState = ResolveLifecycleState(booking.Hold.Status) ?? LifecycleStates.Booked;
         var routeTarget = await _routing.ResolveAsync(ct);
         var notes = BuildCreateNotes(request, actor, booking.Hold.Id, requestedUtc, correlationId);
@@ -140,6 +141,21 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             ct);
 
         return ToResponse(model);
+    }
+
+    private static void EnsureAdviserOwnsBooking(
+        string requestedBy,
+        string? requesterId,
+        ApprovalBookingSnapshot booking)
+    {
+        if (!string.Equals(requestedBy, BookingActorContext.ActorAdviser, StringComparison.OrdinalIgnoreCase))
+            return;
+
+        if (string.IsNullOrWhiteSpace(requesterId)
+            || !string.Equals(booking.Slot.AdviserId, requesterId, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException("Signed-in adviser can only request approval for their own bookings.");
+        }
     }
 
     public async Task<IReadOnlyList<ApprovalRequestResponse>> ListPendingAsync(CancellationToken ct)

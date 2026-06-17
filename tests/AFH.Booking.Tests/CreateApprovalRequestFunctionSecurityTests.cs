@@ -52,7 +52,7 @@ public sealed class CreateApprovalRequestFunctionSecurityTests
         var sut = new CreateApprovalRequestFunction(approvals.Object);
         var request = CreateJsonRequest("""{"changeType":"Cancel","reasonCode":"CLIENT_REQUEST","reasonDetail":"Client asked"}""");
         request.Headers.Add("x-correlation-id", "corr-1");
-        SetDomainUser(request, userId: "adviser-auth", displayName: "Ada Adviser");
+        SetDomainUser(request, userId: "user-auth", adviserId: "adviser-auth", displayName: "Ada Adviser");
 
         var response = await sut.Run(request, request.FunctionContext, "booking-1", CancellationToken.None);
 
@@ -73,7 +73,7 @@ public sealed class CreateApprovalRequestFunctionSecurityTests
         var sut = new CreateApprovalRequestFunction(approvals.Object);
         var request = CreateJsonRequest(
             """{"changeType":"Cancel","requestedBy":"Manager","requesterId":"spoofed-adviser","reasonCode":"CLIENT_REQUEST"}""");
-        SetDomainUser(request, userId: "adviser-auth");
+        SetDomainUser(request, userId: "user-auth", adviserId: "adviser-auth", displayName: "Ada Adviser");
 
         var response = await sut.Run(request, request.FunctionContext, "booking-1", CancellationToken.None);
 
@@ -82,6 +82,22 @@ public sealed class CreateApprovalRequestFunctionSecurityTests
         Assert.Equal("Adviser", captured!.RequestedBy);
         Assert.Equal("adviser-auth", captured.RequesterId);
         Assert.Equal("adviser-auth", captured.ActorContext?.ActorId);
+    }
+
+    [Fact]
+    public async Task Run_ApprovalServiceRejectsDifferentAdviserBooking_ReturnsForbidden()
+    {
+        var approvals = new Mock<IApprovalWorkflowService>();
+        approvals.Setup(x => x.CreateAsync(It.IsAny<CreateApprovalWorkflowRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new UnauthorizedAccessException("Signed-in adviser can only request approval for their own bookings."));
+
+        var sut = new CreateApprovalRequestFunction(approvals.Object);
+        var request = CreateJsonRequest("""{"changeType":"Cancel","reasonCode":"CLIENT_REQUEST"}""");
+        SetDomainUser(request, userId: "user-auth", adviserId: "adviser-auth", displayName: "Ada Adviser");
+
+        var response = await sut.Run(request, request.FunctionContext, "booking-for-another-adviser", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
     [Fact]
@@ -133,6 +149,14 @@ public sealed class CreateApprovalRequestFunctionSecurityTests
         string userId = "adviser-1",
         string displayName = "Adviser One",
         IReadOnlyList<string>? permissions = null)
+        => SetDomainUser(request, userId, userId, displayName, permissions);
+
+    private static void SetDomainUser(
+        TestHttpRequestData request,
+        string userId,
+        string adviserId,
+        string displayName,
+        IReadOnlyList<string>? permissions = null)
     {
         var principal = new ClaimsPrincipal(new ClaimsIdentity(
         [
@@ -146,6 +170,7 @@ public sealed class CreateApprovalRequestFunctionSecurityTests
             {
                 UserId = userId,
                 DisplayName = displayName,
+                AdviserId = adviserId,
                 Email = $"{userId}@example.test",
                 Permissions = permissions ?? [BookingPermissionNames.ApprovalRequestsCreate],
                 Roles = ["Adviser"]

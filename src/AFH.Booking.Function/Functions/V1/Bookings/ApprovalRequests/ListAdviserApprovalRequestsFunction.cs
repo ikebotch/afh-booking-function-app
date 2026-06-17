@@ -4,7 +4,6 @@ using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
-using System.Security.Claims;
 using ContractApprovalRequestResponse = AFH.Booking.Contracts.V1.Responses.ApprovalRequestResponse;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
@@ -36,7 +35,7 @@ public sealed class ListAdviserApprovalRequestsFunction
     {
         var requesterId = ResolveRequesterId(context);
         if (string.IsNullOrWhiteSpace(requesterId))
-            return await req.ProblemAsync(HttpStatusCode.Forbidden, "Authenticated adviser identity could not be resolved.", ct, "Forbidden");
+            return await req.ProblemAsync(HttpStatusCode.Forbidden, "Signed-in user is not mapped to an adviser profile.", ct, "Forbidden");
 
         var query = req.Url.Query;
         var requests = await _approvals.ListAsync(new ListApprovalWorkflowRequestsQuery(
@@ -51,11 +50,7 @@ public sealed class ListAdviserApprovalRequestsFunction
     private static string? ResolveRequesterId(FunctionContext context)
     {
         var user = context.GetDomainUserContext();
-        var principal = context.GetDomainUserPrincipal();
-        return user?.UserId
-            ?? GetClaimValue(principal, "oid", "http://schemas.microsoft.com/identity/claims/objectidentifier", ClaimTypes.NameIdentifier)
-            ?? user?.Email
-            ?? GetClaimValue(principal, ClaimTypes.Email, "email", ClaimTypes.Upn, "preferred_username");
+        return user?.AdviserId;
     }
 
     private static string? GetQueryValue(string query, string key)
@@ -78,18 +73,4 @@ public sealed class ListAdviserApprovalRequestsFunction
         return null;
     }
 
-    private static string? GetClaimValue(ClaimsPrincipal? principal, params string[] claimTypes)
-    {
-        if (principal is null)
-            return null;
-
-        foreach (var claimType in claimTypes)
-        {
-            var claim = principal.FindFirst(claimType);
-            if (!string.IsNullOrWhiteSpace(claim?.Value))
-                return claim.Value;
-        }
-
-        return null;
-    }
 }

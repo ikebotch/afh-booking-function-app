@@ -79,8 +79,8 @@ public sealed class CreateApprovalRequestFunction
                 "Forbidden");
         }
 
-        if (string.IsNullOrWhiteSpace(user.UserId) && string.IsNullOrWhiteSpace(user.Email))
-            return await req.ProblemAsync(HttpStatusCode.Forbidden, "Authenticated adviser identity could not be resolved.", ct, "Forbidden");
+        if (string.IsNullOrWhiteSpace(user.AdviserId))
+            return await req.ProblemAsync(HttpStatusCode.Forbidden, "Signed-in user is not mapped to an adviser profile.", ct, "Forbidden");
 
         if (string.IsNullOrWhiteSpace(body?.ReasonCode))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "reasonCode is required for adviser approval requests.", ct, "Validation");
@@ -114,6 +114,10 @@ public sealed class CreateApprovalRequestFunction
         {
             return await req.ProblemAsync(HttpStatusCode.BadRequest, ex.Message, ct, "Validation");
         }
+        catch (UnauthorizedAccessException ex)
+        {
+            return await req.ProblemAsync(HttpStatusCode.Forbidden, ex.Message, ct, "Forbidden");
+        }
 
         return await req.CreatedJsonAsync(created.ToContract(), ct);
     }
@@ -128,7 +132,11 @@ public sealed class CreateApprovalRequestFunction
         string? correlationId)
     {
         var principal = context.GetDomainUserPrincipal();
-        var actorId = user.UserId ?? GetClaimValue(principal, "oid", "http://schemas.microsoft.com/identity/claims/objectidentifier", ClaimTypes.NameIdentifier) ?? user.Email ?? GetClaimValue(principal, ClaimTypes.Email, "email", ClaimTypes.Upn, "preferred_username");
+        var actorId = user.AdviserId
+            ?? user.UserId
+            ?? GetClaimValue(principal, "oid", "http://schemas.microsoft.com/identity/claims/objectidentifier", ClaimTypes.NameIdentifier)
+            ?? user.Email
+            ?? GetClaimValue(principal, ClaimTypes.Email, "email", ClaimTypes.Upn, "preferred_username");
         var displayName = user.DisplayName ?? GetClaimValue(principal, "name", ClaimTypes.Name);
 
         return BookingActorContext.AdviserPortal(

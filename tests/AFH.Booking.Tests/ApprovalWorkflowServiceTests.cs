@@ -33,7 +33,7 @@ public sealed class ApprovalWorkflowServiceTests
 
         var sut = CreateSut(store.Object);
         var actor = BookingActorContext.AdviserPortal(
-            "adviser-auth",
+            "adviser-1",
             "Ada Adviser",
             "corr-1",
             ["Bookings.ApprovalRequests.Create"]);
@@ -52,12 +52,12 @@ public sealed class ApprovalWorkflowServiceTests
 
         Assert.NotNull(capturedRequest);
         Assert.Equal("Adviser", capturedRequest!.RequestedBy);
-        Assert.Equal("adviser-auth", capturedRequest.RequesterId);
-        Assert.Equal("adviser-auth", capturedHistory!.ActorId);
-        Assert.Equal("adviser-auth", response.RequesterId);
+        Assert.Equal("adviser-1", capturedRequest.RequesterId);
+        Assert.Equal("adviser-1", capturedHistory!.ActorId);
+        Assert.Equal("adviser-1", response.RequesterId);
         var note = Assert.Single(response.Notes);
         Assert.Equal("Adviser", note.ActorType);
-        Assert.Equal("adviser-auth", note.ActorId);
+        Assert.Equal("adviser-1", note.ActorId);
         Assert.Equal("Ada Adviser", note.DisplayName);
         Assert.Equal("Spoke to client", note.Text);
     }
@@ -114,6 +114,31 @@ public sealed class ApprovalWorkflowServiceTests
         Assert.Equal(2, response.ProposedAlternativeTimes.Count);
         Assert.Equal("slot-1", response.ProposedAlternativeTimes[0].SlotId);
         Assert.Equal("slot-2", response.ProposedAlternativeTimes[1].SlotId);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsAdviserRequestForAnotherAdvisersBooking()
+    {
+        var store = CreateStore();
+        var sut = CreateSut(store.Object);
+
+        var ex = await Assert.ThrowsAsync<UnauthorizedAccessException>(() => sut.CreateAsync(new CreateApprovalWorkflowRequest(
+            BookingId: "booking-1",
+            ChangeType: "Cancel",
+            RequestedBy: "Adviser",
+            RequesterId: "adviser-2",
+            ReasonCode: "CLIENT_REQUEST",
+            ReasonDetail: "Client asked to cancel",
+            NewSlotId: null,
+            CorrelationId: "corr-1",
+            ActorContext: BookingActorContext.AdviserPortal("adviser-2", "Another Adviser", "corr-1"),
+            AdviserNote: "Client asked to cancel"), CancellationToken.None));
+
+        Assert.Contains("own bookings", ex.Message);
+        store.Verify(x => x.AddRequestAsync(
+            It.IsAny<ApprovalWorkflowRecord>(),
+            It.IsAny<ApprovalHistoryRecord>(),
+            It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static Mock<IApprovalWorkflowStore> CreateStore()

@@ -69,51 +69,55 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             .ThenInclude(x => x.Transaction)
             .AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(query.BookingId))
+        if (query.BookingIds.Count > 0)
         {
-            var bookingId = query.BookingId.Trim();
-            rows = rows.Where(x => x.Id == bookingId);
+            var bookingIds = Normalize(query.BookingIds);
+            rows = rows.Where(x => bookingIds.Contains(x.Id));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.TransactionId))
+        if (query.TransactionIds.Count > 0)
         {
-            var transactionId = query.TransactionId.Trim();
-            rows = rows.Where(x => x.Slot.TransactionId == transactionId);
+            var transactionIds = Normalize(query.TransactionIds);
+            rows = rows.Where(x => transactionIds.Contains(x.Slot.TransactionId));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.TransactionRef))
+        if (query.TransactionRefs.Count > 0)
         {
-            var transactionRef = query.TransactionRef.Trim();
-            rows = rows.Where(x => x.Slot.Transaction.TransactionRef == transactionRef);
+            var transactionRefs = Normalize(query.TransactionRefs);
+            rows = rows.Where(x => transactionRefs.Contains(x.Slot.Transaction.TransactionRef));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Status) && Enum.TryParse<HoldStatus>(query.Status.Trim(), true, out var status))
+        if (query.Statuses.Count > 0)
         {
-            rows = rows.Where(x => x.Status == status);
+            var statuses = query.Statuses
+                .Select(status => Enum.Parse<HoldStatus>(status.Trim(), ignoreCase: true))
+                .Distinct()
+                .ToArray();
+            rows = rows.Where(x => statuses.Contains(x.Status));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.AdviserId))
+        if (query.AdviserIds.Count > 0)
         {
-            var adviserId = query.AdviserId.Trim();
-            rows = rows.Where(x => x.Slot.AdviserId == adviserId);
+            var adviserIds = Normalize(query.AdviserIds);
+            rows = rows.Where(x => adviserIds.Contains(x.Slot.AdviserId));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.ClientRef))
+        if (query.ClientRefs.Count > 0)
         {
-            var clientRef = query.ClientRef.Trim();
-            rows = rows.Where(x => x.UserId == clientRef);
+            var clientRefs = Normalize(query.ClientRefs);
+            rows = rows.Where(x => clientRefs.Contains(x.UserId));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.LocationRef))
+        if (query.LocationRefs.Count > 0)
         {
-            var locationRef = query.LocationRef.Trim();
-            rows = rows.Where(x => x.Slot.LocationRef == locationRef || x.Slot.Transaction.LocationRef == locationRef);
+            var locationRefs = Normalize(query.LocationRefs);
+            rows = rows.Where(x => locationRefs.Contains(x.Slot.LocationRef!) || locationRefs.Contains(x.Slot.Transaction.LocationRef!));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.MeetingType))
+        if (query.MeetingTypes.Count > 0)
         {
-            var meetingType = query.MeetingType.Trim();
-            rows = rows.Where(x => x.Slot.Transaction.MeetingType == meetingType);
+            var meetingTypes = Normalize(query.MeetingTypes);
+            rows = rows.Where(x => meetingTypes.Contains(x.Slot.Transaction.MeetingType!));
         }
 
         if (query.FromUtc.HasValue)
@@ -130,4 +134,11 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
 
         return rows;
     }
+
+    private static string[] Normalize(IReadOnlyList<string> values)
+        => values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 }

@@ -37,9 +37,9 @@ public sealed class AdminBookingSearchRepositoryTests
 
         var result = await repository.SearchAsync(new SearchAdminBookingsQuery
         {
-            AdviserId = "adv-1",
-            Status = "confirmed",
-            ClientRef = "client-1",
+            AdviserIds = ["adv-1"],
+            Statuses = ["confirmed"],
+            ClientRefs = ["client-1"],
             FromUtc = new DateTime(2026, 7, 15, 0, 0, 0, DateTimeKind.Utc),
             ToUtc = new DateTime(2026, 7, 15, 23, 59, 59, DateTimeKind.Utc),
             Page = 1,
@@ -50,6 +50,24 @@ public sealed class AdminBookingSearchRepositoryTests
         Assert.Equal("booking-1", item.BookingId);
         Assert.Equal("TRX-1", item.TransactionRef);
         Assert.Equal("Review", item.MeetingType);
+    }
+
+    [Fact]
+    public async Task SearchAsync_FiltersByMultipleStatusesAndAdvisers()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+        var repository = new AdminBookingSearchRepository(db);
+
+        var result = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            Statuses = ["Active", "Cancelled"],
+            AdviserIds = ["adv-1", "adv-2"],
+            Page = 1,
+            PageSize = 25
+        }, CancellationToken.None);
+
+        Assert.Equal(["booking-2", "booking-3"], result.Items.Select(x => x.BookingId).ToArray());
     }
 
     private static BookingDbContext CreateDbContext()

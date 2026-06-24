@@ -24,9 +24,9 @@ public sealed class ListAdviserApprovalRequestsFunction
         "List adviser booking change requests",
         Description = "Returns approval/change requests scoped to the authenticated adviser. The requester id is resolved from the domain user token, not from query string or request body.",
         ResponseType = typeof(ContractApprovalRequestResponse[]))]
-    [BookingOpenApiQueryParameter("bookingId", "string", Description = "Optional booking id filter.", Example = "booking-123")]
-    [BookingOpenApiQueryParameter("status", "string", Description = "Optional status filter such as Pending, Approved or Rejected.", Example = "Pending")]
-    [BookingOpenApiQueryParameter("changeType", "string", Description = "Optional change type filter: Cancel or Rearrange.", Example = "Rearrange")]
+    [BookingOpenApiQueryParameter("bookingId", "string", Description = "Optional booking id filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "booking-123")]
+    [BookingOpenApiQueryParameter("status", "string", Description = "Optional status filter such as Pending, Approved or Rejected. Repeat the parameter or use comma-separated values for multiple selections.", Example = "Pending,Rejected")]
+    [BookingOpenApiQueryParameter("changeType", "string", Description = "Optional change type filter: Cancel or Rearrange. Repeat the parameter or use comma-separated values for multiple selections.", Example = "Rearrange,Cancel")]
     [BookingOpenApiQueryParameter("page", "integer", Description = "1-based page number.", Example = "1")]
     [BookingOpenApiQueryParameter("pageSize", "integer", Description = "Page size from 1 to 100.", Example = "25")]
     public async Task<HttpResponseData> Run(
@@ -42,9 +42,9 @@ public sealed class ListAdviserApprovalRequestsFunction
         var query = req.Url.Query;
         var requests = await _approvals.ListAsync(new ListApprovalWorkflowRequestsQuery(
             RequesterId: requesterId,
-            BookingId: GetQueryValue(query, "bookingId"),
-            Status: GetQueryValue(query, "status"),
-            ChangeType: GetQueryValue(query, "changeType")), ct);
+            BookingIds: req.QueryMany("bookingId"),
+            Statuses: req.QueryMany("status"),
+            ChangeTypes: req.QueryMany("changeType")), ct);
 
         var paged = ApplyPaging(requests, req);
 
@@ -58,26 +58,6 @@ public sealed class ListAdviserApprovalRequestsFunction
     {
         var user = context.GetDomainUserContext();
         return user?.AdviserId;
-    }
-
-    private static string? GetQueryValue(string query, string key)
-    {
-        if (string.IsNullOrWhiteSpace(query))
-            return null;
-
-        var trimmed = query[0] == '?' ? query[1..] : query;
-        foreach (var pair in trimmed.Split('&', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var separator = pair.IndexOf('=', StringComparison.Ordinal);
-            var rawKey = separator >= 0 ? pair[..separator] : pair;
-            if (!string.Equals(Uri.UnescapeDataString(rawKey), key, StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            var rawValue = separator >= 0 ? pair[(separator + 1)..] : string.Empty;
-            return Uri.UnescapeDataString(rawValue.Replace("+", "%2B", StringComparison.Ordinal));
-        }
-
-        return null;
     }
 
     private static PagedItems<T> ApplyPaging<T>(IReadOnlyList<T> items, HttpRequestData req)

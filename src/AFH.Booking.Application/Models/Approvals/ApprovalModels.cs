@@ -26,9 +26,9 @@ public sealed record ReviewApprovalWorkflowRequest(
 
 public sealed record ListApprovalWorkflowRequestsQuery(
     string? RequesterId,
-    string? BookingId,
-    string? Status,
-    string? ChangeType);
+    IReadOnlyList<string> BookingIds,
+    IReadOnlyList<string> Statuses,
+    IReadOnlyList<string> ChangeTypes);
 
 public sealed record ApprovalRouteTarget(
     string TargetType,

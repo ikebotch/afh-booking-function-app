@@ -20,6 +20,12 @@ public static class RequestParsingExtensions
     {
         var qs = HttpUtility.ParseQueryString(req.Url.Query);
         var values = qs.GetValues(key);
-        return values is null ? Array.Empty<string>() : values.Where(v => !string.IsNullOrWhiteSpace(v)).ToArray();
+        return values is null
+            ? Array.Empty<string>()
+            : values
+                .SelectMany(value => value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
     }
 }

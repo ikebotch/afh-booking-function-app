@@ -23,10 +23,11 @@ public sealed class AdminBookingSearchService : IAdminBookingSearchService
         if (query.FromUtc.HasValue && query.ToUtc.HasValue && query.FromUtc.Value > query.ToUtc.Value)
             return Result<AdminBookingSearchResponse>.Fail(HttpStatusCode.BadRequest, "from must be before to.", Errors.Validation);
 
-        if (!string.IsNullOrWhiteSpace(query.Status) &&
-            !Enum.TryParse<BookingHoldStatus>(query.Status.Trim(), true, out _))
+        var invalidStatus = query.Statuses.FirstOrDefault(status =>
+            !Enum.TryParse<BookingHoldStatus>(status.Trim(), true, out _));
+        if (!string.IsNullOrWhiteSpace(invalidStatus))
         {
-            return Result<AdminBookingSearchResponse>.Fail(HttpStatusCode.BadRequest, $"status '{query.Status}' is not valid.", Errors.Validation);
+            return Result<AdminBookingSearchResponse>.Fail(HttpStatusCode.BadRequest, $"status '{invalidStatus}' is not valid.", Errors.Validation);
         }
 
         var result = await _repository.SearchAsync(query, ct);

@@ -66,22 +66,22 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
             rows = rows.Where(x => x.RequesterId == requesterId);
         }
 
-        if (!string.IsNullOrWhiteSpace(query.BookingId))
+        if (query.BookingIds.Count > 0)
         {
-            var bookingId = query.BookingId.Trim();
-            rows = rows.Where(x => x.BookingId == bookingId);
+            var bookingIds = Normalize(query.BookingIds);
+            rows = rows.Where(x => bookingIds.Contains(x.BookingId));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.Status))
+        if (query.Statuses.Count > 0)
         {
-            var status = query.Status.Trim();
-            rows = rows.Where(x => x.Status == status);
+            var statuses = Normalize(query.Statuses);
+            rows = rows.Where(x => statuses.Contains(x.Status));
         }
 
-        if (!string.IsNullOrWhiteSpace(query.ChangeType))
+        if (query.ChangeTypes.Count > 0)
         {
-            var changeType = query.ChangeType.Trim();
-            rows = rows.Where(x => x.ChangeType == changeType);
+            var changeTypes = Normalize(query.ChangeTypes);
+            rows = rows.Where(x => changeTypes.Contains(x.ChangeType));
         }
 
         var results = await rows
@@ -90,6 +90,13 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
 
         return results.Select(ToRecord).ToList();
     }
+
+    private static string[] Normalize(IReadOnlyList<string> values)
+        => values
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
     public async Task<ApprovalWorkflowRecord?> GetAsync(string requestId, CancellationToken ct)
     {

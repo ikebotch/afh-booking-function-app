@@ -62,6 +62,8 @@ public sealed class BookingRbacAuthorisationTests
                         "userId": "user-1",
                         "email": "alex@afh.co.uk",
                         "displayName": "Alex Example",
+                        "adviserId": "adv-1",
+                        "jobRole": "Financial Adviser",
                         "roles": ["LeadTech"],
                         "permissions": ["Bookings.Cancel.AsLeadTech"]
                       }
@@ -86,6 +88,8 @@ public sealed class BookingRbacAuthorisationTests
         Assert.NotNull(user);
         Assert.Equal("user-1", user!.UserId);
         Assert.Equal("alex@afh.co.uk", user.Email);
+        Assert.Equal("adv-1", user.AdviserId);
+        Assert.Equal("Financial Adviser", user.JobRole);
         Assert.Contains(BookingPermissionNames.CancelAsLeadTech, user.Permissions);
         Assert.NotNull(captured);
         Assert.Equal("/api/internal/identity/v1/me", captured!.RequestUri!.AbsolutePath);
@@ -93,6 +97,54 @@ public sealed class BookingRbacAuthorisationTests
         Assert.Equal("internal-token", captured.Headers.Authorization?.Parameter);
         Assert.True(captured.Headers.TryGetValues("x-afh-user-token", out var userTokens));
         Assert.Equal("entra-token", Assert.Single(userTokens));
+        Assert.True(captured.Headers.TryGetValues("x-functions-key", out var functionKeys));
+        Assert.Equal("location-key", Assert.Single(functionKeys));
+    }
+
+    [Fact]
+    public async Task BookingIdentityAdminClient_CallsLocationIdentityAdminEndpointWithInternalToken()
+    {
+        HttpRequestMessage? captured = null;
+        var handler = new StubHandler(request =>
+        {
+            captured = request;
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""
+                    {
+                      "success": true,
+                      "data": [
+                        {
+                          "permissionId": "00000000-0000-0000-0000-000000000001",
+                          "permission": "Bookings.Admin.Read",
+                          "displayName": "Read booking admin data",
+                          "category": "Bookings",
+                          "isEnabled": true
+                        }
+                      ]
+                    }
+                    """, Encoding.UTF8, "application/json")
+            };
+        });
+
+        var sut = new BookingIdentityAdminClient(
+            new HttpClient(handler) { BaseAddress = new Uri("https://location.example") },
+            Options.Create(new LocationServiceOptions
+            {
+                BaseUrl = "https://location.example",
+                FunctionKey = "location-key",
+                InternalToken = "internal-token"
+            }),
+            new InternalBearerServiceAuthenticator(),
+            NullLogger<BookingIdentityAdminClient>.Instance);
+
+        var permissions = await sut.GetAsync<IReadOnlyList<IdentityPermissionStub>>("permissions", CancellationToken.None);
+
+        var permission = Assert.Single(permissions!);
+        Assert.Equal("Bookings.Admin.Read", permission.Permission);
+        Assert.Equal("/api/internal/identity/v1/permissions", captured!.RequestUri!.AbsolutePath);
+        Assert.Equal("Bearer", captured.Headers.Authorization?.Scheme);
+        Assert.Equal("internal-token", captured.Headers.Authorization?.Parameter);
         Assert.True(captured.Headers.TryGetValues("x-functions-key", out var functionKeys));
         Assert.Equal("location-key", Assert.Single(functionKeys));
     }
@@ -297,5 +349,14 @@ public sealed class BookingRbacAuthorisationTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(handle(request));
+    }
+
+    private sealed class IdentityPermissionStub
+    {
+        public Guid PermissionId { get; init; }
+        public string Permission { get; init; } = string.Empty;
+        public string DisplayName { get; init; } = string.Empty;
+        public string Category { get; init; } = string.Empty;
+        public bool IsEnabled { get; init; }
     }
 }

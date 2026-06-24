@@ -191,6 +191,14 @@ public static class ServiceCollectionExtensions
 
             http.Timeout = TimeSpan.FromSeconds(30);
         });
+        services.AddHttpClient<IBookingIdentityAdminClient, BookingIdentityAdminClient>((sp, http) =>
+        {
+            var options = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(options.BaseUrl))
+                http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
         services.AddHttpClient<IBookingNotificationPublisher, NotificationApiPublisher>((sp, http) =>
         {
             var options = sp.GetRequiredService<IOptions<NotificationApiPublisherOptions>>().Value;

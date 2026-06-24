@@ -43,6 +43,8 @@ public sealed class GetCurrentUserFunction
             UserId = profile.UserId,
             Email = profile.Email,
             DisplayName = profile.DisplayName,
+            AdviserId = profile.AdviserId,
+            JobRole = profile.JobRole,
             Roles = profile.Roles,
             Capabilities = profile.Permissions
         }, ct);

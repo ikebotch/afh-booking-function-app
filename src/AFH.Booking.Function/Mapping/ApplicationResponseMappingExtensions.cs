@@ -95,6 +95,39 @@ public static class ApplicationResponseMappingExtensions
             RescheduleBookingUrl = response.RescheduleBookingUrl
         };
 
+    public static ContractResponses.AdminBookingSearchResponse ToContract(this AppBookings.AdminBookingSearchResponse response)
+        => new()
+        {
+            Items = response.Items.Select(ToContract).ToList(),
+            Page = response.Page,
+            PageSize = response.PageSize,
+            TotalItems = response.TotalItems,
+            TotalPages = response.TotalPages
+        };
+
+    public static ContractResponses.AdminBookingSearchItem ToContract(this AppBookings.AdminBookingSearchItem item)
+        => new()
+        {
+            BookingId = item.BookingId,
+            SlotId = item.SlotId,
+            TransactionId = item.TransactionId,
+            TransactionRef = item.TransactionRef,
+            ClientRef = item.ClientRef,
+            AdviserId = item.AdviserId,
+            AdviserName = item.AdviserName,
+            StartUtc = AsUtc(item.StartUtc),
+            EndUtc = AsUtc(item.EndUtc),
+            DurationMinutes = item.DurationMinutes,
+            IsRemote = item.IsRemote,
+            MeetingType = item.MeetingType,
+            LocationRef = item.LocationRef,
+            Status = item.Status,
+            CreatedUtc = AsUtc(item.CreatedUtc),
+            ConfirmedUtc = AsUtc(item.ConfirmedUtc),
+            CancelledUtc = AsUtc(item.CancelledUtc),
+            CancelReason = item.CancelReason
+        };
+
     public static ContractResponses.RearrangeBookingResponse ToContract(this AppBookings.RearrangeBookingResponse response)
         => new()
         {

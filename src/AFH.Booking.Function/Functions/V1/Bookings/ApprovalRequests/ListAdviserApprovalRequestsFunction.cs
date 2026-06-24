@@ -27,6 +27,8 @@ public sealed class ListAdviserApprovalRequestsFunction
     [BookingOpenApiQueryParameter("bookingId", "string", Description = "Optional booking id filter.", Example = "booking-123")]
     [BookingOpenApiQueryParameter("status", "string", Description = "Optional status filter such as Pending, Approved or Rejected.", Example = "Pending")]
     [BookingOpenApiQueryParameter("changeType", "string", Description = "Optional change type filter: Cancel or Rearrange.", Example = "Rearrange")]
+    [BookingOpenApiQueryParameter("page", "integer", Description = "1-based page number.", Example = "1")]
+    [BookingOpenApiQueryParameter("pageSize", "integer", Description = "Page size from 1 to 100.", Example = "25")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/adviser/booking-change-requests")]
         HttpRequestData req,
@@ -44,7 +46,12 @@ public sealed class ListAdviserApprovalRequestsFunction
             Status: GetQueryValue(query, "status"),
             ChangeType: GetQueryValue(query, "changeType")), ct);
 
-        return await req.OkJsonAsync(requests.Select(x => x.ToContract()).ToList(), ct);
+        var paged = ApplyPaging(requests, req);
+
+        return await req.OkJsonAsync(
+            paged.Items.Select(x => x.ToContract()).ToList(),
+            ct,
+            paged.Paging);
     }
 
     private static string? ResolveRequesterId(FunctionContext context)
@@ -73,4 +80,27 @@ public sealed class ListAdviserApprovalRequestsFunction
         return null;
     }
 
+    private static PagedItems<T> ApplyPaging<T>(IReadOnlyList<T> items, HttpRequestData req)
+    {
+        var page = Math.Max(ParseInt(req.Query("page"), 1), 1);
+        var pageSize = Math.Clamp(ParseInt(req.Query("pageSize"), 25), 1, 100);
+        var totalItems = items.Count;
+        var totalPages = totalItems == 0 ? 0 : (int)Math.Ceiling(totalItems / (double)pageSize);
+        var pageItems = items.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+
+        return new PagedItems<T>(
+            pageItems,
+            new ApiPaging
+            {
+                Page = page,
+                PageSize = pageSize,
+                TotalItems = totalItems,
+                TotalPages = totalPages
+            });
+    }
+
+    private static int ParseInt(string? value, int fallback)
+        => int.TryParse(value, out var parsed) ? parsed : fallback;
+
+    private sealed record PagedItems<T>(IReadOnlyList<T> Items, ApiPaging Paging);
 }

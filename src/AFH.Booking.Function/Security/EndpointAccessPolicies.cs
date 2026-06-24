@@ -20,6 +20,7 @@ public static class EndpointAccessPolicies
             ["Booking_ScalarUi"] = Public(),
             ["EmailBouncebackFunctionV1"] = Public(),
             ["Bookings_CancelBooking"] = UserPermission(BookingPermissionNames.CancelDirect),
+            ["Bookings_AdminSearch"] = UserPermission(BookingPermissionNames.AdminRead),
             ["Bookings_ConfirmHold"] = Public(),
             ["Bookings_CreateApprovalRequest"] = UserPermission(BookingPermissionNames.ApprovalRequestsCreate),
             ["Config_DeleteMeetingType"] = InternalOnly(),

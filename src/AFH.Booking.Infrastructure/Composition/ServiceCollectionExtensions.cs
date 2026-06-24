@@ -79,6 +79,7 @@ public static class ServiceCollectionExtensions
         services.AddAfhCommonErrorsApplicationInsights();
         services.AddAfhCommonErrorsEntityFramework<BookingDbContext>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped<IAdminBookingSearchRepository, AdminBookingSearchRepository>();
         services.AddScoped<DatabaseApplicationLogSink>();
         services.AddScoped<BookingHandledErrorTelemetryEmitter>();
         services.AddScoped<ApplicationInsightsLogSink>(sp => new ApplicationInsightsLogSink(

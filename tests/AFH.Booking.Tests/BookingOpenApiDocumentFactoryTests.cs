@@ -226,13 +226,49 @@ public class BookingOpenApiDocumentFactoryTests
         Assert.Contains(adviserListGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "bookingId");
         Assert.Contains(adviserListGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "status");
         Assert.Contains(adviserListGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "changeType");
+        Assert.Contains(adviserListGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "page");
+        Assert.Contains(adviserListGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "pageSize");
         Assert.StartsWith("#/components/schemas/ApiResponseOf", adviserListGet["responses"]!["200"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>(), StringComparison.Ordinal);
 
         Assert.Equal("List pending approval requests", pendingGet["summary"]!.GetValue<string>());
+        Assert.Contains(pendingGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "page");
+        Assert.Contains(pendingGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "pageSize");
         Assert.Equal("Review approval request", reviewPost["summary"]!.GetValue<string>());
         Assert.Contains("shared booking lifecycle workflow", reviewPost["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
         Assert.Equal("#/components/schemas/ReviewApprovalRequest", reviewPost["requestBody"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
         Assert.Equal("slot-456", reviewPost["requestBody"]!["content"]!["application/json"]!["example"]!["selectedSlotId"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public void CreateOpenApiJson_AdminBookingSearchDocumentsFiltersAndPagedResponse()
+    {
+        var json = BookingOpenApiDocumentFactory.CreateOpenApiJson(new Uri("https://localhost/api/openapi/v1.json"));
+        var document = JsonNode.Parse(json)!.AsObject();
+        var paths = document["paths"]!.AsObject();
+        var schemas = document["components"]!["schemas"]!.AsObject();
+
+        var searchGet = paths["/v1/admin/bookings"]!["get"]!.AsObject();
+        var parameters = searchGet["parameters"]!.AsArray();
+
+        Assert.Equal("Search admin bookings", searchGet["summary"]!.GetValue<string>());
+        Assert.Equal("#/components/schemas/ApiResponseOfAdminBookingSearchResponse", searchGet["responses"]!["200"]!["content"]!["application/json"]!["schema"]!["$ref"]!.GetValue<string>());
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "bookingId");
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "transactionId");
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "transactionRef");
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "status");
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "adviserId");
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "clientRef");
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "from");
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "to");
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "page");
+        Assert.Contains(parameters, x => x!["name"]!.GetValue<string>() == "pageSize");
+
+        var searchSchemaProperties = schemas["AdminBookingSearchResponse"]!["properties"]!.AsObject();
+        Assert.True(searchSchemaProperties.ContainsKey("items"));
+        Assert.True(searchSchemaProperties.ContainsKey("page"));
+        Assert.True(searchSchemaProperties.ContainsKey("pageSize"));
+        Assert.True(searchSchemaProperties.ContainsKey("totalItems"));
+        Assert.True(searchSchemaProperties.ContainsKey("totalPages"));
     }
 
     [Fact]

@@ -46,7 +46,7 @@ public sealed class GetCurrentUserFunction
             AdviserId = profile.AdviserId,
             JobRole = profile.JobRole,
             Roles = profile.Roles,
-            Capabilities = profile.Permissions
+            Permissions = profile.Permissions
         }, ct);
     }
 

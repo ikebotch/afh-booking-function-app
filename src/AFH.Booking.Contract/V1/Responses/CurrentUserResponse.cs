@@ -8,5 +8,5 @@ public sealed class CurrentUserResponse
     public string? AdviserId { get; init; }
     public string? JobRole { get; init; }
     public IReadOnlyList<string> Roles { get; init; } = [];
-    public IReadOnlyList<string> Capabilities { get; init; } = [];
+    public IReadOnlyList<string> Permissions { get; init; } = [];
 }

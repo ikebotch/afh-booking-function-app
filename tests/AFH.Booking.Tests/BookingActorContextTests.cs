@@ -133,7 +133,7 @@ public sealed class BookingActorContextTests
     public async Task InternalCancelFunction_DefaultActorContext_IsNotClient()
     {
         var service = new StubCancelBookingService();
-        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var sut = new CancelBookingFunction(service, new StubBookingDetailsService(), NullLogger<CancelBookingFunction>.Instance);
         var request = CreateJsonRequest("""{"reasonCode":"ADMIN_REQUEST"}""");
         SetDomainUser(request, "admin-1", "Ada Admin", [BookingPermissionNames.CancelDirect], ["Admin"]);
 
@@ -208,6 +208,7 @@ public sealed class BookingActorContextTests
             new AdviserUserContext
             {
                 UserId = userId,
+                AdviserId = "adv-1",
                 DisplayName = displayName,
                 Email = $"{userId}@example.test",
                 Permissions = permissions,
@@ -229,6 +230,24 @@ public sealed class BookingActorContextTests
                 Status = "Cancelled"
             }));
         }
+    }
+
+    private sealed class StubBookingDetailsService : IBookingDetailsService
+    {
+        public Task<Result<BookingDetailsResponse>> HandleAsync(GetBookingDetailsQuery query, CancellationToken ct)
+            => Task.FromResult(Result<BookingDetailsResponse>.Ok(new BookingDetailsResponse
+            {
+                BookingId = query.BookingId,
+                SlotId = "slot-1",
+                TransactionId = "tx-1",
+                TransactionRef = "TRX-1",
+                AdviserId = "adv-1",
+                AdviserName = "Adviser One",
+                StartUtc = new DateTime(2026, 06, 01, 9, 0, 0, DateTimeKind.Utc),
+                EndUtc = new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc),
+                DurationMinutes = 60,
+                Status = "Confirmed"
+            }));
     }
 
     private sealed class StubReleaseHoldService : IReleaseHoldService

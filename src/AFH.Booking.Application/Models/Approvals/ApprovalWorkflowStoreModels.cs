@@ -10,7 +10,9 @@ public sealed record ApprovalBookingSnapshot(
 public sealed class ApprovalWorkflowRecord
 {
     public string Id { get; set; } = default!;
+    public string? Reference { get; set; }
     public string BookingId { get; set; } = default!;
+    public string? BookingReference { get; set; }
     public string TransactionId { get; set; } = default!;
     public string ChangeType { get; set; } = default!;
     public string RequestedBy { get; set; } = default!;

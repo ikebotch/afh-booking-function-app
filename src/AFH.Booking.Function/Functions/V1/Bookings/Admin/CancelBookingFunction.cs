@@ -5,6 +5,7 @@ using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Auth;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -16,13 +17,16 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 public sealed class CancelBookingFunction
 {
     private readonly ICancelBookingService _service;
+    private readonly IBookingDetailsService _details;
     private readonly ILogger<CancelBookingFunction> _logger;
 
     public CancelBookingFunction(
         ICancelBookingService service,
+        IBookingDetailsService details,
         ILogger<CancelBookingFunction> logger)
     {
         _service = service;
+        _details = details;
         _logger = logger;
     }
 
@@ -60,6 +64,18 @@ public sealed class CancelBookingFunction
                 ct);
             if (!authResult.IsSuccess)
                 return authResult.Response!;
+
+            var details = await _details.HandleAsync(new GetBookingDetailsQuery { BookingId = bookingId.Trim() }, ct);
+            if (!details.IsSuccess)
+                return await req.ProblemAsync(
+                    details.StatusCode,
+                    details.ErrorMessage ?? "Request failed.",
+                    ct,
+                    details.ErrorCode);
+
+            var forbidden = await BookingFunctionActorContext.EnsureCanAccessBookingAsync(req, context.GetDomainUserContext()!, details.Value!, ct);
+            if (forbidden is not null)
+                return forbidden;
 
             if (string.IsNullOrWhiteSpace(body?.ReasonCode))
                 return await req.ProblemAsync(HttpStatusCode.BadRequest, "reasonCode is required for manager/admin booking cancellation.", ct, Errors.ReasonCodeRequired);

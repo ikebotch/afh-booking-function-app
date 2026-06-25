@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Models.Auth;
+using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Http;
@@ -11,6 +12,21 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 
 internal static class BookingFunctionActorContext
 {
+    public static async Task<BookingFunctionUserContextResult> BuildAuthenticatedAsync(
+        HttpRequestData req,
+        FunctionContext context,
+        CancellationToken ct)
+    {
+        var user = context.GetDomainUserContext();
+        if (user is null)
+        {
+            return BookingFunctionUserContextResult.Fail(
+                await req.ProblemAsync(HttpStatusCode.Unauthorized, "Authenticated domain user identity is required.", ct, "Unauthorized"));
+        }
+
+        return BookingFunctionUserContextResult.Ok(user);
+    }
+
     public static async Task<BookingFunctionActorContextResult> BuildManagerOrAdminAsync(
         HttpRequestData req,
         FunctionContext context,
@@ -52,6 +68,31 @@ internal static class BookingFunctionActorContext
         return BookingFunctionActorContextResult.Ok(actor);
     }
 
+    public static async Task<HttpResponseData?> EnsureCanAccessBookingAsync(
+        HttpRequestData req,
+        AdviserUserContext user,
+        BookingDetailsResponse booking,
+        CancellationToken ct)
+    {
+        if (CanAccessBooking(user, booking.AdviserId))
+            return null;
+
+        return await req.ProblemAsync(
+            HttpStatusCode.Forbidden,
+            "Signed-in user can only access bookings for their mapped adviser unless they have booking admin access.",
+            ct,
+            "Forbidden");
+    }
+
+    public static bool CanAccessBooking(AdviserUserContext user, string adviserId)
+    {
+        if (user.Permissions.Contains(Domain.Auth.BookingPermissionNames.AdminRead, StringComparer.OrdinalIgnoreCase))
+            return true;
+
+        return !string.IsNullOrWhiteSpace(user.AdviserId)
+            && string.Equals(user.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool IsManager(AdviserUserContext user)
         => user.Roles.Any(role =>
             role.Equals(BookingActorContext.ActorManager, StringComparison.OrdinalIgnoreCase) ||
@@ -86,5 +127,17 @@ internal sealed record BookingFunctionActorContextResult(
         => new(true, actor, null);
 
     public static BookingFunctionActorContextResult Fail(HttpResponseData response)
+        => new(false, null, response);
+}
+
+internal sealed record BookingFunctionUserContextResult(
+    bool IsSuccess,
+    AdviserUserContext? User,
+    HttpResponseData? Response)
+{
+    public static BookingFunctionUserContextResult Ok(AdviserUserContext user)
+        => new(true, user, null);
+
+    public static BookingFunctionUserContextResult Fail(HttpResponseData response)
         => new(false, null, response);
 }

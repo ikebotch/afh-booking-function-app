@@ -17,6 +17,7 @@ public sealed class BookingHoldModel
     // Identity
     // -------------------------
     public string Id { get; set; } = default!;        // BookingHoldId (string / guid)
+    public string? Reference { get; set; }
     public string UserId { get; set; } = default!;        // BookingHoldId (string / guid)
 
     // -------------------------

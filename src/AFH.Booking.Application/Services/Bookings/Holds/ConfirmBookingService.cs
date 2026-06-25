@@ -437,6 +437,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             new ConfirmBookingResponse
             {
                 BookingId = hold.Id,
+                BookingReference = hold.Reference,
                 SlotId = hold.SlotId,
                 TransactionId = tx.Id,
                 TransactionRef = tx.TransactionRef,

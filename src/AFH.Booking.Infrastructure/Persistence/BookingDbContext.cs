@@ -28,6 +28,7 @@ public sealed class BookingDbContext : DbContext
     public DbSet<IntegrationSyncStateModel> IntegrationSyncStates => Set<IntegrationSyncStateModel>();
     public DbSet<IntegrationOperationAuditModel> IntegrationOperationAudits => Set<IntegrationOperationAuditModel>();
     public DbSet<ApplicationLogModel> ApplicationLogs => Set<ApplicationLogModel>();
+    public DbSet<FeatureFlagModel> FeatureFlags => Set<FeatureFlagModel>();
 
     public override int SaveChanges()
     {

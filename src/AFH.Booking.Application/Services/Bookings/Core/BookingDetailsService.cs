@@ -65,6 +65,7 @@ public sealed class BookingDetailsService : IBookingDetailsService
         var response = new BookingDetailsResponse
         {
             BookingId = hold.Id,
+            BookingReference = hold.Reference,
             SlotId = slot.Id,
             TransactionId = tx.Id,
             TransactionRef = tx.TransactionRef,

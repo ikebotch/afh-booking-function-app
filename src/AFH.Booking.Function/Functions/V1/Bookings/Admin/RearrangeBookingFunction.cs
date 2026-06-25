@@ -3,6 +3,7 @@ using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Auth;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -13,10 +14,14 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 public sealed class RearrangeBookingFunction
 {
     private readonly IRearrangeBookingService _service;
+    private readonly IBookingDetailsService _details;
 
-    public RearrangeBookingFunction(IRearrangeBookingService service)
+    public RearrangeBookingFunction(
+        IRearrangeBookingService service,
+        IBookingDetailsService details)
     {
         _service = service;
+        _details = details;
     }
 
     [Function("Bookings_Rearrange")]
@@ -55,6 +60,18 @@ public sealed class RearrangeBookingFunction
             ct);
         if (!authResult.IsSuccess)
             return authResult.Response!;
+
+        var details = await _details.HandleAsync(new GetBookingDetailsQuery { BookingId = bookingId.Trim() }, ct);
+        if (!details.IsSuccess)
+            return await req.ProblemAsync(
+                details.StatusCode,
+                details.ErrorMessage ?? "Request failed.",
+                ct,
+                details.ErrorCode);
+
+        var forbidden = await BookingFunctionActorContext.EnsureCanAccessBookingAsync(req, context.GetDomainUserContext()!, details.Value!, ct);
+        if (forbidden is not null)
+            return forbidden;
 
         if (string.IsNullOrWhiteSpace(body.NewSlotId))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "newSlotId is required.", ct, Errors.Validation);

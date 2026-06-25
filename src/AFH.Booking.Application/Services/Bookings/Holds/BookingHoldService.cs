@@ -1,4 +1,5 @@
 ﻿using AFH.Booking.Application.Abstractions.Bookings.Holds;
+using AFH.Booking.Application.Services.Bookings.Core;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Calendar;
 
@@ -12,17 +13,20 @@ public sealed class BookingHoldService : IBookingHoldService
     private readonly IBookingTransactionRepository _txRepo;
     private readonly ICalendarGateway _calendar;
     private readonly IUnitOfWork _uow;
+    private readonly IBookingReferenceGenerator? _references;
 
     public BookingHoldService(
         IBookingHoldRepository holdRepo,
         IBookingTransactionRepository txRepo,
         ICalendarGateway calendar,
-        IUnitOfWork uow)
+        IUnitOfWork uow,
+        IBookingReferenceGenerator? references = null)
     {
         _holdRepo = holdRepo;
         _txRepo = txRepo;
         _calendar = calendar;
         _uow = uow;
+        _references = references;
     }
 
     public async Task<Result<BookingHold>> CreateOrReplaceAsync(
@@ -69,6 +73,8 @@ public sealed class BookingHoldService : IBookingHoldService
                 DefaultHoldWindow,
                 context.CalendarUserId);
 
+            await EnsureReferenceAsync(slotHold, ct);
+
             context.Transaction.ExtendExpiry(slotHold.ExpiresUtc);
 
             await _holdRepo.UpdateAsync(slotHold, ct);
@@ -101,6 +107,8 @@ public sealed class BookingHoldService : IBookingHoldService
             utcNow: utcNow,
             holdDuration: DefaultHoldWindow);
 
+        await EnsureReferenceAsync(newHold, ct);
+
         context.Transaction.ExtendExpiry(newHold.ExpiresUtc);
 
         await _holdRepo.AddAsync(newHold, ct);
@@ -108,6 +116,18 @@ public sealed class BookingHoldService : IBookingHoldService
         await _uow.SaveChangesAsync(ct);
 
         return Result<BookingHold>.Ok(newHold);
+    }
+
+    private async Task EnsureReferenceAsync(BookingHold hold, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(hold.Reference))
+            return;
+
+        var reference = _references is null
+            ? BookingReferenceFallback.CreateBookingReference(hold.Id)
+            : await _references.GenerateBookingReferenceAsync(hold.Id, ct);
+
+        hold.AssignReference(reference);
     }
 
     private async Task CancelCalendarEventIfExistsAsync(

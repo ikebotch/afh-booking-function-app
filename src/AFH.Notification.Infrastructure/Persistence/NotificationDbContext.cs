@@ -13,6 +13,7 @@ public sealed class NotificationDbContext : DbContext
     public DbSet<EmailBounceEventModel> EmailBounceEvents => Set<EmailBounceEventModel>();
     public DbSet<NotificationTemplateModel> NotificationTemplates => Set<NotificationTemplateModel>();
     public DbSet<NotificationMessageLogModel> NotificationMessageLogs => Set<NotificationMessageLogModel>();
+    public DbSet<NotificationSettingModel> NotificationSettings => Set<NotificationSettingModel>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -21,6 +22,7 @@ public sealed class NotificationDbContext : DbContext
         modelBuilder.ApplyConfiguration(new EmailBounceEventModelConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationTemplateModelConfiguration());
         modelBuilder.ApplyConfiguration(new NotificationMessageLogModelConfiguration());
+        modelBuilder.ApplyConfiguration(new NotificationSettingModelConfiguration());
         base.OnModelCreating(modelBuilder);
     }
 }

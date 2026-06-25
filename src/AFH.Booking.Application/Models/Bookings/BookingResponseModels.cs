@@ -5,6 +5,7 @@ namespace AFH.Booking.Application.Models.Bookings;
 public sealed class CreateBookingResponse
 {
     public string BookingId { get; init; } = default!;
+    public string? BookingReference { get; init; }
     public string SlotId { get; init; } = default!;
     public DateTime HoldExpiresUtc { get; init; }
     public int CompanyBufferMinutes { get; init; }
@@ -13,6 +14,7 @@ public sealed class CreateBookingResponse
 public sealed class ConfirmBookingResponse
 {
     public string BookingId { get; init; } = default!;
+    public string? BookingReference { get; init; }
     public string SlotId { get; init; } = default!;
     public string TransactionId { get; init; } = default!;
     public string TransactionRef { get; init; } = default!;
@@ -37,6 +39,7 @@ public sealed class ReleaseHoldError
 public sealed class CancelBookingResponse
 {
     public string BookingId { get; init; } = default!;
+    public string? BookingReference { get; init; }
     public DateTime CancelledUtc { get; init; }
     public string Status { get; init; } = "Cancelled";
 }
@@ -44,6 +47,7 @@ public sealed class CancelBookingResponse
 public sealed class BookingDetailsResponse
 {
     public string BookingId { get; init; } = default!;
+    public string? BookingReference { get; init; }
     public string SlotId { get; init; } = default!;
     public string TransactionId { get; init; } = default!;
     public string TransactionRef { get; init; } = default!;
@@ -75,6 +79,7 @@ public sealed class AdminBookingSearchResponse
 public sealed class AdminBookingSearchItem
 {
     public string BookingId { get; init; } = default!;
+    public string? BookingReference { get; init; }
     public string SlotId { get; init; } = default!;
     public string TransactionId { get; init; } = default!;
     public string TransactionRef { get; init; } = default!;
@@ -97,7 +102,9 @@ public sealed class AdminBookingSearchItem
 public sealed class RearrangeBookingResponse
 {
     public string PreviousBookingId { get; init; } = default!;
+    public string? PreviousBookingReference { get; init; }
     public string NewBookingId { get; init; } = default!;
+    public string? NewBookingReference { get; init; }
     public string NewSlotId { get; init; } = default!;
     public string PreviousAdviserId { get; init; } = default!;
     public string PreviousAdviserName { get; init; } = default!;
@@ -113,6 +120,7 @@ public sealed class RearrangeBookingResponse
 public sealed class RearrangementOptionsResponse
 {
     public string BookingId { get; init; } = default!;
+    public string? BookingReference { get; init; }
     public string TransactionId { get; init; } = default!;
     public string AssignedAdviserId { get; init; } = default!;
     public string AssignedAdviserName { get; init; } = default!;
@@ -124,6 +132,7 @@ public sealed class RearrangementOptionsResponse
 public sealed class RecordNoShowResponse
 {
     public string BookingId { get; init; } = default!;
+    public string? BookingReference { get; init; }
     public string TransactionId { get; init; } = default!;
     public string LifecycleEventId { get; init; } = default!;
     public string PreviousState { get; init; } = default!;

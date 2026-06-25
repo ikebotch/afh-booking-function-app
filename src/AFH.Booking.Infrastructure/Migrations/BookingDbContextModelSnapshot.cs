@@ -22,6 +22,12 @@ namespace AFH.Booking.Infrastructure.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.HasSequence<long>("ApprovalRequestReferenceNumber", "dbo")
+                .StartsAt(199L);
+
+            modelBuilder.HasSequence<long>("BookingReferenceNumber", "dbo")
+                .StartsAt(1001L);
+
             modelBuilder.Entity("AFH.Booking.Domain.Bookings.LocationModel", b =>
                 {
                     b.Property<string>("Id")
@@ -277,6 +283,10 @@ namespace AFH.Booking.Infrastructure.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<string>("BookingReference")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<string>("ChangeType")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -296,6 +306,10 @@ namespace AFH.Booking.Infrastructure.Migrations
                     b.Property<string>("ReasonDetail")
                         .HasMaxLength(1024)
                         .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("Reference")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
 
                     b.Property<string>("RequestedBy")
                         .IsRequired()
@@ -338,6 +352,10 @@ namespace AFH.Booking.Infrastructure.Migrations
 
                     b.HasIndex("BookingId");
 
+                    b.HasIndex("Reference")
+                        .IsUnique()
+                        .HasFilter("[Reference] IS NOT NULL");
+
                     b.HasIndex("TransactionId");
 
                     b.HasIndex("Status", "RequestedUtc");
@@ -376,6 +394,10 @@ namespace AFH.Booking.Infrastructure.Migrations
                     b.Property<DateTime?>("ReleasedUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Reference")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
                     b.Property<byte[]>("RowVersion")
                         .IsConcurrencyToken()
                         .IsRequired()
@@ -397,6 +419,10 @@ namespace AFH.Booking.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("HoldExpiresUtc");
+
+                    b.HasIndex("Reference")
+                        .IsUnique()
+                        .HasFilter("[Reference] IS NOT NULL");
 
                     b.HasIndex("SlotId")
                         .IsUnique();

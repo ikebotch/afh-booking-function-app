@@ -12,7 +12,9 @@ public sealed class ApprovalRequestModelConfiguration : IEntityTypeConfiguration
         b.HasKey(x => x.Id);
 
         b.Property(x => x.Id).HasMaxLength(64).IsRequired();
+        b.Property(x => x.Reference).HasMaxLength(32);
         b.Property(x => x.BookingId).HasMaxLength(64).IsRequired();
+        b.Property(x => x.BookingReference).HasMaxLength(32);
         b.Property(x => x.TransactionId).HasMaxLength(64).IsRequired();
         b.Property(x => x.ChangeType).HasMaxLength(32).IsRequired();
         b.Property(x => x.RequestedBy).HasMaxLength(32).IsRequired();
@@ -27,6 +29,10 @@ public sealed class ApprovalRequestModelConfiguration : IEntityTypeConfiguration
         b.Property(x => x.Reviewer).HasMaxLength(128);
         b.Property(x => x.ReviewNotes).HasMaxLength(1024);
         b.Property(x => x.ExecutionError).HasMaxLength(1024);
+
+        b.HasIndex(x => x.Reference)
+            .IsUnique()
+            .HasFilter("[Reference] IS NOT NULL");
 
         b.HasIndex(x => x.BookingId);
         b.HasIndex(x => x.TransactionId);

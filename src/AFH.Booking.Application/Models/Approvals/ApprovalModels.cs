@@ -38,7 +38,9 @@ public sealed record ApprovalRouteTarget(
 public sealed class ApprovalRequestResponse
 {
     public string RequestId { get; init; } = default!;
+    public string? RequestReference { get; init; }
     public string BookingId { get; init; } = default!;
+    public string? BookingReference { get; init; }
     public string TransactionId { get; init; } = default!;
     public string ChangeType { get; init; } = default!;
     public string RequestedBy { get; init; } = default!;

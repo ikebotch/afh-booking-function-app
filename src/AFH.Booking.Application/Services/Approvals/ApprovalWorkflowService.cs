@@ -18,6 +18,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
     private readonly ILifecycleAuditService _audit;
     private readonly IApprovalNotificationService _notifications;
     private readonly IUnitOfWork _uow;
+    private readonly IBookingReferenceGenerator? _references;
     private readonly JsonSerializerOptions _jsonOptions;
 
     public ApprovalWorkflowService(
@@ -28,7 +29,8 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         ILifecycleAuditService audit,
         IApprovalNotificationService notifications,
         IUnitOfWork uow,
-        JsonSerializerOptions jsonOptions)
+        JsonSerializerOptions jsonOptions,
+        IBookingReferenceGenerator? references = null)
     {
         _store = store;
         _routing = routing;
@@ -37,6 +39,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         _audit = audit;
         _notifications = notifications;
         _uow = uow;
+        _references = references;
         _jsonOptions = jsonOptions;
     }
 
@@ -71,6 +74,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         {
             Id = Guid.NewGuid().ToString("N"),
             BookingId = booking.Hold.Id,
+            BookingReference = booking.Hold.Reference,
             TransactionId = booking.Transaction.Id,
             ChangeType = request.ChangeType.Trim(),
             RequestedBy = requestedBy,
@@ -84,6 +88,9 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             ApproverTargetValue = routeTarget.TargetValue,
             ApproverTargetDisplayName = routeTarget.DisplayName
         };
+        model.Reference = _references is null
+            ? $"REQ-{model.Id[..Math.Min(model.Id.Length, 8)].ToUpperInvariant()}"
+            : await _references.GenerateApprovalRequestReferenceAsync(model.Id, ct);
 
         await _store.AddRequestAsync(
             model,
@@ -466,7 +473,9 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         return new ApprovalRequestResponse
         {
             RequestId = model.Id,
+            RequestReference = model.Reference,
             BookingId = model.BookingId,
+            BookingReference = model.BookingReference,
             TransactionId = model.TransactionId,
             ChangeType = model.ChangeType,
             RequestedBy = model.RequestedBy,

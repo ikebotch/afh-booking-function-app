@@ -28,6 +28,7 @@ public sealed class BookingHold
     public DateTime? CancelledUtc { get; private set; }
     public string? CancelReason { get; private set; }
     public string? BookingId { get; private set; }
+    public string? Reference { get; private set; }
 
     public string? CalendarProviderEventId { get; private set; }
     public void Reopen(
@@ -129,6 +130,14 @@ public sealed class BookingHold
         CalendarProviderEventId = eventId;
     }
 
+    public void AssignReference(string reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+            throw new DomainException("booking reference required.");
+
+        Reference = reference.Trim();
+    }
+
     public static BookingHold Rehydrate(
        string id,
        string slotId,
@@ -141,7 +150,8 @@ public sealed class BookingHold
        DateTime? cancelledUtc,
        string? cancelReason,
        string? providerEventId,
-       string? bookingId)
+       string? bookingId,
+       string? reference = null)
     {
         return new BookingHold
         {
@@ -156,7 +166,8 @@ public sealed class BookingHold
             CancelledUtc = cancelledUtc,
             CancelReason = cancelReason,
             CalendarProviderEventId = providerEventId,
-            BookingId = bookingId
+            BookingId = bookingId,
+            Reference = reference
         };
     }
 

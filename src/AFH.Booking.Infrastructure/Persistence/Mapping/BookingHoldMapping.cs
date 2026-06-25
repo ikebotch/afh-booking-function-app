@@ -10,6 +10,7 @@ public static class BookingHoldMapping
     public static BookingHoldModel ToModel(this BookingHold h) => new()
     {
         Id = h.Id,
+        Reference = h.Reference,
         SlotId = h.SlotId,
         UserId = h.UserId,
 
@@ -39,7 +40,8 @@ public static class BookingHoldMapping
             cancelledUtc: AsUtcNullable(m.CancelledUtc),
             cancelReason: m.CancelReason,
             providerEventId: m.CalendarProviderEventId,
-            bookingId: m.Slot?.TransactionId
+            bookingId: m.Slot?.TransactionId,
+            reference: m.Reference
         );
 
     private static HoldStatus ToModelStatus(BookingHoldStatus s) => s switch
@@ -70,6 +72,7 @@ public static class BookingHoldMapping
         // SlotId should not change for a hold
         // m.SlotId = h.SlotId;
 
+        m.Reference = h.Reference;
         m.Status = (Models.HoldStatus)h.Status;
 
         m.CreatedUtc = AsUtc(h.CreatedUtc);

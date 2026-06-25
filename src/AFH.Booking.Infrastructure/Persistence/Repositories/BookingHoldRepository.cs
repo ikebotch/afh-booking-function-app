@@ -27,10 +27,11 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         if (string.IsNullOrWhiteSpace(holdId))
             throw new ArgumentException("holdId is required.", nameof(holdId));
 
+        var lookup = holdId.Trim();
         var m = await _db.Holds
             .Include(x => x.Slot)
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == holdId, ct);
+            .FirstOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
 
         return m is null ? null : m.ToDomain();
     }
@@ -41,8 +42,9 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
             throw new ArgumentException("holdId is required.", nameof(holdId));
 
         // tracked entity
+        var lookup = holdId.Trim();
         var m = await _db.Holds
-            .FirstOrDefaultAsync(x => x.Id == holdId, ct);
+            .FirstOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
 
         return m is null ? null : m.ToDomain();
     }
@@ -94,8 +96,9 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         if (string.IsNullOrWhiteSpace(holdId))
             throw new ArgumentException("holdId is required.", nameof(holdId));
 
+        var lookup = holdId.Trim();
         var m = await _db.Holds
-            .FirstOrDefaultAsync(x => x.Id == holdId, ct);
+            .FirstOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
 
         return m is null ? null : m.ToDomain();
     }

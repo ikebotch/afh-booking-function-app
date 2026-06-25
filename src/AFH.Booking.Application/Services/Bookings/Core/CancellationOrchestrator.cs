@@ -337,6 +337,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         return Result<CancelBookingResponse>.Ok(new CancelBookingResponse
         {
             BookingId = hold.Id,
+            BookingReference = hold.Reference,
             Status = hold.Status.ToString(),
             CancelledUtc = hold.CancelledUtc ?? utcNow
         });
@@ -361,6 +362,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
         return Result<CancelBookingResponse>.Ok(new CancelBookingResponse
         {
             BookingId = existing.BookingId,
+            BookingReference = null,
             Status = BookingHoldStatus.Cancelled.ToString(),
             CancelledUtc = existing.OccurredUtc == default ? utcNow : existing.OccurredUtc
         });

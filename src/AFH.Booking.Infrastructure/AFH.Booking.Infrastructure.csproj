@@ -37,6 +37,7 @@
 	  <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
 	  <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.5" />
 	  <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.5" />
+	  <PackageReference Include="OpenTelemetry.Api" Version="1.16.0" />
 
 
 	

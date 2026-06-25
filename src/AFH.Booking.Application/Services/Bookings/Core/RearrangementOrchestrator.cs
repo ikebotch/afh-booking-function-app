@@ -462,7 +462,9 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         return Result<RearrangeBookingResponse>.Ok(new RearrangeBookingResponse
         {
             PreviousBookingId = existingBooking.Hold.Id,
+            PreviousBookingReference = existingBooking.Hold.Reference,
             NewBookingId = newBooking.Hold.Id,
+            NewBookingReference = newBooking.Hold.Reference,
             NewSlotId = newBooking.Slot.Id,
             PreviousAdviserId = existingBooking.Slot.AdviserId,
             PreviousAdviserName = existingBooking.Slot.AdviserName,

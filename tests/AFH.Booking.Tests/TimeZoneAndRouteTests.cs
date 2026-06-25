@@ -49,8 +49,11 @@ public class TimeZoneAndRouteTests
     [InlineData("Bookings_LeadTechRearrange", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_LeadTechRearrangementOptions", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_CancelBooking", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Bookings_GetBooking", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Bookings_GetRearrangementOptions", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_AdminSearch", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_Rearrange", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Admin_Reporting_Exports_Download", EndpointAccessPolicy.UserAuthenticated)]
     public void EndpointAccessPolicies_ClassifiesFunctions(string functionName, EndpointAccessPolicy expected)
     {
         Assert.Equal(expected, EndpointAccessPolicies.GetPolicy(functionName));
@@ -65,6 +68,7 @@ public class TimeZoneAndRouteTests
     [InlineData("Bookings_LeadTechRearrange", BookingPermissionNames.RearrangeAsLeadTech)]
     [InlineData("Bookings_LeadTechRearrangementOptions", BookingPermissionNames.RearrangementOptionsRead)]
     [InlineData("Bookings_CancelBooking", BookingPermissionNames.CancelDirect)]
+    [InlineData("Bookings_GetRearrangementOptions", BookingPermissionNames.RearrangementOptionsRead)]
     [InlineData("Bookings_AdminSearch", BookingPermissionNames.AdminRead)]
     [InlineData("Bookings_Rearrange", BookingPermissionNames.RearrangeDirect)]
     public void EndpointAccessPolicies_SelectedAdminFunctionsRequireBookingPermissions(string functionName, string expectedPermission)
@@ -76,7 +80,6 @@ public class TimeZoneAndRouteTests
     }
 
     [Theory]
-    [InlineData("Bookings_GetRearrangementOptions")]
     [InlineData("Bookings_RecordNoShow")]
     [InlineData("Transactions_Availability_V2")]
     public void EndpointAccessPolicies_ExistingServiceToServiceEndpointsRemainInternalOnly(string functionName)

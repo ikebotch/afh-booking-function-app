@@ -15,6 +15,14 @@ public sealed class BookingHoldModelConfiguration : IEntityTypeConfiguration<Boo
         b.Property(x => x.Id)
             .HasMaxLength(64)
             .IsRequired();
+
+        b.Property(x => x.Reference)
+            .HasMaxLength(32);
+
+        b.HasIndex(x => x.Reference)
+            .IsUnique()
+            .HasFilter("[Reference] IS NOT NULL");
+
         b.HasIndex(x => new { x.SlotId, x.Status });
         // -----
         // FK to Slot (one hold per slot)

@@ -46,6 +46,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationDeliveryAuditStore, NotificationDeliveryAuditStore>();
         services.AddScoped<INotificationTemplateStore, NotificationTemplateStore>();
         services.AddScoped<INotificationTemplateAdminStore, NotificationTemplateAdminStore>();
+        services.AddScoped<INotificationSettingsService, NotificationSettingsService>();
         services.AddScoped<INotificationStatusService, NotificationStatusService>();
         AddEmailDeliveryGateway(services, configuration);
         AddSmsDeliveryGateway(services, configuration);

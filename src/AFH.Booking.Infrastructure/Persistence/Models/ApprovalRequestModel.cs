@@ -3,7 +3,9 @@ namespace AFH.Booking.Infrastructure.Persistence.Models;
 public sealed class ApprovalRequestModel
 {
     public string Id { get; set; } = default!;
+    public string? Reference { get; set; }
     public string BookingId { get; set; } = default!;
+    public string? BookingReference { get; set; }
     public string TransactionId { get; set; } = default!;
     public string ChangeType { get; set; } = default!;
     public string RequestedBy { get; set; } = default!;

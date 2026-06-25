@@ -66,6 +66,7 @@ public sealed class NoShowBookingService : INoShowBookingService
             return Result<RecordNoShowResponse>.Ok(new RecordNoShowResponse
             {
                 BookingId = existing.BookingId,
+                BookingReference = null,
                 TransactionId = existing.TransactionId ?? string.Empty,
                 LifecycleEventId = existing.Id,
                 PreviousState = existing.PreviousState ?? LifecycleStates.Booked,
@@ -131,6 +132,7 @@ public sealed class NoShowBookingService : INoShowBookingService
         return Result<RecordNoShowResponse>.Ok(new RecordNoShowResponse
         {
             BookingId = hold.Id,
+            BookingReference = hold.Reference,
             TransactionId = tx.Id,
             LifecycleEventId = eventId,
             PreviousState = LifecycleStates.Booked,

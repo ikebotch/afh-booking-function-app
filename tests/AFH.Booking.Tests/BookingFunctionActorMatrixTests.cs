@@ -37,7 +37,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task ManagerCancel_MapsAuthenticatedManagerActorAndUsesSharedCancelService()
     {
         var service = new CapturingCancelBookingService();
-        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var sut = new CancelBookingFunction(service, new StubBookingDetailsService(), NullLogger<CancelBookingFunction>.Instance);
         var request = CreateJsonRequest("""{"requestedBy":"Client","reasonCode":"ADMIN_REQUEST","reasonDetail":"Back office change"}""");
         request.Headers.Add("x-correlation-id", "corr-admin");
         SetDomainUser(request, "manager-1", "Mina Manager", [BookingPermissionNames.CancelDirect], ["Manager"]);
@@ -58,7 +58,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task AdminCancel_MapsAuthenticatedAdminActorAndUsesSharedCancelService()
     {
         var service = new CapturingCancelBookingService();
-        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var sut = new CancelBookingFunction(service, new StubBookingDetailsService(), NullLogger<CancelBookingFunction>.Instance);
         var request = CreateJsonRequest("""{"reasonCode":"ADMIN_REQUEST","reasonDetail":"Back office change"}""");
         SetDomainUser(request, "admin-1", "Ada Admin", [BookingPermissionNames.CancelDirect], ["Admin"]);
 
@@ -75,7 +75,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task ManagerCancel_RequiresReasonCode()
     {
         var service = new CapturingCancelBookingService();
-        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var sut = new CancelBookingFunction(service, new StubBookingDetailsService(), NullLogger<CancelBookingFunction>.Instance);
         var request = CreateJsonRequest("""{"reasonDetail":"Back office change"}""");
         SetDomainUser(request, "manager-1", "Mina Manager", [BookingPermissionNames.CancelDirect], ["Manager"]);
 
@@ -89,7 +89,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task AdviserWithoutDirectCancelPermission_IsRejected()
     {
         var service = new CapturingCancelBookingService();
-        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var sut = new CancelBookingFunction(service, new StubBookingDetailsService(), NullLogger<CancelBookingFunction>.Instance);
         var request = CreateJsonRequest("""{"reasonCode":"ADMIN_REQUEST"}""");
         SetDomainUser(request, "adviser-1", "Ava Adviser", [BookingPermissionNames.ApprovalRequestsCreate], ["Adviser"]);
 
@@ -103,7 +103,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task UnauthenticatedDirectCancel_IsRejected()
     {
         var service = new CapturingCancelBookingService();
-        var sut = new CancelBookingFunction(service, NullLogger<CancelBookingFunction>.Instance);
+        var sut = new CancelBookingFunction(service, new StubBookingDetailsService(), NullLogger<CancelBookingFunction>.Instance);
         var request = CreateJsonRequest("""{"reasonCode":"ADMIN_REQUEST"}""");
 
         var response = await sut.Run(request, request.FunctionContext, "booking-1", CancellationToken.None);
@@ -135,7 +135,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task ManagerRearrange_MapsAuthenticatedManagerActorAndUsesSharedRearrangeService()
     {
         var service = new CapturingRearrangeBookingService();
-        var sut = new RearrangeBookingFunction(service);
+        var sut = new RearrangeBookingFunction(service, new StubBookingDetailsService());
         var request = CreateJsonRequest("""{"newSlotId":"slot-new","requestedBy":"Client","reasonCode":"ADMIN_RESCHEDULE"}""");
         request.Headers.Add("x-correlation-id", "corr-admin");
         SetDomainUser(request, "manager-1", "Mina Manager", [BookingPermissionNames.RearrangeDirect], ["Manager"]);
@@ -157,7 +157,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task AdminRearrange_MapsAuthenticatedAdminActorAndUsesSharedRearrangeService()
     {
         var service = new CapturingRearrangeBookingService();
-        var sut = new RearrangeBookingFunction(service);
+        var sut = new RearrangeBookingFunction(service, new StubBookingDetailsService());
         var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"ADMIN_RESCHEDULE"}""");
         SetDomainUser(request, "admin-1", "Ada Admin", [BookingPermissionNames.RearrangeDirect], ["Admin"]);
 
@@ -174,7 +174,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task ManagerRearrange_RequiresReasonCode()
     {
         var service = new CapturingRearrangeBookingService();
-        var sut = new RearrangeBookingFunction(service);
+        var sut = new RearrangeBookingFunction(service, new StubBookingDetailsService());
         var request = CreateJsonRequest("""{"newSlotId":"slot-new"}""");
         SetDomainUser(request, "manager-1", "Mina Manager", [BookingPermissionNames.RearrangeDirect], ["Manager"]);
 
@@ -188,7 +188,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task AdviserWithoutDirectRearrangePermission_IsRejected()
     {
         var service = new CapturingRearrangeBookingService();
-        var sut = new RearrangeBookingFunction(service);
+        var sut = new RearrangeBookingFunction(service, new StubBookingDetailsService());
         var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"ADMIN_RESCHEDULE"}""");
         SetDomainUser(request, "adviser-1", "Ava Adviser", [BookingPermissionNames.ApprovalRequestsCreate], ["Adviser"]);
 
@@ -202,7 +202,7 @@ public sealed class BookingFunctionActorMatrixTests
     public async Task UnauthenticatedDirectRearrange_IsRejected()
     {
         var service = new CapturingRearrangeBookingService();
-        var sut = new RearrangeBookingFunction(service);
+        var sut = new RearrangeBookingFunction(service, new StubBookingDetailsService());
         var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"ADMIN_RESCHEDULE"}""");
 
         var response = await sut.Run(request, request.FunctionContext, "booking-old", CancellationToken.None);
@@ -239,6 +239,7 @@ public sealed class BookingFunctionActorMatrixTests
             new AdviserUserContext
             {
                 UserId = userId,
+                AdviserId = "adv-1",
                 DisplayName = displayName,
                 Email = $"{userId}@example.test",
                 Permissions = permissions,
@@ -260,6 +261,24 @@ public sealed class BookingFunctionActorMatrixTests
                 Status = "Cancelled"
             }));
         }
+    }
+
+    private sealed class StubBookingDetailsService : IBookingDetailsService
+    {
+        public Task<Result<BookingDetailsResponse>> HandleAsync(GetBookingDetailsQuery query, CancellationToken ct)
+            => Task.FromResult(Result<BookingDetailsResponse>.Ok(new BookingDetailsResponse
+            {
+                BookingId = query.BookingId,
+                SlotId = "slot-1",
+                TransactionId = "tx-1",
+                TransactionRef = "TRX-1",
+                AdviserId = "adv-1",
+                AdviserName = "Adviser One",
+                StartUtc = new DateTime(2026, 06, 01, 9, 0, 0, DateTimeKind.Utc),
+                EndUtc = new DateTime(2026, 06, 01, 10, 0, 0, DateTimeKind.Utc),
+                DurationMinutes = 60,
+                Status = "Confirmed"
+            }));
     }
 
     private sealed class CapturingRearrangeBookingService : IRearrangeBookingService

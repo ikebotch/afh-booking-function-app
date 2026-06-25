@@ -20,7 +20,8 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
         string bookingId,
         CancellationToken ct)
     {
-        var hold = await _db.Holds.AsNoTracking().SingleOrDefaultAsync(x => x.Id == bookingId, ct)
+        var lookup = bookingId.Trim();
+        var hold = await _db.Holds.AsNoTracking().SingleOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct)
             ?? throw new InvalidOperationException($"Booking '{bookingId}' was not found.");
         var slot = await _db.BookingSlots.AsNoTracking().SingleOrDefaultAsync(x => x.Id == hold.SlotId, ct)
             ?? throw new InvalidOperationException($"Slot '{hold.SlotId}' was not found.");
@@ -69,7 +70,7 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
         if (query.BookingIds.Count > 0)
         {
             var bookingIds = Normalize(query.BookingIds);
-            rows = rows.Where(x => bookingIds.Contains(x.BookingId));
+            rows = rows.Where(x => bookingIds.Contains(x.BookingId) || bookingIds.Contains(x.BookingReference!));
         }
 
         if (query.Statuses.Count > 0)
@@ -100,13 +101,15 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
 
     public async Task<ApprovalWorkflowRecord?> GetAsync(string requestId, CancellationToken ct)
     {
-        var row = await _db.ApprovalRequests.AsNoTracking().SingleOrDefaultAsync(x => x.Id == requestId, ct);
+        var lookup = requestId.Trim();
+        var row = await _db.ApprovalRequests.AsNoTracking().SingleOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
         return row is null ? null : ToRecord(row);
     }
 
     public async Task<ApprovalWorkflowRecord?> GetForUpdateAsync(string requestId, CancellationToken ct)
     {
-        var row = await _db.ApprovalRequests.SingleOrDefaultAsync(x => x.Id == requestId, ct);
+        var lookup = requestId.Trim();
+        var row = await _db.ApprovalRequests.SingleOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
         return row is null ? null : ToRecord(row);
     }
 
@@ -129,11 +132,13 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
         string requestedBy,
         CancellationToken ct)
     {
+        var requestLookup = requestId.Trim();
+        var bookingLookup = bookingId.Trim();
         return await _db.ApprovalRequests
             .AsNoTracking()
             .AnyAsync(
-                x => x.Id == requestId &&
-                     x.BookingId == bookingId &&
+                x => (x.Id == requestLookup || x.Reference == requestLookup) &&
+                     (x.BookingId == bookingLookup || x.BookingReference == bookingLookup) &&
                      x.ChangeType == changeType &&
                      x.RequestedBy == requestedBy &&
                      x.Status == "Approved",
@@ -145,7 +150,9 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
         return new ApprovalWorkflowRecord
         {
             Id = model.Id,
+            Reference = model.Reference,
             BookingId = model.BookingId,
+            BookingReference = model.BookingReference,
             TransactionId = model.TransactionId,
             ChangeType = model.ChangeType,
             RequestedBy = model.RequestedBy,
@@ -176,7 +183,9 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
     private static void Apply(ApprovalWorkflowRecord source, ApprovalRequestModel target)
     {
         target.Id = source.Id;
+        target.Reference = source.Reference;
         target.BookingId = source.BookingId;
+        target.BookingReference = source.BookingReference;
         target.TransactionId = source.TransactionId;
         target.ChangeType = source.ChangeType;
         target.RequestedBy = source.RequestedBy;

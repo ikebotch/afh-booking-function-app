@@ -32,6 +32,7 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             {
                 BookingId = x.Id,
                 SlotId = x.SlotId,
+                BookingReference = x.Reference,
                 TransactionId = x.Slot.TransactionId,
                 TransactionRef = x.Slot.Transaction.TransactionRef,
                 ClientRef = x.UserId,
@@ -72,7 +73,7 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
         if (query.BookingIds.Count > 0)
         {
             var bookingIds = Normalize(query.BookingIds);
-            rows = rows.Where(x => bookingIds.Contains(x.Id));
+            rows = rows.Where(x => bookingIds.Contains(x.Id) || bookingIds.Contains(x.Reference!));
         }
 
         if (query.TransactionIds.Count > 0)

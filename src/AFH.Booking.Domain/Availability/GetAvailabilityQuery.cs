@@ -14,6 +14,7 @@ public sealed class GetAvailabilityQuery
     public string? TransactionId { get; init; }
     public string? ClientLookupRef { get; init; }
     public string? ClientLookupSource { get; init; }
+    public string ProjectContext { get; init; } = "Booking";
     public bool IsRemote { get; init; }
 
     // Window support

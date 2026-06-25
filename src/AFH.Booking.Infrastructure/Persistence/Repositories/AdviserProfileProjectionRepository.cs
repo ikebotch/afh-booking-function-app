@@ -28,22 +28,11 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
         {
             if (!existing.TryGetValue(adviser.AdviserId, out var row))
             {
-                await _db.AdviserProfileProjections.AddAsync(new AdviserProfileProjectionModel
+                row = new AdviserProfileProjectionModel
                 {
-                    AdviserId = adviser.AdviserId,
-                    DisplayName = adviser.DisplayName,
-                    MailboxUserId = adviser.MailboxUserId,
-                    Region = adviser.Region,
-                    HomePostcode = adviser.HomePostcode,
-                    IsActive = adviser.IsActive,
-                    Rating = adviser.Rating,
-                    SkillsJson = JsonSerializer.Serialize(adviser.Skills),
-                    CoverageRadiusMiles = adviser.CoverageRadiusMiles,
-                    MaxTravelTimeMinutes = adviser.MaxTravelTimeMinutes,
-                    LastSyncedUtc = adviser.LastSyncedUtc,
-                    SourceVersion = adviser.SourceVersion
-                }, ct);
-                continue;
+                    AdviserId = adviser.AdviserId
+                };
+                await _db.AdviserProfileProjections.AddAsync(row, ct);
             }
 
             row.DisplayName = adviser.DisplayName;
@@ -64,7 +53,7 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
     {
         take = Math.Clamp(take, 1, 500);
 
-        var query = _db.AdviserProfileProjections.AsNoTracking();
+        IQueryable<AdviserProfileProjectionModel> query = _db.AdviserProfileProjections.AsNoTracking();
         if (sinceUtc.HasValue)
             query = query.Where(x => x.LastSyncedUtc > sinceUtc.Value);
 
@@ -98,18 +87,7 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
     }
 
     private static AdviserProfileProjectionRecord Map(AdviserProfileProjectionModel row)
-    {
-        IReadOnlyList<string> skills;
-        try
-        {
-            skills = JsonSerializer.Deserialize<List<string>>(row.SkillsJson) ?? [];
-        }
-        catch
-        {
-            skills = [];
-        }
-
-        return new AdviserProfileProjectionRecord
+        => new()
         {
             AdviserId = row.AdviserId,
             DisplayName = row.DisplayName,
@@ -118,11 +96,22 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
             HomePostcode = row.HomePostcode,
             IsActive = row.IsActive,
             Rating = row.Rating,
-            Skills = skills,
+            Skills = DeserializeSkills(row.SkillsJson).ToList(),
             CoverageRadiusMiles = row.CoverageRadiusMiles,
             MaxTravelTimeMinutes = row.MaxTravelTimeMinutes,
             LastSyncedUtc = row.LastSyncedUtc,
             SourceVersion = row.SourceVersion
         };
+
+    private static IReadOnlyList<string> DeserializeSkills(string skillsJson)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(skillsJson) ?? [];
+        }
+        catch
+        {
+            return [];
+        }
     }
 }

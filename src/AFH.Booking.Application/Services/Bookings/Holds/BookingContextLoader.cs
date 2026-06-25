@@ -103,7 +103,8 @@ public sealed class BookingContextLoader : IBookingContextLoader
             slot.EndUtc,
             transaction.Duration.TotalMinutes,
             _clock.UtcNow,
-            ct);
+            ct,
+            slot.ProjectContext);
 
         return evaluation.IsAllowed
             ? Result.Ok()

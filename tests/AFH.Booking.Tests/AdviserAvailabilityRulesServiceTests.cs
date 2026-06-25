@@ -17,7 +17,7 @@ using System.Net;
 
 namespace AFH.Booking.Tests;
 
-public sealed class AdviserAvailabilityRulesSprint5Tests
+public sealed class AdviserAvailabilityRulesServiceTests
 {
     private static readonly DateTime FixedNow = new(2026, 06, 15, 8, 0, 0, DateTimeKind.Utc);
 
@@ -250,6 +250,114 @@ public sealed class AdviserAvailabilityRulesSprint5Tests
     }
 
     [Fact]
+    public async Task US5307_AvailabilityRules_EnforceDailyWeeklyAndMonthlyCapacityLimits()
+    {
+        var slotStart = new DateTime(2026, 06, 17, 10, 0, 0, DateTimeKind.Utc);
+        var dayStart = new DateTime(2026, 06, 17, 0, 0, 0, DateTimeKind.Utc);
+        var weekStart = new DateTime(2026, 06, 15, 0, 0, 0, DateTimeKind.Utc);
+        var monthStart = new DateTime(2026, 06, 01, 0, 0, 0, DateTimeKind.Utc);
+
+        var holds = new Mock<IBookingHoldRepository>();
+        holds.Setup(x => x.CountActiveOrConfirmedByAdviserAsync(
+                "adv-1",
+                dayStart,
+                dayStart.AddDays(1),
+                FixedNow,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(1);
+        holds.Setup(x => x.CountActiveOrConfirmedByAdviserAsync(
+                "adv-1",
+                weekStart,
+                weekStart.AddDays(7),
+                FixedNow,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(4);
+        holds.Setup(x => x.CountActiveOrConfirmedByAdviserAsync(
+                "adv-1",
+                monthStart,
+                monthStart.AddMonths(1),
+                FixedNow,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(8);
+
+        var service = CreateRulesService(new AvailabilityRulesOptions
+        {
+            CapacityLimits =
+            [
+                new AdviserCapacityOptions
+                {
+                    AdviserId = "adv-1",
+                    DailyLimit = 3,
+                    WeeklyLimit = 4,
+                    MonthlyLimit = 12
+                }
+            ]
+        }, holds.Object);
+
+        var result = await service.EvaluateAsync(
+            new AdviserProjectionItem { AdviserId = "adv-1" },
+            slotStart,
+            slotStart.AddHours(1),
+            60,
+            FixedNow,
+            CancellationToken.None);
+
+        Assert.False(result.IsAllowed);
+        Assert.False(result.CapacityAllowed);
+        Assert.Equal("Capacity", result.RejectionReason);
+
+        holds.Verify(x => x.CountActiveOrConfirmedByAdviserAsync(
+            "adv-1",
+            dayStart,
+            dayStart.AddDays(1),
+            FixedNow,
+            It.IsAny<CancellationToken>()), Times.Once);
+        holds.Verify(x => x.CountActiveOrConfirmedByAdviserAsync(
+            "adv-1",
+            weekStart,
+            weekStart.AddDays(7),
+            FixedNow,
+            It.IsAny<CancellationToken>()), Times.Once);
+        holds.Verify(x => x.CountActiveOrConfirmedByAdviserAsync(
+            "adv-1",
+            monthStart,
+            monthStart.AddMonths(1),
+            FixedNow,
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task AvailabilityRulesService_UsesPersistedRulesBeforeFallbackConfig()
+    {
+        var persisted = new AvailabilityRulesOptions
+        {
+            MinimumAppointmentMinutes = 45,
+            DefaultWorkingDayStart = "09:00",
+            DefaultWorkingDayEnd = "17:00"
+        };
+
+        var fallback = new AvailabilityRulesOptions
+        {
+            MinimumAppointmentMinutes = 15,
+            DefaultWorkingDayStart = "08:00",
+            DefaultWorkingDayEnd = "18:00"
+        };
+
+        var service = CreateRulesService(fallback, rules: new StubAvailabilityRulesRepository(persisted));
+
+        var result = await service.EvaluateAsync(
+            new AdviserProjectionItem { AdviserId = "adv-1" },
+            new DateTime(2026, 06, 15, 10, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 06, 15, 10, 30, 0, DateTimeKind.Utc),
+            30,
+            FixedNow,
+            CancellationToken.None);
+
+        Assert.False(result.IsAllowed);
+        Assert.Equal("MinimumDuration", result.RejectionReason);
+    }
+
+    [Fact]
     public async Task US5308_CreateHold_RevalidatesSelectedSlotAndRejectsOverCapacityAdviser()
     {
         var slot = BookingSlot.Rehydrate(
@@ -303,7 +411,8 @@ public sealed class AdviserAvailabilityRulesSprint5Tests
                 slot.EndUtc,
                 60,
                 FixedNow,
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<string?>()))
             .ReturnsAsync(new AvailabilityRuleEvaluation(
                 false,
                 true,
@@ -387,9 +496,11 @@ public sealed class AdviserAvailabilityRulesSprint5Tests
 
     private static AvailabilityRulesService CreateRulesService(
         AvailabilityRulesOptions options,
-        IBookingHoldRepository? holds = null)
+        IBookingHoldRepository? holds = null,
+        IAvailabilityRulesRepository? rules = null)
         => new(
             holds ?? Mock.Of<IBookingHoldRepository>(),
+            rules ?? new StubAvailabilityRulesRepository(null),
             Options.Create(options));
 
     private static AvailabilitySlotProcessor CreateProcessor(AvailabilityRuleEvaluation rules)
@@ -428,7 +539,8 @@ public sealed class AdviserAvailabilityRulesSprint5Tests
                 It.IsAny<DateTime>(),
                 It.IsAny<double>(),
                 It.IsAny<DateTime>(),
-                It.IsAny<CancellationToken>()))
+                It.IsAny<CancellationToken>(),
+                It.IsAny<string?>()))
             .ReturnsAsync(rules);
 
         return new AvailabilitySlotProcessor(
@@ -438,5 +550,18 @@ public sealed class AdviserAvailabilityRulesSprint5Tests
             timeZone.Object,
             availabilityRules.Object,
             NullLogger<AvailabilitySlotProcessor>.Instance);
+    }
+
+    private sealed class StubAvailabilityRulesRepository : IAvailabilityRulesRepository
+    {
+        private readonly AvailabilityRulesOptions? _rules;
+
+        public StubAvailabilityRulesRepository(AvailabilityRulesOptions? rules)
+        {
+            _rules = rules;
+        }
+
+        public Task<AvailabilityRulesOptions?> GetActiveRulesAsync(CancellationToken ct, string projectContext = "Booking")
+            => Task.FromResult(_rules);
     }
 }

@@ -17,6 +17,7 @@ public sealed class BookingSlot
 
     public int Score { get; private set; }                              // 1..5
     public IReadOnlyDictionary<string, int>? ScoreBreakdown { get; private set; }
+    public string ProjectContext { get; private set; } = "Booking";
 
     public int? TravelMinutes { get; private set; }
     public int? CompanyBufferMinutes { get; private set; }
@@ -47,11 +48,12 @@ public sealed class BookingSlot
            string adviserName,
            DateTime startUtc,
            DateTime endUtc,
-           int score,
-           IReadOnlyDictionary<string, int>? scoreBreakdown,
-           LocationCandidate? travel,
-           string? locationRef,
-           DateTime utcNow)
+	           int score,
+	           IReadOnlyDictionary<string, int>? scoreBreakdown,
+	           LocationCandidate? travel,
+	           string? locationRef,
+               string? projectContext,
+	           DateTime utcNow)
     {
         if (string.IsNullOrWhiteSpace(id))
             throw new DomainException("slot id is required.");
@@ -78,6 +80,7 @@ public sealed class BookingSlot
 
             Score = score,
             ScoreBreakdown = scoreBreakdown,
+            ProjectContext = NormalizeProjectContext(projectContext),
 
             TravelMinutes = travel?.TravelMinutes,
             CompanyBufferMinutes = travel?.CompanyBufferMinutes,
@@ -143,6 +146,41 @@ public sealed class BookingSlot
         string? travelStatus,
         string? travelMessage,
         DateTime createdUtc)
+        => Rehydrate(
+            id,
+            transactionRef,
+            adviserId,
+            adviserName,
+            startUtc,
+            endUtc,
+            score,
+            scoreBreakdown,
+            locationRef,
+            null,
+            travelMinutes,
+            companyBufferMinutes,
+            distanceMiles,
+            travelStatus,
+            travelMessage,
+            createdUtc);
+
+    public static BookingSlot Rehydrate(
+        string id,
+        string transactionRef,
+        string adviserId,
+        string adviserName,
+        DateTime startUtc,
+        DateTime endUtc,
+        int score,
+        IReadOnlyDictionary<string, int>? scoreBreakdown,
+        string? locationRef,
+        string? projectContext,
+        int? travelMinutes,
+        int? companyBufferMinutes,
+        decimal? distanceMiles,
+        string? travelStatus,
+        string? travelMessage,
+        DateTime createdUtc)
     {
         return Rehydrate(
             id,
@@ -154,10 +192,11 @@ public sealed class BookingSlot
             score,
             scoreBreakdown,
             locationRef,
+            projectContext,
             travelMinutes,
             companyBufferMinutes,
             distanceMiles,
-            distanceMiles.HasValue ? Convert.ToDouble(distanceMiles.Value) : null,
+            distanceMiles.HasValue ? Convert.ToDouble(distanceMiles.Value) : (double?)null,
             null,
             null,
             null,
@@ -202,6 +241,65 @@ public sealed class BookingSlot
         string? travelStatus,
         string? travelMessage,
         DateTime createdUtc)
+        => Rehydrate(
+            id,
+            transactionRef,
+            adviserId,
+            adviserName,
+            startUtc,
+            endUtc,
+            score,
+            scoreBreakdown,
+            locationRef,
+            null,
+            travelMinutes,
+            companyBufferMinutes,
+            distanceMiles,
+            travelDistanceMiles,
+            sourceLocationRef,
+            sourcePostcode,
+            sourceLatitude,
+            sourceLongitude,
+            destinationLocationRef,
+            destinationPostcode,
+            destinationLatitude,
+            destinationLongitude,
+            travelProvider,
+            travelConfidence,
+            travelCalculatedUtc,
+            travelStatus,
+            travelMessage,
+            createdUtc);
+
+    public static BookingSlot Rehydrate(
+        string id,
+        string transactionRef,
+        string adviserId,
+        string adviserName,
+        DateTime startUtc,
+        DateTime endUtc,
+        int score,
+        IReadOnlyDictionary<string, int>? scoreBreakdown,
+        string? locationRef,
+        string? projectContext,
+        int? travelMinutes,
+        int? companyBufferMinutes,
+        decimal? distanceMiles,
+        double? travelDistanceMiles,
+        string? sourceLocationRef,
+        string? sourcePostcode,
+        double? sourceLatitude,
+        double? sourceLongitude,
+        string? destinationLocationRef,
+        string? destinationPostcode,
+        double? destinationLatitude,
+        double? destinationLongitude,
+        string? travelProvider,
+        string? travelConfidence,
+        DateTime? travelCalculatedUtc,
+        string? travelStatus,
+        string? travelMessage,
+        DateTime createdUtc)
     {
         return new BookingSlot
         {
@@ -213,6 +311,7 @@ public sealed class BookingSlot
             EndUtc = DateTime.SpecifyKind(endUtc, DateTimeKind.Utc),
             Score = score,
             ScoreBreakdown = scoreBreakdown,
+            ProjectContext = NormalizeProjectContext(projectContext),
             LocationRef = locationRef,
             TravelMinutes = travelMinutes,
             CompanyBufferMinutes = companyBufferMinutes,
@@ -236,4 +335,7 @@ public sealed class BookingSlot
             CreatedUtc = DateTime.SpecifyKind(createdUtc, DateTimeKind.Utc)
         };
     }
+
+    private static string NormalizeProjectContext(string? projectContext)
+        => string.IsNullOrWhiteSpace(projectContext) ? "Booking" : projectContext.Trim();
 }

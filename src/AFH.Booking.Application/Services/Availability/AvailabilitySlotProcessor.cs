@@ -83,7 +83,8 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
                     end,
                     query.Duration,
                     utcNow,
-                    ct);
+                    ct,
+                    query.ProjectContext);
 
                 var ruleAudit = rules.Audit;
 
@@ -153,6 +154,7 @@ public sealed class AvailabilitySlotProcessor : IAvailabilitySlotProcessor
                     scoreBreakdown: scoreBreakdown,
                     travel: travelCandidate,
                     locationRef: query.LocationRef,
+                    projectContext: query.ProjectContext,
                     utcNow: utcNow);
 
                 AttachTravelSnapshot(slot, query, travelCandidate);

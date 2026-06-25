@@ -23,4 +23,7 @@ public sealed class AdviserCapacityOptions
 {
     public string AdviserId { get; set; } = string.Empty;
     public int MaxActiveBookings { get; set; }
+    public int? DailyLimit { get; set; }
+    public int? WeeklyLimit { get; set; }
+    public int? MonthlyLimit { get; set; }
 }

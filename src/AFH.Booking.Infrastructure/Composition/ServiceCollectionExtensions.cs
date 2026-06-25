@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Auth;
+using AFH.Booking.Application.Abstractions.Availability;
 using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Abstractions.Calendar;
 using AFH.Booking.Application.Abstractions.Clients;
@@ -176,6 +177,14 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IBookingNotificationPolicyProvider, BookingNotificationPolicyProvider>();
         services.AddScoped<IBookingNotificationRecipientResolver, BookingNotificationRecipientResolver>();
         services.AddHttpClient<IBookingOrganisationAssignmentsClient, BookingOrganisationAssignmentsClient>((sp, http) =>
+        {
+            var options = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
+            if (!string.IsNullOrWhiteSpace(options.BaseUrl))
+                http.BaseAddress = new Uri(options.BaseUrl.TrimEnd('/') + "/", UriKind.Absolute);
+
+            http.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddHttpClient<IAvailabilityRulesRepository, LocationAvailabilityRulesRepository>((sp, http) =>
         {
             var options = sp.GetRequiredService<IOptions<LocationServiceOptions>>().Value;
             if (!string.IsNullOrWhiteSpace(options.BaseUrl))

@@ -25,6 +25,7 @@ internal static class BookingSlotMapping
             score: m.Score,
             scoreBreakdown: DeserializeBreakdown(m.ScoreBreakdownJson),
             locationRef: m.LocationRef,
+            projectContext: m.ProjectContext,
             travelMinutes: m.TravelMinutes,
             companyBufferMinutes: m.CompanyBufferMinutes,
             distanceMiles: m.DistanceMiles,
@@ -63,6 +64,7 @@ internal static class BookingSlotMapping
 
             Score = s.Score,
             ScoreBreakdownJson = SerializeBreakdown(s.ScoreBreakdown),
+            ProjectContext = s.ProjectContext,
 
             TravelMinutes = s.TravelMinutes,
             CompanyBufferMinutes = s.CompanyBufferMinutes,
@@ -109,6 +111,7 @@ internal static class BookingSlotMapping
 
         m.Score = s.Score;
         m.ScoreBreakdownJson = SerializeBreakdown(s.ScoreBreakdown);
+        m.ProjectContext = s.ProjectContext;
 
         m.TravelMinutes = s.TravelMinutes;
         m.CompanyBufferMinutes = s.CompanyBufferMinutes;

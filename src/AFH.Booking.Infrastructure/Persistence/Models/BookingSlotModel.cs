@@ -23,6 +23,7 @@ public sealed class BookingSlotModel
     // -------------------------
     public int Score { get; set; }
     public string? ScoreBreakdownJson { get; set; }
+    public string ProjectContext { get; set; } = "Booking";
 
 
     // -------------------------

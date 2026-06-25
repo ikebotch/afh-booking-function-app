@@ -37,6 +37,11 @@ public sealed class BookingSlotModelConfiguration : IEntityTypeConfiguration<Boo
         b.Property(x => x.Score)
             .IsRequired();
 
+        b.Property(x => x.ProjectContext)
+            .HasMaxLength(128)
+            .IsRequired()
+            .HasDefaultValue("Booking");
+
         // store score breakdown dict as JSON string
         b.Property(x => x.ScoreBreakdownJson)
             .HasMaxLength(4000);

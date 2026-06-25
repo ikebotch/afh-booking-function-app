@@ -10,5 +10,6 @@ public interface IAvailabilityRulesService
         DateTime endUtc,
         double durationMinutes,
         DateTime utcNow,
-        CancellationToken ct);
+        CancellationToken ct,
+        string? projectContext = null);
 }

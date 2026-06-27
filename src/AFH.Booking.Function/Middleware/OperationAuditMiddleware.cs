@@ -37,6 +37,7 @@ public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
                 ? (unhandled is null ? (int?)null : (int)HttpStatusCode.InternalServerError)
                 : (int)response.StatusCode;
             var correlationId = TryGetString(context, CorrelationIdMiddleware.ItemKey);
+            var userProfileId = Header(req, "x-afh-user-profile-id");
 
             try
             {
@@ -51,6 +52,7 @@ public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
                         Category = "FunctionInvocation",
                         Operation = context.FunctionDefinition.Name,
                         CorrelationId = correlationId,
+                        UserId = userProfileId,
                         ContextId = context.InvocationId,
                         EventType = unhandled is null ? "InvocationCompleted" : "InvocationFailed",
                         Result = unhandled is null && (statusCode is null || statusCode < 400) ? "Success" : "Failure",
@@ -65,7 +67,16 @@ public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
                             Method = req?.Method,
                             Path = req?.Url.AbsolutePath,
                             StatusCode = statusCode,
-                            DurationMs = sw.ElapsedMilliseconds
+                            DurationMs = sw.ElapsedMilliseconds,
+                            AuthorizedPermission = Header(req, "x-afh-authorized-permission"),
+                            Actor = new
+                            {
+                                UserProfileId = userProfileId,
+                                ExternalSubject = Header(req, "x-afh-user-external-subject"),
+                                Email = Header(req, "x-afh-user-email"),
+                                DisplayName = Header(req, "x-afh-user-display-name"),
+                                AdviserId = Header(req, "x-afh-user-adviser-id")
+                            }
                         }, loggingOptions)
                     }, CancellationToken.None);
                 }
@@ -98,4 +109,9 @@ public sealed class OperationAuditMiddleware : IFunctionsWorkerMiddleware
 
         return value?.ToString();
     }
+
+    private static string? Header(HttpRequestData? req, string name)
+        => req is not null && req.Headers.TryGetValues(name, out var values)
+            ? values.FirstOrDefault()
+            : null;
 }

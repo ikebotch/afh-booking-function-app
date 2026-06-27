@@ -40,13 +40,13 @@ public sealed class GetAvailabilityFunction
                                "isRemote": false,
                                "meetingType": "Review",
                                "destinationAddress": {
-                                 "line1": "1 High Street",
-                                 "town": "Sheffield",
-                                 "postcode": "S1 2HH",
+                                 "line1": "42 King Street",
+                                 "town": "Manchester",
+                                 "postcode": "M2 4LQ",
                                  "country": "UK"
                                },
                                "preferredAdviserIds": [ "adviser-123" ],
-                               "regions": [ "South Yorkshire" ],
+                               "regions": [ "North West" ],
                                "requiredSkills": [ "Pensions" ],
                                "excludeAdviserIds": [],
                                "searchHorizonMinutes": 180,

@@ -44,7 +44,24 @@ public static class DomainUserAccessAuthorizer
         var token = authHeader["Bearer ".Length..].Trim();
 
         if (string.IsNullOrWhiteSpace(requirement.RequiredPermission))
-            return DomainUserAccessResult.Allowed(null, null);
+        {
+            var currentUser = await permissions.GetCurrentUserAsync(token, ct);
+            if (!currentUser.IsAuthorised)
+            {
+                return DomainUserAccessResult.Denied(
+                    await request.ProblemAsync(
+                        HttpStatusCode.Unauthorized,
+                        currentUser.FailureMessage ?? "Unable to resolve current user.",
+                        ct,
+                        Errors.Unauthorized),
+                    null,
+                    currentUser.User,
+                    requirement.RequiredPermission,
+                    authorised: false);
+            }
+
+            return DomainUserAccessResult.Allowed(null, currentUser.User);
+        }
 
         var authorisation = await permissions.AuthorizeAsync(token, requirement.RequiredPermission, ct);
         if (!authorisation.IsAuthorised)

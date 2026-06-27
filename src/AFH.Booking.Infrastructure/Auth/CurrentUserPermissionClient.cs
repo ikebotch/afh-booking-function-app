@@ -19,7 +19,7 @@ public sealed class CurrentUserPermissionClient : ICurrentUserPermissionClient
         string requiredPermission,
         CancellationToken ct)
     {
-        var user = await GetCurrentUserAsync(bearerToken, ct);
+        var user = await ResolveCurrentUserAsync(bearerToken, ct);
         if (user is null)
             return CurrentUserPermissionResult.Unavailable("Unable to resolve current user permissions.");
 
@@ -28,7 +28,17 @@ public sealed class CurrentUserPermissionClient : ICurrentUserPermissionClient
             : CurrentUserPermissionResult.Forbidden(user, requiredPermission);
     }
 
-    private Task<AdviserUserContext?> GetCurrentUserAsync(string bearerToken, CancellationToken ct)
+    public async Task<CurrentUserPermissionResult> GetCurrentUserAsync(
+        string bearerToken,
+        CancellationToken ct)
+    {
+        var user = await ResolveCurrentUserAsync(bearerToken, ct);
+        return user is null
+            ? CurrentUserPermissionResult.Unavailable("Unable to resolve current user permissions.")
+            : CurrentUserPermissionResult.Authorised(user);
+    }
+
+    private Task<AdviserUserContext?> ResolveCurrentUserAsync(string bearerToken, CancellationToken ct)
     {
         if (_cachedUserContext is not null && string.Equals(_cachedBearerToken, bearerToken, StringComparison.Ordinal))
             return _cachedUserContext;

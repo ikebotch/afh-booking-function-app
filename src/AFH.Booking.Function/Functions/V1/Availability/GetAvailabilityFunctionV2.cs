@@ -29,10 +29,16 @@ public sealed class GetAvailabilityFunctionV2
                                "clientId": "client-123",
                                "preferredStartUtc": "2026-06-20T10:00:00Z",
                                "duration": 60,
-                               "isRemote": true,
+                               "isRemote": false,
                                "meetingType": "Review",
+                               "destinationAddress": {
+                                 "line1": "42 King Street",
+                                 "town": "Manchester",
+                                 "postcode": "M2 4LQ",
+                                 "country": "UK"
+                               },
                                "preferredAdviserIds": [ "adviser-123" ],
-                               "regions": [ "South Yorkshire" ],
+                               "regions": [ "North West" ],
                                "requiredSkills": [ "Pensions" ],
                                "excludeAdviserIds": [],
                                "searchHorizonMinutes": 180,

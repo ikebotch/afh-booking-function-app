@@ -107,7 +107,7 @@ public class BookingOpenApiDocumentFactoryTests
         Assert.Contains("capacity", description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("revalidated again during hold creation", description, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Sprint 5 availability governance", v2Description, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal("S1 2HH", requestExample["destinationAddress"]!["postcode"]!.GetValue<string>());
+        Assert.Equal("M2 4LQ", requestExample["destinationAddress"]!["postcode"]!.GetValue<string>());
         Assert.Equal("Pensions", requestExample["requiredSkills"]![0]!.GetValue<string>());
         Assert.Equal(1, responseExampleSlot["scoreBreakdown"]!["rule.workingPatternAllowed"]!.GetValue<int>());
         Assert.Equal(1, responseExampleSlot["scoreBreakdown"]!["rule.capacityAllowed"]!.GetValue<int>());

@@ -310,6 +310,13 @@ public sealed class BookingRbacAuthorisationTests
 
     private sealed class StubPermissionClient(bool allow) : ICurrentUserPermissionClient
     {
+        public Task<CurrentUserPermissionResult> GetCurrentUserAsync(string bearerToken, CancellationToken ct)
+            => Task.FromResult(CurrentUserPermissionResult.Authorised(new AdviserUserContext
+            {
+                UserId = "user-1",
+                Email = "alex@afh.co.uk"
+            }));
+
         public Task<CurrentUserPermissionResult> AuthorizeAsync(string bearerToken, string requiredPermission, CancellationToken ct)
         {
             var user = new AdviserUserContext
@@ -328,6 +335,16 @@ public sealed class BookingRbacAuthorisationTests
     private sealed class CapturingPermissionClient(bool allow) : ICurrentUserPermissionClient
     {
         public string? LastBearerToken { get; private set; }
+
+        public Task<CurrentUserPermissionResult> GetCurrentUserAsync(string bearerToken, CancellationToken ct)
+        {
+            LastBearerToken = bearerToken;
+            return Task.FromResult(CurrentUserPermissionResult.Authorised(new AdviserUserContext
+            {
+                UserId = "user-1",
+                Email = "alex@afh.co.uk"
+            }));
+        }
 
         public Task<CurrentUserPermissionResult> AuthorizeAsync(string bearerToken, string requiredPermission, CancellationToken ct)
         {

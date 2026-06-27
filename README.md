@@ -6,6 +6,12 @@
 - Internal calls to the location service for in-person adviser search.
 - Internal calls to the calendar service for appointment and subscription work.
 
+## Service Separation Target
+- Booking remains the owner of lifecycle state and recipient/template policy selection.
+- Notification execution has a standalone service folder at `../afh-notification-function-app`.
+- During migration, this repo may still contain transitional Notification host wiring for compatibility; new gateway and deployment wiring should target the standalone Notification service.
+- Booking should publish notification intent over HTTP or Service Bus and must not call Notification infrastructure directly.
+
 ## Local Setup
 1. Copy `src/AFH.Booking.Functions/local.settings.template.json` to `src/AFH.Booking.Functions/local.settings.json`.
 2. Fill in the required values:

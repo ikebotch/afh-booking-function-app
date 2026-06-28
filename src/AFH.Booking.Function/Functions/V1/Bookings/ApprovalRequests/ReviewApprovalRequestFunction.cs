@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Approvals;
+using AFH.Booking.Application.Abstractions.Bookings;
 using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Domain.Bookings.Commands;
@@ -15,10 +16,14 @@ namespace AFH.Booking.Function.Functions.V1.Bookings;
 public sealed class ReviewApprovalRequestFunction
 {
     private readonly IApprovalWorkflowService _approvals;
+    private readonly IBookingDetailsService _details;
 
-    public ReviewApprovalRequestFunction(IApprovalWorkflowService approvals)
+    public ReviewApprovalRequestFunction(
+        IApprovalWorkflowService approvals,
+        IBookingDetailsService details)
     {
         _approvals = approvals;
+        _details = details;
     }
 
     [Function("Approvals_Review")]
@@ -48,6 +53,21 @@ public sealed class ReviewApprovalRequestFunction
         var body = await req.ReadJsonAsync<ReviewApprovalRequest>(ct);
         if (body is null)
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "Request body is required.", ct, "Validation");
+
+        var user = context.GetDomainUserContext();
+        if (user is null)
+            return await req.ProblemAsync(HttpStatusCode.Unauthorized, "Authenticated domain user identity is required.", ct, "Unauthorized");
+
+        var existingRequest = await _approvals.GetAsync(requestId.Trim(), ct);
+        if (existingRequest is null)
+            return await req.ProblemAsync(HttpStatusCode.NotFound, $"Approval request '{requestId}' was not found.", ct, "NotFound");
+
+        var details = await _details.HandleAsync(new GetBookingDetailsQuery { BookingId = existingRequest.BookingId }, ct);
+        if (!details.IsSuccess)
+            return await req.ProblemAsync(details.StatusCode, details.ErrorMessage ?? "Request failed.", ct, details.ErrorCode);
+
+        if (details.Value is null || !BookingFunctionActorContext.CanAccessBooking(user, details.Value))
+            return await req.ProblemAsync(HttpStatusCode.Forbidden, "Signed-in user can only review approvals inside their assigned access scope.", ct, "Forbidden");
 
         var actor = BuildReviewerActorContext(context, BookingChangeRequestContext.GetCorrelationId(req));
 

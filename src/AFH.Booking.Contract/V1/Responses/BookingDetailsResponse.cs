@@ -9,6 +9,7 @@ public sealed class BookingDetailsResponse
 
     public string AdviserId { get; init; } = default!;
     public string AdviserName { get; init; } = default!;
+    public string? AdviserRegion { get; init; }
 
     public DateTime StartUtc { get; init; }
     public DateTime EndUtc { get; init; }
@@ -16,6 +17,7 @@ public sealed class BookingDetailsResponse
 
     public bool IsRemote { get; init; }
     public string? MeetingType { get; init; }
+    public string? LocationRef { get; init; }
 
     public string Status { get; init; } = default!;
     public DateTime? ConfirmedUtc { get; init; }

@@ -74,24 +74,83 @@ internal static class BookingFunctionActorContext
         BookingDetailsResponse booking,
         CancellationToken ct)
     {
-        if (CanAccessBooking(user, booking.AdviserId))
+        if (CanAccessBooking(user, booking))
             return null;
 
         return await req.ProblemAsync(
             HttpStatusCode.Forbidden,
-            "Signed-in user can only access bookings for their mapped adviser unless they have booking admin access.",
+            "Signed-in user can only access bookings inside their assigned access scope.",
             ct,
             "Forbidden");
     }
 
     public static bool CanAccessBooking(AdviserUserContext user, string adviserId)
     {
-        if (user.Permissions.Contains(Domain.Auth.BookingPermissionNames.AdminRead, StringComparer.OrdinalIgnoreCase))
+        if (HasUnrestrictedScope(user, "Bookings"))
             return true;
 
         return !string.IsNullOrWhiteSpace(user.AdviserId)
             && string.Equals(user.AdviserId, adviserId, StringComparison.OrdinalIgnoreCase);
     }
+
+    public static bool CanAccessBooking(AdviserUserContext user, BookingDetailsResponse booking)
+    {
+        if (HasUnrestrictedScope(user, "Bookings"))
+            return true;
+
+        if (MatchesScopedValue(user, "Bookings", "AdviserSelf", booking.AdviserId)
+            || MatchesScopedValue(user, "Bookings", "Adviser", booking.AdviserId))
+        {
+            return true;
+        }
+
+        if (MatchesScopedValue(user, "Bookings", "Region", booking.AdviserRegion))
+            return true;
+
+        return MatchesScopedValue(user, "Bookings", "Branch", booking.LocationRef)
+            || MatchesScopedValue(user, "Bookings", "Location", booking.LocationRef);
+    }
+
+    public static bool HasUnrestrictedScope(AdviserUserContext user, string area)
+    {
+        if (user.AccessScopes.Any(scope =>
+                IsAreaMatch(scope.Area, area)
+                && (scope.ScopeType.Equals("All", StringComparison.OrdinalIgnoreCase)
+                    || scope.ScopeType.Equals("Organisation", StringComparison.OrdinalIgnoreCase))))
+        {
+            return true;
+        }
+
+        return user.Permissions.Contains("*", StringComparer.OrdinalIgnoreCase)
+            || (user.AccessScopes.Count == 0
+                && HasLegacyBroadBookingPermission(user))
+            || (user.Permissions.Contains(Domain.Auth.BookingPermissionNames.AdminRead, StringComparer.OrdinalIgnoreCase)
+                && user.Roles.Any(role =>
+                    role.Equals("Admin", StringComparison.OrdinalIgnoreCase)
+                    || role.Equals("Operations", StringComparison.OrdinalIgnoreCase)));
+    }
+
+    public static bool MatchesScopedValue(AdviserUserContext user, string area, string scopeType, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return false;
+
+        return user.AccessScopes.Any(scope =>
+            IsAreaMatch(scope.Area, area)
+            && scope.ScopeType.Equals(scopeType, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(scope.ScopeValue, value.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsAreaMatch(string? scopeArea, string area)
+        => string.Equals(scopeArea, "*", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(scopeArea, area, StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasLegacyBroadBookingPermission(AdviserUserContext user)
+        => user.Permissions.Contains(Domain.Auth.BookingPermissionNames.AdminRead, StringComparer.OrdinalIgnoreCase)
+            || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.CancelDirect, StringComparer.OrdinalIgnoreCase)
+            || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.RearrangeDirect, StringComparer.OrdinalIgnoreCase)
+            || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.CancelAsLeadTech, StringComparer.OrdinalIgnoreCase)
+            || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.RearrangeAsLeadTech, StringComparer.OrdinalIgnoreCase);
 
     private static bool IsManager(AdviserUserContext user)
         => user.Roles.Any(role =>

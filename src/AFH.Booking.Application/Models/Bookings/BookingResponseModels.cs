@@ -53,11 +53,13 @@ public sealed class BookingDetailsResponse
     public string TransactionRef { get; init; } = default!;
     public string AdviserId { get; init; } = default!;
     public string AdviserName { get; init; } = default!;
+    public string? AdviserRegion { get; init; }
     public DateTime StartUtc { get; init; }
     public DateTime EndUtc { get; init; }
     public int DurationMinutes { get; init; }
     public bool IsRemote { get; init; }
     public string? MeetingType { get; init; }
+    public string? LocationRef { get; init; }
     public string Status { get; init; } = default!;
     public DateTime? ConfirmedUtc { get; init; }
     public DateTime? CancelledUtc { get; init; }

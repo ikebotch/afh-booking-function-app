@@ -20,6 +20,8 @@ public static class EndpointAccessPolicies
             ["Admin_SyncAdviserDirectoryProjection"] = InternalOnly(),
             ["Admin_System_Audit"] = UserPermission(BookingPermissionNames.SystemRead),
             ["Admin_System_AuditLog"] = UserPermission(BookingPermissionNames.SystemRead),
+            ["Admin_BookingPolicyDefaults_Get"] = UserPermission(BookingPermissionNames.SystemRead),
+            ["Admin_BookingPolicyDefaults_Patch"] = UserPermission(BookingPermissionNames.SystemManage),
             ["Admin_System_FeatureFlags_Delete"] = UserPermission(BookingPermissionNames.SystemManage),
             ["Admin_System_FeatureFlags_List"] = UserPermission(BookingPermissionNames.SystemRead),
             ["Admin_System_FeatureFlags_Upsert"] = UserPermission(BookingPermissionNames.SystemManage),

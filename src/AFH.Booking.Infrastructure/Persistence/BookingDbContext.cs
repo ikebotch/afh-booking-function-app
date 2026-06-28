@@ -56,6 +56,12 @@ public sealed class BookingDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasSequence<long>("ApprovalRequestReferenceNumber", "dbo")
+            .StartsAt(199L);
+
+        modelBuilder.HasSequence<long>("BookingReferenceNumber", "dbo")
+            .StartsAt(1001L);
+
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);
         modelBuilder.ApplyConfiguration(new AdviserProfileProjectionModelConfiguration());
         modelBuilder.AddErrorRecordEntity();

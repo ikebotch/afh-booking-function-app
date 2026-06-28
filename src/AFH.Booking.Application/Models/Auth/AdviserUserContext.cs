@@ -10,4 +10,13 @@ public sealed class AdviserUserContext
     public string? JobRole { get; init; }
     public IReadOnlyList<string> Roles { get; init; } = [];
     public IReadOnlyList<string> Permissions { get; init; } = [];
+    public IReadOnlyList<AdviserUserAccessScope> AccessScopes { get; init; } = [];
+}
+
+public sealed class AdviserUserAccessScope
+{
+    public string Area { get; init; } = string.Empty;
+    public string ScopeType { get; init; } = string.Empty;
+    public string? ScopeValue { get; init; }
+    public string? DisplayName { get; init; }
 }

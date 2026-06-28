@@ -70,6 +70,24 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             .ThenInclude(x => x.Transaction)
             .AsQueryable();
 
+        if (!query.HasUnrestrictedAccess)
+        {
+            var scopedAdviserIds = Normalize(query.ScopedAdviserIds);
+            var scopedRegions = Normalize(query.ScopedRegions);
+            var scopedLocationRefs = Normalize(query.ScopedLocationRefs);
+
+            if (scopedAdviserIds.Length == 0 && scopedRegions.Length == 0 && scopedLocationRefs.Length == 0)
+                return rows.Where(_ => false);
+
+            rows = rows.Where(x =>
+                scopedAdviserIds.Contains(x.Slot.AdviserId)
+                || scopedLocationRefs.Contains(x.Slot.LocationRef!)
+                || scopedLocationRefs.Contains(x.Slot.Transaction.LocationRef!)
+                || _db.AdviserProfileProjections.Any(profile =>
+                    scopedRegions.Contains(profile.Region)
+                    && profile.AdviserId == x.Slot.AdviserId));
+        }
+
         if (query.BookingIds.Count > 0)
         {
             var bookingIds = Normalize(query.BookingIds);

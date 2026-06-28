@@ -35,8 +35,14 @@ public sealed class SearchAdminBookingsFunction
     [BookingOpenApiQueryParameter("pageSize", "integer", Description = "Page size from 1 to 100.", Example = "25")]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "v1/admin/bookings")] HttpRequestData req,
+        FunctionContext context,
         CancellationToken ct)
     {
+        var authResult = await BookingFunctionActorContext.BuildAuthenticatedAsync(req, context, ct);
+        if (!authResult.IsSuccess)
+            return authResult.Response!;
+
+        var scope = BuildBookingSearchScope(authResult.User!);
         var fromIsValid = TryParseUtc(req.Query("from"), out var fromUtc, out var fromError);
         var toIsValid = TryParseUtc(req.Query("to"), out var toUtc, out var toError);
 
@@ -55,6 +61,10 @@ public sealed class SearchAdminBookingsFunction
             ClientRefs = req.QueryMany("clientRef").Concat(req.QueryMany("clientId")).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             LocationRefs = req.QueryMany("locationRef"),
             MeetingTypes = req.QueryMany("meetingType"),
+            HasUnrestrictedAccess = scope.HasUnrestrictedAccess,
+            ScopedAdviserIds = scope.ScopedAdviserIds,
+            ScopedRegions = scope.ScopedRegions,
+            ScopedLocationRefs = scope.ScopedLocationRefs,
             FromUtc = fromUtc,
             ToUtc = toUtc,
             Page = ParseInt(req.Query("page"), 1),
@@ -87,6 +97,57 @@ public sealed class SearchAdminBookingsFunction
 
     private static int ParseInt(string? value, int fallback)
         => int.TryParse(value, out var parsed) ? parsed : fallback;
+
+    private static BookingSearchAccessScope BuildBookingSearchScope(AFH.Booking.Application.Models.Auth.AdviserUserContext user)
+    {
+        if (BookingFunctionActorContext.HasUnrestrictedScope(user, "Bookings"))
+            return new BookingSearchAccessScope(true, [], [], []);
+
+        var adviserIds = new List<string>();
+        var regions = new List<string>();
+        var locationRefs = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(user.AdviserId))
+            adviserIds.Add(user.AdviserId);
+
+        foreach (var scope in user.AccessScopes.Where(scope =>
+                     string.Equals(scope.Area, "Bookings", StringComparison.OrdinalIgnoreCase)
+                     || string.Equals(scope.Area, "*", StringComparison.OrdinalIgnoreCase)))
+        {
+            if (scope.ScopeType.Equals("AdviserSelf", StringComparison.OrdinalIgnoreCase)
+                || scope.ScopeType.Equals("Adviser", StringComparison.OrdinalIgnoreCase))
+            {
+                AddIfPresent(adviserIds, scope.ScopeValue);
+            }
+            else if (scope.ScopeType.Equals("Region", StringComparison.OrdinalIgnoreCase))
+            {
+                AddIfPresent(regions, scope.ScopeValue);
+            }
+            else if (scope.ScopeType.Equals("Branch", StringComparison.OrdinalIgnoreCase)
+                     || scope.ScopeType.Equals("Location", StringComparison.OrdinalIgnoreCase))
+            {
+                AddIfPresent(locationRefs, scope.ScopeValue);
+            }
+        }
+
+        return new BookingSearchAccessScope(
+            false,
+            adviserIds.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            regions.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            locationRefs.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
+    }
+
+    private static void AddIfPresent(List<string> values, string? value)
+    {
+        if (!string.IsNullOrWhiteSpace(value))
+            values.Add(value.Trim());
+    }
+
+    private sealed record BookingSearchAccessScope(
+        bool HasUnrestrictedAccess,
+        IReadOnlyList<string> ScopedAdviserIds,
+        IReadOnlyList<string> ScopedRegions,
+        IReadOnlyList<string> ScopedLocationRefs);
 
     private static bool TryParseUtc(string? value, out DateTime? parsed, out string? error)
     {

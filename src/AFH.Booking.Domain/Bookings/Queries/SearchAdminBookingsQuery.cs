@@ -10,6 +10,10 @@ public sealed class SearchAdminBookingsQuery
     public IReadOnlyList<string> ClientRefs { get; init; } = [];
     public IReadOnlyList<string> LocationRefs { get; init; } = [];
     public IReadOnlyList<string> MeetingTypes { get; init; } = [];
+    public bool HasUnrestrictedAccess { get; init; } = true;
+    public IReadOnlyList<string> ScopedAdviserIds { get; init; } = [];
+    public IReadOnlyList<string> ScopedRegions { get; init; } = [];
+    public IReadOnlyList<string> ScopedLocationRefs { get; init; } = [];
     public DateTime? FromUtc { get; init; }
     public DateTime? ToUtc { get; init; }
     public int Page { get; init; } = 1;

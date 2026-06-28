@@ -10,6 +10,7 @@ public sealed class BookingDetailsService : IBookingDetailsService
     private readonly IBookingHoldRepository _holds;
     private readonly IBookingSlotRepository _slots;
     private readonly IBookingTransactionRepository _transactions;
+    private readonly IAdviserProfileProjectionRepository _adviserProfiles;
     private readonly IBookingTokenService _tokenService;
     private readonly NotificationsOptions _notificationOptions;
 
@@ -19,10 +20,28 @@ public sealed class BookingDetailsService : IBookingDetailsService
         IBookingTransactionRepository transactions,
         IBookingTokenService tokenService,
         IOptions<NotificationsOptions> notificationOptions)
+        : this(
+            holds,
+            slots,
+            transactions,
+            NullAdviserProfileProjectionRepository.Instance,
+            tokenService,
+            notificationOptions)
+    {
+    }
+
+    public BookingDetailsService(
+        IBookingHoldRepository holds,
+        IBookingSlotRepository slots,
+        IBookingTransactionRepository transactions,
+        IAdviserProfileProjectionRepository adviserProfiles,
+        IBookingTokenService tokenService,
+        IOptions<NotificationsOptions> notificationOptions)
     {
         _holds = holds;
         _slots = slots;
         _transactions = transactions;
+        _adviserProfiles = adviserProfiles;
         _tokenService = tokenService;
         _notificationOptions = notificationOptions.Value;
     }
@@ -61,6 +80,7 @@ public sealed class BookingDetailsService : IBookingDetailsService
 
         var links = await BuildSelfServiceLinksAsync(hold.Id, ct);
         var canUseActionLinks = BookingSelfServiceStatusRules.CanUseActionLinks(hold.Status);
+        var adviserProfile = await _adviserProfiles.GetAsync(slot.AdviserId, ct);
 
         var response = new BookingDetailsResponse
         {
@@ -71,11 +91,13 @@ public sealed class BookingDetailsService : IBookingDetailsService
             TransactionRef = tx.TransactionRef,
             AdviserId = slot.AdviserId,
             AdviserName = slot.AdviserName,
+            AdviserRegion = adviserProfile?.Region,
             StartUtc = slot.StartUtc,
             EndUtc = slot.EndUtc,
             DurationMinutes = (int)Math.Round((slot.EndUtc - slot.StartUtc).TotalMinutes),
             IsRemote = tx.IsRemote,
             MeetingType = tx.MeetingType,
+            LocationRef = slot.LocationRef ?? tx.LocationRef,
             Status = hold.Status.ToString(),
             ConfirmedUtc = hold.ConfirmedUtc,
             CancelledUtc = hold.CancelledUtc,
@@ -94,5 +116,22 @@ public sealed class BookingDetailsService : IBookingDetailsService
         return tokenResult.IsSuccess
             ? BookingSelfServiceLinkBuilder.Build(_notificationOptions.ClientPortalBaseUrl, bookingId, tokenResult.Value)
             : null;
+    }
+
+    private sealed class NullAdviserProfileProjectionRepository : IAdviserProfileProjectionRepository
+    {
+        public static readonly NullAdviserProfileProjectionRepository Instance = new();
+
+        public Task UpsertRangeAsync(IReadOnlyList<Models.AdviserProjection.AdviserProfileProjectionRecord> advisers, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public Task<IReadOnlyList<Models.AdviserProjection.AdviserProfileProjectionRecord>> ListAsync(DateTime? sinceUtc, int take, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<Models.AdviserProjection.AdviserProfileProjectionRecord>>([]);
+
+        public Task<IReadOnlyList<Models.AdviserProjection.AdviserProfileProjectionRecord>> ListActiveAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<Models.AdviserProjection.AdviserProfileProjectionRecord>>([]);
+
+        public Task<Models.AdviserProjection.AdviserProfileProjectionRecord?> GetAsync(string adviserId, CancellationToken ct)
+            => Task.FromResult<Models.AdviserProjection.AdviserProfileProjectionRecord?>(null);
     }
 }

@@ -1,5 +1,5 @@
 using AFH.Booking.Application.Abstractions.Persistence;
-using Microsoft.EntityFrameworkCore;
+using AFH.Booking.Infrastructure.Persistence.Models;
 
 namespace AFH.Booking.Infrastructure.Persistence;
 
@@ -14,20 +14,40 @@ public sealed class SqlBookingReferenceGenerator : IBookingReferenceGenerator
 
     public async Task<string> GenerateBookingReferenceAsync(string bookingId, CancellationToken ct)
     {
-        var number = await NextSequenceValueAsync("BookingReferenceNumber", ct);
+        var number = await AllocateBookingReferenceNumberAsync(ct);
         return $"BK-{number:0000}-{CreateSuffix(bookingId)}";
     }
 
     public async Task<string> GenerateApprovalRequestReferenceAsync(string approvalRequestId, CancellationToken ct)
     {
-        var number = await NextSequenceValueAsync("ApprovalRequestReferenceNumber", ct);
+        var number = await AllocateApprovalRequestReferenceNumberAsync(ct);
         return $"REQ-{number:0000}";
     }
 
-    private async Task<long> NextSequenceValueAsync(string sequenceName, CancellationToken ct)
+    private async Task<long> AllocateBookingReferenceNumberAsync(CancellationToken ct)
     {
-        var sql = $"SELECT CAST(NEXT VALUE FOR dbo.{sequenceName} AS bigint) AS Value";
-        return await _db.Database.SqlQueryRaw<long>(sql).SingleAsync(ct);
+        var allocation = new BookingReferenceAllocationModel
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            CreatedUtc = DateTime.UtcNow
+        };
+
+        _db.BookingReferenceAllocations.Add(allocation);
+        await _db.SaveChangesAsync(ct);
+        return allocation.Value;
+    }
+
+    private async Task<long> AllocateApprovalRequestReferenceNumberAsync(CancellationToken ct)
+    {
+        var allocation = new ApprovalRequestReferenceAllocationModel
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            CreatedUtc = DateTime.UtcNow
+        };
+
+        _db.ApprovalRequestReferenceAllocations.Add(allocation);
+        await _db.SaveChangesAsync(ct);
+        return allocation.Value;
     }
 
     private static string CreateSuffix(string value)

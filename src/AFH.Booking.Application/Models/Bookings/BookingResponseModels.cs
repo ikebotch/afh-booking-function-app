@@ -86,6 +86,14 @@ public sealed class AdminBookingSearchResponse
     public int TotalPages { get; init; }
 }
 
+public sealed class AdminBookingFilterOptionsResponse
+{
+    public IReadOnlyList<string> AdviserNames { get; init; } = [];
+    public IReadOnlyList<string> Modes { get; init; } = [];
+    public IReadOnlyList<string> Statuses { get; init; } = [];
+    public IReadOnlyList<string> MeetingTypes { get; init; } = [];
+}
+
 public sealed class AdminBookingSearchItem
 {
     public string BookingId { get; init; } = default!;

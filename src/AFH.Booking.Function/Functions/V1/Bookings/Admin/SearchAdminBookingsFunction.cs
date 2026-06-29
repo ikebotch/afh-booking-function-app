@@ -31,7 +31,7 @@ public sealed class SearchAdminBookingsFunction
     [BookingOpenApiQueryParameter("clientRef", "string", Description = "Optional client/user reference filter. clientId is accepted as an alias. Repeat the parameter or use comma-separated values for multiple selections.", Example = "client-123")]
     [BookingOpenApiQueryParameter("locationRef", "string", Description = "Optional location reference filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "branch-123")]
     [BookingOpenApiQueryParameter("meetingType", "string", Description = "Optional meeting type filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "Review")]
-    [BookingOpenApiQueryParameter("mode", "string", Description = "Optional mode filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "In-Person Meeting")]
+    [BookingOpenApiQueryParameter("mode", "string", Description = "Optional mode filter: Online, In-Person or Phone. Repeat the parameter or use comma-separated values for multiple selections.", Example = "In-Person")]
     [BookingOpenApiQueryParameter("from", "string", Format = "date-time", Description = "Optional UTC lower bound for booking start.", Example = "2026-07-01T00:00:00Z")]
     [BookingOpenApiQueryParameter("to", "string", Format = "date-time", Description = "Optional UTC upper bound for booking start.", Example = "2026-07-31T23:59:59Z")]
     [BookingOpenApiQueryParameter("page", "integer", Description = "1-based page number.", Example = "1")]

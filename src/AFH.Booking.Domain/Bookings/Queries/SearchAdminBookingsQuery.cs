@@ -2,14 +2,17 @@ namespace AFH.Booking.Domain.Bookings.Queries;
 
 public sealed class SearchAdminBookingsQuery
 {
+    public string? Search { get; init; }
     public IReadOnlyList<string> BookingIds { get; init; } = [];
     public IReadOnlyList<string> TransactionIds { get; init; } = [];
     public IReadOnlyList<string> TransactionRefs { get; init; } = [];
     public IReadOnlyList<string> Statuses { get; init; } = [];
     public IReadOnlyList<string> AdviserIds { get; init; } = [];
+    public IReadOnlyList<string> AdviserNames { get; init; } = [];
     public IReadOnlyList<string> ClientRefs { get; init; } = [];
     public IReadOnlyList<string> LocationRefs { get; init; } = [];
     public IReadOnlyList<string> MeetingTypes { get; init; } = [];
+    public IReadOnlyList<string> Modes { get; init; } = [];
     public bool HasUnrestrictedAccess { get; init; } = true;
     public IReadOnlyList<string> ScopedAdviserIds { get; init; } = [];
     public IReadOnlyList<string> ScopedRegions { get; init; } = [];

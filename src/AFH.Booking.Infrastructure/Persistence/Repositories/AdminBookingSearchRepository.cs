@@ -11,6 +11,10 @@ namespace AFH.Booking.Infrastructure.Persistence.Repositories;
 
 public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
 {
+    private const string OnlineMode = "Online";
+    private const string InPersonMode = "In-Person";
+    private const string PhoneMode = "Phone";
+
     private readonly BookingDbContext _db;
     private readonly IClientDirectory _clients;
     private readonly ILogger<AdminBookingSearchRepository> _logger;
@@ -155,11 +159,8 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             rows = rows.Where(x =>
                 (x.Id != null && x.Id.ToLower().Contains(search))
                 || (x.Reference != null && x.Reference.ToLower().Contains(search))
-                || (x.Slot.Transaction.BookingReference != null && x.Slot.Transaction.BookingReference.ToLower().Contains(search))
                 || (x.Slot.Transaction.TransactionRef != null && x.Slot.Transaction.TransactionRef.ToLower().Contains(search))
                 || (x.UserId != null && x.UserId.ToLower().Contains(search))
-                || (x.Slot.Transaction.ClientName != null && x.Slot.Transaction.ClientName.ToLower().Contains(search))
-                || (x.Slot.Transaction.ClientEmail != null && x.Slot.Transaction.ClientEmail.ToLower().Contains(search))
                 || (x.Slot.AdviserName != null && x.Slot.AdviserName.ToLower().Contains(search))
                 || (x.Slot.AdviserId != null && x.Slot.AdviserId.ToLower().Contains(search))
                 || (x.Slot.Transaction.MeetingType != null && x.Slot.Transaction.MeetingType.ToLower().Contains(search))
@@ -227,10 +228,21 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
         if (query.Modes.Count > 0)
         {
             var modes = Normalize(query.Modes);
-            var includeRemote = modes.Any(IsRemoteMode);
-            var includeInPerson = modes.Any(IsInPersonMode);
-            if (includeRemote != includeInPerson)
-                rows = rows.Where(x => x.Slot.Transaction.IsRemote == includeRemote);
+            var includeOnline = modes.Contains(OnlineMode, StringComparer.Ordinal);
+            var includeInPerson = modes.Contains(InPersonMode, StringComparer.Ordinal);
+            var includePhone = modes.Contains(PhoneMode, StringComparer.Ordinal);
+
+            if (includeOnline || includeInPerson || includePhone)
+            {
+                rows = rows.Where(x =>
+                    (includeOnline && x.Slot.Transaction.IsRemote && x.Slot.Transaction.MeetingType != PhoneMode)
+                    || (includeInPerson && !x.Slot.Transaction.IsRemote)
+                    || (includePhone && x.Slot.Transaction.IsRemote && x.Slot.Transaction.MeetingType == PhoneMode));
+            }
+            else
+            {
+                rows = rows.Where(_ => false);
+            }
         }
 
         if (query.FromUtc.HasValue)
@@ -254,19 +266,6 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             .Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-
-    private static bool IsRemoteMode(string value)
-        => value.Equals("online video", StringComparison.OrdinalIgnoreCase)
-           || value.Equals("online", StringComparison.OrdinalIgnoreCase)
-           || value.Equals("remote", StringComparison.OrdinalIgnoreCase)
-           || value.Equals("video", StringComparison.OrdinalIgnoreCase);
-
-    private static bool IsInPersonMode(string value)
-        => value.Equals("in-person meeting", StringComparison.OrdinalIgnoreCase)
-           || value.Equals("in person meeting", StringComparison.OrdinalIgnoreCase)
-           || value.Equals("in-person", StringComparison.OrdinalIgnoreCase)
-           || value.Equals("in person", StringComparison.OrdinalIgnoreCase)
-           || value.Equals("branch", StringComparison.OrdinalIgnoreCase);
 
     private sealed class NullClientDirectory : IClientDirectory
     {

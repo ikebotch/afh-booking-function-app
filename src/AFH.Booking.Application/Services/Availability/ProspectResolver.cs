@@ -27,6 +27,9 @@ public sealed class ProspectResolver : IProspectResolver
         if (query.IsRemote)
             return (null, null);
 
+        if (HasCompleteDestinationAddress(query))
+            return (null, null);
+
         var lookup = ResolveLeadLookup(query);
         var leadKey = lookup.Reference;
         if (string.IsNullOrWhiteSpace(leadKey))
@@ -101,6 +104,12 @@ public sealed class ProspectResolver : IProspectResolver
 
         return (query.ClientId, "ClientId");
     }
+
+    private static bool HasCompleteDestinationAddress(GetAvailabilityQuery query)
+        => query.DestinationAddress is not null &&
+           !string.IsNullOrWhiteSpace(query.DestinationAddress.Line1) &&
+           !string.IsNullOrWhiteSpace(query.DestinationAddress.Town) &&
+           !string.IsNullOrWhiteSpace(query.DestinationAddress.Postcode);
 
     private static string? HashForLog(string? value)
     {

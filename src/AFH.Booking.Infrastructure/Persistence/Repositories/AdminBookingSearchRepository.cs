@@ -51,7 +51,7 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
                 BookingReference = x.Slot.Transaction.BookingReference ?? x.Reference,
                 TransactionId = x.Slot.TransactionId,
                 TransactionRef = x.Slot.Transaction.TransactionRef,
-                ClientRef = x.UserId,
+                ClientRef = x.Slot.Transaction.TransactionRef,
                 ClientName = x.Slot.Transaction.ClientName,
                 ClientEmail = x.Slot.Transaction.ClientEmail,
                 ClientAddressLine1 = x.Slot.Transaction.ClientAddressLine1,
@@ -93,13 +93,26 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
 
         foreach (var item in items)
         {
-            if (string.IsNullOrWhiteSpace(item.ClientRef))
+            var lookupRefs = new[] { item.ClientRef, item.TransactionRef }
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (lookupRefs.Length == 0)
                 continue;
 
-            if (!cache.TryGetValue(item.ClientRef, out var client))
+            ClientDirectoryItem? client = null;
+            foreach (var lookupRef in lookupRefs)
             {
-                client = await TryGetClientAsync(item.ClientRef, ct);
-                cache[item.ClientRef] = client;
+                if (!cache.TryGetValue(lookupRef, out client))
+                {
+                    client = await TryGetClientAsync(lookupRef, ct);
+                    cache[lookupRef] = client;
+                }
+
+                if (client is not null)
+                    break;
             }
 
             if (client is null)
@@ -225,7 +238,9 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
         if (query.ClientRefs.Count > 0)
         {
             var clientRefs = Normalize(query.ClientRefs);
-            rows = rows.Where(x => clientRefs.Contains(x.UserId));
+            rows = rows.Where(x =>
+                clientRefs.Contains(x.Slot.Transaction.TransactionRef)
+                || clientRefs.Contains(x.UserId));
         }
 
         if (query.LocationRefs.Count > 0)

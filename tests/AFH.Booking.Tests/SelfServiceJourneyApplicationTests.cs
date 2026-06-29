@@ -206,6 +206,115 @@ public sealed class SelfServiceJourneyApplicationTests
     }
 
     [Fact]
+    public async Task RearrangementOptions_InPersonWithCapturedAddress_UsesSnapshotInsteadOfLeadLookup()
+    {
+        var hold = BookingHold.Rehydrate(
+            "booking-1",
+            "slot-1",
+            "user-1",
+            BookingHoldStatus.Confirmed,
+            DateTime.UtcNow.AddHours(-2),
+            DateTime.UtcNow.AddHours(1),
+            DateTime.UtcNow.AddHours(-1),
+            null,
+            null,
+            null,
+            "provider-1",
+            null);
+
+        var slot = BookingSlot.Rehydrate(
+            "slot-1",
+            "tx-1",
+            "adviser-1",
+            "Adviser One",
+            DateTime.UtcNow.AddDays(1),
+            DateTime.UtcNow.AddDays(1).AddHours(1),
+            5,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            DateTime.UtcNow);
+
+        var tx = BookingTransaction.Rehydrate(
+            "tx-1",
+            "original-client-ref",
+            bookingReference: "BK-1001",
+            clientName: "Fiona Gallagher",
+            clientEmail: "fiona@example.com",
+            clientAddressLine1: "42 King Street",
+            clientAddressLine2: null,
+            clientTown: "Manchester",
+            clientCounty: null,
+            clientPostcode: "M2 4LQ",
+            proposedStartUtc: DateTime.UtcNow,
+            duration: TimeSpan.FromHours(1),
+            timezone: "Europe/London",
+            isRemote: false,
+            meetingType: "Review",
+            locationRef: null,
+            status: BookingTransactionStatus.Completed,
+            createdUtc: DateTime.UtcNow,
+            expiresUtc: null);
+
+        var holds = new Mock<IBookingHoldRepository>();
+        holds.Setup(x => x.GetAsync("booking-1", It.IsAny<CancellationToken>())).ReturnsAsync(hold);
+
+        var slots = new Mock<IBookingSlotRepository>();
+        slots.Setup(x => x.GetAsync("slot-1", It.IsAny<CancellationToken>())).ReturnsAsync(slot);
+
+        var transactions = new Mock<IBookingTransactionRepository>();
+        transactions.Setup(x => x.GetAsync("tx-1", It.IsAny<CancellationToken>())).ReturnsAsync(tx);
+
+        var availabilityQueries = new List<GetAvailabilityQuery>();
+        var availability = new Mock<IAvailabilityService>();
+        availability.Setup(x => x.HandleAsync(It.IsAny<GetAvailabilityQuery>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((GetAvailabilityQuery query, CancellationToken _) =>
+            {
+                availabilityQueries.Add(query);
+                return Result<GetAvailabilityResponse>.Ok(new GetAvailabilityResponse
+                {
+                    TransactionId = query.TransactionId ?? string.Empty,
+                    Advisers = [],
+                    Paging = new()
+                });
+            });
+
+        var service = new RearrangementOptionsService(
+            holds.Object,
+            slots.Object,
+            transactions.Object,
+            availability.Object);
+
+        var result = await service.HandleAsync(
+            new GetRearrangementOptionsCommand
+            {
+                BookingId = "booking-1",
+                IsRemote = false,
+                Limit = 5
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(2, availabilityQueries.Count);
+        Assert.All(availabilityQueries, query =>
+        {
+            Assert.False(query.IsRemote);
+            Assert.Null(query.ClientLookupRef);
+            Assert.Null(query.ClientLookupSource);
+            Assert.Equal("Fiona Gallagher", query.ClientName);
+            Assert.Equal("fiona@example.com", query.ClientEmail);
+            Assert.NotNull(query.DestinationAddress);
+            Assert.Equal("42 King Street", query.DestinationAddress!.Line1);
+            Assert.Equal("Manchester", query.DestinationAddress.Town);
+            Assert.Equal("M2 4LQ", query.DestinationAddress.Postcode);
+        });
+    }
+
+    [Fact]
     public async Task RearrangementOptions_InPersonMissingOriginalTransactionRef_ReturnsValidationBeforeAvailabilitySearch()
     {
         var hold = BookingHold.Rehydrate(

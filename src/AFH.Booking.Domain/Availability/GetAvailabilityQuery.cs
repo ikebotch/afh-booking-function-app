@@ -11,6 +11,8 @@ public sealed class GetAvailabilityQuery
     public string? Cursor { get; set; }
 
     public string? ClientId { get; init; }
+    public string? ClientName { get; init; }
+    public string? ClientEmail { get; init; }
     public string? TransactionId { get; init; }
     public string? ClientLookupRef { get; init; }
     public string? ClientLookupSource { get; init; }

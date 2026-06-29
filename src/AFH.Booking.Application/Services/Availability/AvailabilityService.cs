@@ -155,8 +155,8 @@ public sealed class AvailabilityService : IAvailabilityService
                 : await _references.GenerateBookingReferenceAsync(tx.Id, ct));
 
             tx.CaptureClientSnapshot(
-                BuildClientName(client),
-                client?.Email,
+                BuildClientName(client) ?? q.ClientName,
+                client?.Email ?? q.ClientEmail,
                 client?.StreetName1 ?? q.DestinationAddress?.Line1,
                 client?.StreetName2,
                 client?.Town ?? q.DestinationAddress?.Town,

@@ -1,8 +1,11 @@
+using AFH.Booking.Application.Abstractions.Clients;
+using AFH.Booking.Domain.Client;
 using AFH.Booking.Domain.Bookings.Queries;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using AFH.Booking.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AFH.Booking.Tests;
 
@@ -25,7 +28,7 @@ public sealed class AdminBookingSearchRepositoryTests
         Assert.Equal(2, result.TotalPages);
         Assert.Equal(["booking-3", "booking-1"], result.Items.Select(x => x.BookingId).ToArray());
         Assert.Equal("Confirmed", result.Items[1].Status);
-        Assert.Equal("client-1", result.Items[1].ClientRef);
+        Assert.Equal("TRX-1", result.Items[1].ClientRef);
     }
 
     [Fact]
@@ -39,7 +42,7 @@ public sealed class AdminBookingSearchRepositoryTests
         {
             AdviserIds = ["adv-1"],
             Statuses = ["confirmed"],
-            ClientRefs = ["client-1"],
+            ClientRefs = ["TRX-1"],
             FromUtc = new DateTime(2026, 7, 15, 0, 0, 0, DateTimeKind.Utc),
             ToUtc = new DateTime(2026, 7, 15, 23, 59, 59, DateTimeKind.Utc),
             Page = 1,
@@ -50,6 +53,41 @@ public sealed class AdminBookingSearchRepositoryTests
         Assert.Equal("booking-1", item.BookingId);
         Assert.Equal("TRX-1", item.TransactionRef);
         Assert.Equal("Review", item.MeetingType);
+    }
+
+    [Fact]
+    public async Task SearchAsync_EnrichesClientSnapshotFromTransactionRef()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+        var clients = new StubClientDirectory(new Dictionary<string, ClientDirectoryItem>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["TRX-1"] = new()
+            {
+                FirstName = "Alice",
+                LastName = "Smith",
+                Email = "alice.smith@example.com",
+                StreetName1 = "42 King Street",
+                Town = "Manchester",
+                PostalCode = "M2 4LQ"
+            }
+        });
+        var repository = new AdminBookingSearchRepository(db, clients, NullLogger<AdminBookingSearchRepository>.Instance);
+
+        var result = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            BookingIds = ["booking-1"],
+            Page = 1,
+            PageSize = 10
+        }, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("TRX-1", item.ClientRef);
+        Assert.Equal("Alice Smith", item.ClientName);
+        Assert.Equal("alice.smith@example.com", item.ClientEmail);
+        Assert.Equal("42 King Street", item.ClientAddressLine1);
+        Assert.Equal("Manchester", item.ClientTown);
+        Assert.Equal("M2 4LQ", item.ClientPostcode);
     }
 
     [Fact]
@@ -150,4 +188,17 @@ public sealed class AdminBookingSearchRepositoryTests
             CancelReason = cancelledUtc.HasValue ? "Client request" : null,
             RowVersion = []
         };
+
+    private sealed class StubClientDirectory : IClientDirectory
+    {
+        private readonly IReadOnlyDictionary<string, ClientDirectoryItem> _clients;
+
+        public StubClientDirectory(IReadOnlyDictionary<string, ClientDirectoryItem> clients)
+        {
+            _clients = clients;
+        }
+
+        public Task<ClientDirectoryItem?> GetAsync(string transactionIdOrClientId, CancellationToken ct)
+            => Task.FromResult(_clients.TryGetValue(transactionIdOrClientId, out var client) ? client : null);
+    }
 }

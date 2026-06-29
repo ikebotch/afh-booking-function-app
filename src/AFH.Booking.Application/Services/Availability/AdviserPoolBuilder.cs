@@ -132,14 +132,14 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
         IReadOnlyList<string> normalizedRequiredSkills,
         CancellationToken ct)
     {
-        if (query.IsRemote || prospect is null)
+        if (query.IsRemote || (prospect is null && !HasCompleteDestinationAddress(query.DestinationAddress)))
             return null;
 
         var destination = new LocationAddress
         {
-            Line1 = prospect.StreetName1 ?? query.DestinationAddress?.Line1 ?? string.Empty,
-            Town = prospect.Town ?? query.DestinationAddress?.Town ?? string.Empty,
-            Postcode = prospect.PostalCode ?? query.DestinationAddress?.Postcode ?? string.Empty,
+            Line1 = prospect?.StreetName1 ?? query.DestinationAddress?.Line1 ?? string.Empty,
+            Town = prospect?.Town ?? query.DestinationAddress?.Town ?? string.Empty,
+            Postcode = prospect?.PostalCode ?? query.DestinationAddress?.Postcode ?? string.Empty,
             Country = query.DestinationAddress?.Country ?? "UK"
         };
 
@@ -216,6 +216,12 @@ public sealed class AdviserPoolBuilder : IAdviserPoolBuilder
 
         return result;
     }
+
+    private static bool HasCompleteDestinationAddress(LocationAddress? address)
+        => address is not null &&
+           !string.IsNullOrWhiteSpace(address.Line1) &&
+           !string.IsNullOrWhiteSpace(address.Town) &&
+           !string.IsNullOrWhiteSpace(address.Postcode);
 
     private async Task<List<AdviserProfileProjectionRecord>> BuildCandidateProfilesAsync(
         GetAvailabilityQuery query,

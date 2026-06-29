@@ -4,6 +4,7 @@ using AFH.Booking.Application.Models.Common;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Domain.Availability;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Booking.Domain.Location;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Security.Cryptography;
 using System.Text;
@@ -78,12 +79,15 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
         var isRemote = cmd.IsRemote ?? tx.IsRemote;
         var meetingType = string.IsNullOrWhiteSpace(cmd.MeetingType) ? tx.MeetingType ?? "Review" : cmd.MeetingType;
         var limit = cmd.Limit.GetValueOrDefault(10);
-        var clientLookupRef = ResolveClientLookupRef(tx, isRemote);
-        if (!isRemote && string.IsNullOrWhiteSpace(clientLookupRef))
+        var destinationAddress = BuildDestinationAddress(tx);
+        var clientLookupRef = ResolveClientLookupRef(tx, isRemote, destinationAddress);
+        if (!isRemote &&
+            string.IsNullOrWhiteSpace(clientLookupRef) &&
+            !HasCompleteDestinationAddress(destinationAddress))
         {
             return Result<RearrangementOptionsResponse>.Fail(
                 HttpStatusCode.BadRequest,
-                "Original booking transaction reference is required for in-person rearrangement options.",
+                "Original booking transaction reference or captured client address is required for in-person rearrangement options.",
                 Errors.Validation);
         }
 
@@ -92,6 +96,8 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
         var assignedQuery = new GetAvailabilityQuery
         {
             ClientId = tx.TransactionRef,
+            ClientName = tx.ClientName,
+            ClientEmail = tx.ClientEmail,
             TransactionId = tx.Id,
             ClientLookupRef = clientLookupRef,
             ClientLookupSource = clientLookupRef is null ? null : "OriginalBookingTransactionRef",
@@ -100,6 +106,7 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
             IsRemote = isRemote,
             MeetingType = meetingType,
             LocationRef = tx.LocationRef,
+            DestinationAddress = destinationAddress,
             PreferredAdviserIds = new[] { slot.AdviserId },
             Limit = limit,
             Take = limit,
@@ -118,6 +125,8 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
         var alternativeQuery = new GetAvailabilityQuery
         {
             ClientId = tx.TransactionRef,
+            ClientName = tx.ClientName,
+            ClientEmail = tx.ClientEmail,
             TransactionId = tx.Id,
             ClientLookupRef = clientLookupRef,
             ClientLookupSource = clientLookupRef is null ? null : "OriginalBookingTransactionRef",
@@ -126,6 +135,7 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
             IsRemote = isRemote,
             MeetingType = meetingType,
             LocationRef = tx.LocationRef,
+            DestinationAddress = destinationAddress,
             ExcludeAdviserIds = new[] { slot.AdviserId },
             Limit = limit,
             Take = limit,
@@ -183,8 +193,32 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
             }
         };
 
-    private static string? ResolveClientLookupRef(BookingTransaction tx, bool isRemote)
-        => isRemote ? null : tx.TransactionRef;
+    private static string? ResolveClientLookupRef(BookingTransaction tx, bool isRemote, LocationAddress? destinationAddress)
+        => isRemote || HasCompleteDestinationAddress(destinationAddress) ? null : tx.TransactionRef;
+
+    private static LocationAddress? BuildDestinationAddress(BookingTransaction tx)
+    {
+        if (string.IsNullOrWhiteSpace(tx.ClientAddressLine1) ||
+            string.IsNullOrWhiteSpace(tx.ClientTown) ||
+            string.IsNullOrWhiteSpace(tx.ClientPostcode))
+        {
+            return null;
+        }
+
+        return new LocationAddress
+        {
+            Line1 = tx.ClientAddressLine1,
+            Town = tx.ClientTown,
+            Postcode = tx.ClientPostcode,
+            Country = "UK"
+        };
+    }
+
+    private static bool HasCompleteDestinationAddress(LocationAddress? address)
+        => address is not null &&
+           !string.IsNullOrWhiteSpace(address.Line1) &&
+           !string.IsNullOrWhiteSpace(address.Town) &&
+           !string.IsNullOrWhiteSpace(address.Postcode);
 
     private void LogRearrangementContext(
         string bookingId,

@@ -50,6 +50,7 @@ public class TimeZoneAndRouteTests
     [InlineData("Bookings_LeadTechRearrangementOptions", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_CancelBooking", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_GetBooking", EndpointAccessPolicy.UserAuthenticated)]
+    [InlineData("Bookings_GetBookingLifecycle", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_GetRearrangementOptions", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_AdminSearch", EndpointAccessPolicy.UserAuthenticated)]
     [InlineData("Bookings_Rearrange", EndpointAccessPolicy.UserAuthenticated)]

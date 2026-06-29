@@ -1,18 +1,33 @@
+using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Domain.Client;
 using AFH.Booking.Domain.Bookings.Queries;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace AFH.Booking.Infrastructure.Persistence.Repositories;
 
 public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
 {
     private readonly BookingDbContext _db;
+    private readonly IClientDirectory _clients;
+    private readonly ILogger<AdminBookingSearchRepository> _logger;
 
     public AdminBookingSearchRepository(BookingDbContext db)
+        : this(db, NullClientDirectory.Instance, Microsoft.Extensions.Logging.Abstractions.NullLogger<AdminBookingSearchRepository>.Instance)
+    {
+    }
+
+    public AdminBookingSearchRepository(
+        BookingDbContext db,
+        IClientDirectory clients,
+        ILogger<AdminBookingSearchRepository> logger)
     {
         _db = db;
+        _clients = clients;
+        _logger = logger;
     }
 
     public async Task<AdminBookingSearchResult> SearchAsync(SearchAdminBookingsQuery query, CancellationToken ct)
@@ -52,6 +67,8 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             })
             .ToListAsync(ct);
 
+        await EnrichClientsAsync(items, ct);
+
         return new AdminBookingSearchResult
         {
             Items = items,
@@ -60,6 +77,50 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             TotalItems = totalItems,
             TotalPages = totalPages
         };
+    }
+
+    private async Task EnrichClientsAsync(IReadOnlyList<AdminBookingSearchItem> items, CancellationToken ct)
+    {
+        var cache = new Dictionary<string, ClientDirectoryItem?>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.TransactionRef))
+                continue;
+
+            if (!cache.TryGetValue(item.TransactionRef, out var client))
+            {
+                client = await TryGetClientAsync(item.TransactionRef, ct);
+                cache[item.TransactionRef] = client;
+            }
+
+            if (client is null)
+                continue;
+
+            item.ClientName = BuildClientName(client);
+            item.ClientEmail = client.Email;
+        }
+    }
+
+    private async Task<ClientDirectoryItem?> TryGetClientAsync(string transactionRef, CancellationToken ct)
+    {
+        try
+        {
+            return await _clients.GetAsync(transactionRef, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Client lookup skipped while enriching booking search. TransactionRef={TransactionRef}", transactionRef);
+            return null;
+        }
+    }
+
+    private static string? BuildClientName(ClientDirectoryItem client)
+    {
+        var first = string.IsNullOrWhiteSpace(client.FirstName) ? null : client.FirstName.Trim();
+        var last = string.IsNullOrWhiteSpace(client.LastName) ? null : client.LastName.Trim();
+        var value = string.Join(" ", new[] { first, last }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private IQueryable<BookingHoldModel> BuildQuery(SearchAdminBookingsQuery query)
@@ -160,4 +221,12 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             .Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    private sealed class NullClientDirectory : IClientDirectory
+    {
+        public static readonly NullClientDirectory Instance = new();
+
+        public Task<ClientDirectoryItem?> GetAsync(string transactionIdOrClientId, CancellationToken ct)
+            => Task.FromResult<ClientDirectoryItem?>(null);
+    }
 }

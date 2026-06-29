@@ -50,7 +50,7 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
                 BookingReference = x.Slot.Transaction.BookingReference ?? x.Reference,
                 TransactionId = x.Slot.TransactionId,
                 TransactionRef = x.Slot.Transaction.TransactionRef,
-                ClientRef = x.Slot.Transaction.TransactionRef,
+                ClientRef = x.UserId,
                 ClientName = x.Slot.Transaction.ClientName,
                 ClientEmail = x.Slot.Transaction.ClientEmail,
                 ClientAddressLine1 = x.Slot.Transaction.ClientAddressLine1,
@@ -92,13 +92,13 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
 
         foreach (var item in items)
         {
-            if (string.IsNullOrWhiteSpace(item.TransactionRef))
+            if (string.IsNullOrWhiteSpace(item.ClientRef))
                 continue;
 
-            if (!cache.TryGetValue(item.TransactionRef, out var client))
+            if (!cache.TryGetValue(item.ClientRef, out var client))
             {
-                client = await TryGetClientAsync(item.TransactionRef, ct);
-                cache[item.TransactionRef] = client;
+                client = await TryGetClientAsync(item.ClientRef, ct);
+                cache[item.ClientRef] = client;
             }
 
             if (client is null)
@@ -200,7 +200,7 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
         if (query.ClientRefs.Count > 0)
         {
             var clientRefs = Normalize(query.ClientRefs);
-            rows = rows.Where(x => clientRefs.Contains(x.Slot.Transaction.TransactionRef));
+            rows = rows.Where(x => clientRefs.Contains(x.UserId));
         }
 
         if (query.LocationRefs.Count > 0)

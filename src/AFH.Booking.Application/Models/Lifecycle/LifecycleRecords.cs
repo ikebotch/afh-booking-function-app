@@ -17,6 +17,7 @@ public sealed record LifecycleEventRecord
     public DateTime OccurredUtc { get; init; }
     public string? CorrelationId { get; init; }
     public string? SourceSystem { get; init; }
+    public string? PartnerName { get; init; }
     public string? RelatedBookingId { get; init; }
     public string? TriggerReason { get; init; }
     public IReadOnlyList<LifecycleStepRecord> Steps { get; init; } = [];

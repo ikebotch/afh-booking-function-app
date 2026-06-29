@@ -17,6 +17,7 @@ public sealed class LifecycleEventModel
     public DateTime OccurredUtc { get; set; }
     public string? CorrelationId { get; set; }
     public string? SourceSystem { get; set; }
+    public string? PartnerName { get; set; }
     public string? RelatedBookingId { get; set; }
     public string? TriggerReason { get; set; }
 

@@ -75,6 +75,7 @@ public sealed class GetBookingLifecycleFunction
             OccurredUtc = record.OccurredUtc,
             CorrelationId = record.CorrelationId,
             SourceSystem = record.SourceSystem,
+            PartnerName = record.PartnerName,
             RelatedBookingId = record.RelatedBookingId,
             TriggerReason = record.TriggerReason,
             Steps = record.Steps.Select(Map).ToList()

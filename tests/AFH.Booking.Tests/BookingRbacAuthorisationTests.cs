@@ -20,14 +20,14 @@ public sealed class BookingRbacAuthorisationTests
     {
         var client = new CurrentUserPermissionClient(new StubAdviserUserContextClient(new AdviserUserContext
         {
-            Email = "leadtech@afh.co.uk",
-            Permissions = [BookingPermissionNames.CancelAsLeadTech]
+            Email = "partner@afh.co.uk",
+            Permissions = [BookingPermissionNames.CancelAsPartner]
         }));
 
-        var result = await client.AuthorizeAsync("token", BookingPermissionNames.CancelAsLeadTech, CancellationToken.None);
+        var result = await client.AuthorizeAsync("token", BookingPermissionNames.CancelAsPartner, CancellationToken.None);
 
         Assert.True(result.IsAuthorised);
-        Assert.Equal("leadtech@afh.co.uk", result.User?.Email);
+        Assert.Equal("partner@afh.co.uk", result.User?.Email);
     }
 
     [Fact]
@@ -64,8 +64,8 @@ public sealed class BookingRbacAuthorisationTests
                         "displayName": "Alex Example",
                         "adviserId": "adv-1",
                         "jobRole": "Financial Adviser",
-                        "roles": ["LeadTech"],
-                        "permissions": ["Bookings.Cancel.AsLeadTech"]
+                        "roles": ["Partner"],
+                        "permissions": ["Bookings.Cancel.AsPartner"]
                       }
                     }
                     """, Encoding.UTF8, "application/json")
@@ -90,7 +90,7 @@ public sealed class BookingRbacAuthorisationTests
         Assert.Equal("alex@afh.co.uk", user.Email);
         Assert.Equal("adv-1", user.AdviserId);
         Assert.Equal("Financial Adviser", user.JobRole);
-        Assert.Contains(BookingPermissionNames.CancelAsLeadTech, user.Permissions);
+        Assert.Contains(BookingPermissionNames.CancelAsPartner, user.Permissions);
         Assert.NotNull(captured);
         Assert.Equal("/api/internal/identity/v1/me", captured!.RequestUri!.AbsolutePath);
         Assert.Equal("Bearer", captured.Headers.Authorization?.Scheme);
@@ -272,16 +272,16 @@ public sealed class BookingRbacAuthorisationTests
         {
             UserId = "user-1",
             Email = "alex@afh.co.uk",
-            Roles = ["LeadTech"],
+            Roles = ["Partner"],
             Permissions =
             [
-                BookingPermissionNames.CancelAsLeadTech,
+                BookingPermissionNames.CancelAsPartner,
                 BookingPermissionNames.RearrangementOptionsRead
             ]
         });
         var permissions = new CurrentUserPermissionClient(adviser);
 
-        var cancel = await permissions.AuthorizeAsync("good-token", BookingPermissionNames.CancelAsLeadTech, CancellationToken.None);
+        var cancel = await permissions.AuthorizeAsync("good-token", BookingPermissionNames.CancelAsPartner, CancellationToken.None);
         var options = await permissions.AuthorizeAsync("good-token", BookingPermissionNames.RearrangementOptionsRead, CancellationToken.None);
 
         Assert.True(cancel.IsAuthorised);

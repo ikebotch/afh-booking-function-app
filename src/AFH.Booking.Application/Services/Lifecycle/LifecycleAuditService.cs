@@ -53,6 +53,7 @@ public sealed class LifecycleAuditService : ILifecycleAuditService
             OccurredUtc = entry.OccurredUtc,
             CorrelationId = entry.CorrelationId,
             SourceSystem = entry.SourceSystem,
+            PartnerName = entry.PartnerName,
             RelatedBookingId = entry.RelatedBookingId,
             TriggerReason = entry.TriggerReason
         }, ct);

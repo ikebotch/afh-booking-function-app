@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 
 namespace AFH.Notification.Infrastructure.Persistence;
@@ -30,7 +31,9 @@ public sealed class NotificationDbContextFactory : IDesignTimeDbContextFactory<N
             ?? "Server=(localdb)\\mssqllocaldb;Database=AFH.Booking.DesignTime;Trusted_Connection=True;TrustServerCertificate=True";
 
         var optionsBuilder = new DbContextOptionsBuilder<NotificationDbContext>();
-        optionsBuilder.UseSqlServer(connectionString);
+        optionsBuilder
+            .UseSqlServer(connectionString)
+            .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
 
         return new NotificationDbContext(optionsBuilder.Options);
     }

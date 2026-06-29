@@ -36,7 +36,8 @@ public sealed class BookingLifecycleRecorder : IBookingLifecycleRecorder
             RelatedBookingId: entry.RelatedBookingId,
             PreviousState: entry.PreviousState,
             NewState: newState,
-            TriggerReason: entry.TriggerReason), ct);
+            TriggerReason: entry.TriggerReason,
+            PartnerName: actor?.PartnerName ?? entry.PartnerName), ct);
     }
 
     public Task RecordStepAsync(string lifecycleEventId, BookingLifecycleStepRecord step, CancellationToken ct)

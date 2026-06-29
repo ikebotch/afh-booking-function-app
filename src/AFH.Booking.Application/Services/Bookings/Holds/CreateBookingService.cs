@@ -184,7 +184,7 @@ public sealed class CreateBookingService : ICreateBookingService
                     hold.Id,
                     ResolveNotificationActorType(cmd),
                     BuildHoldCreatedRecipients(client),
-                    BuildHoldCreatedNotificationData(hold, context)),
+                    BuildHoldCreatedNotificationData(hold, context, client)),
                 ct);
         }
         catch (Exception ex)
@@ -241,7 +241,8 @@ public sealed class CreateBookingService : ICreateBookingService
 
     private static IReadOnlyDictionary<string, string> BuildHoldCreatedNotificationData(
         BookingHold hold,
-        BookingContext context)
+        BookingContext context,
+        Domain.Client.ClientDirectoryItem? client)
     {
         var tz = string.IsNullOrWhiteSpace(context.Transaction.Timezone)
             ? "UTC"
@@ -278,7 +279,7 @@ public sealed class CreateBookingService : ICreateBookingService
             ? string.Empty
             : $"Company buffer: {Math.Max(0, context.Slot.CompanyBufferMinutes ?? 30)} minutes";
 
-        return new Dictionary<string, string>
+        var data = new Dictionary<string, string>
         {
             ["transactionRef"] = context.Transaction.TransactionRef,
             ["holdId"] = hold.Id,
@@ -291,7 +292,50 @@ public sealed class CreateBookingService : ICreateBookingService
             ["companyLine"] = companyBuffer,
             ["manageBookingLinks"] = string.Empty
         };
+
+        AddClientAndMeetingLocation(data, context.Transaction, client);
+        return data;
     }
+
+    private static void AddClientAndMeetingLocation(
+        Dictionary<string, string> data,
+        BookingTransaction transaction,
+        Domain.Client.ClientDirectoryItem? client)
+    {
+        data["clientName"] = FirstNonEmpty(
+            transaction.ClientName,
+            BuildClientDisplayName(client));
+        data["clientEmail"] = FirstNonEmpty(transaction.ClientEmail, client?.Email);
+        data["clientPhone"] = client?.Phone?.Trim() ?? string.Empty;
+        data["meetingAddressLine1"] = FirstNonEmpty(transaction.ClientAddressLine1, client?.StreetName1);
+        data["meetingAddressLine2"] = FirstNonEmpty(transaction.ClientAddressLine2, client?.StreetName2);
+        data["meetingTown"] = FirstNonEmpty(transaction.ClientTown, client?.Town);
+        data["meetingCounty"] = FirstNonEmpty(transaction.ClientCounty, client?.County);
+        data["meetingPostcode"] = FirstNonEmpty(transaction.ClientPostcode, client?.PostalCode);
+        data["meetingAddress"] = BuildMeetingAddress(data);
+    }
+
+    private static string BuildClientDisplayName(Domain.Client.ClientDirectoryItem? client)
+        => client is null
+            ? string.Empty
+            : FirstNonEmpty($"{client.FirstName} {client.LastName}".Trim(), client.Email);
+
+    private static string BuildMeetingAddress(Dictionary<string, string> data)
+    {
+        string Get(string key) => data.TryGetValue(key, out var value) ? value : string.Empty;
+
+        return string.Join(", ", new[]
+        {
+            Get("meetingAddressLine1"),
+            Get("meetingAddressLine2"),
+            Get("meetingTown"),
+            Get("meetingCounty"),
+            Get("meetingPostcode")
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static string FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
 
     private static Result<Unit> Validate(CreateHoldCommand cmd)
     {

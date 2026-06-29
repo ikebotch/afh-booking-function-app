@@ -43,9 +43,9 @@ public sealed class RearrangementWorkflowContextTests
     }
 
     [Fact]
-    public async Task RearrangeAsync_LeadTechActorContext_RecordsLeadTechActorAndSource()
+    public async Task RearrangeAsync_PartnerActorContext_RecordsPartnerActorAndSource()
     {
-        var actor = BookingActorContext.LeadTech("leadtech-user", "LeadTech User", "corr-leadtech");
+        var actor = BookingActorContext.Partner("PartnerCo", "partner-user", "Partner User", "corr-partner");
         var harness = RearrangementHarness.Create("slot-assigned", "adviser-old");
 
         var result = await harness.Sut.RearrangeAsync(new RearrangeBookingCommand
@@ -53,15 +53,16 @@ public sealed class RearrangementWorkflowContextTests
             BookingId = "booking-old",
             NewSlotId = "slot-assigned",
             ActorContext = actor,
-            ReasonCode = "LEADTECH_REQUEST"
+            ReasonCode = "PARTNER_REQUEST"
         }, CancellationToken.None);
 
         Assert.True(result.IsSuccess);
         var recorded = Assert.Single(harness.Events);
-        Assert.Equal(LifecycleActors.LeadTech, recorded.ActorType);
-        Assert.Equal("leadtech-user", recorded.ActorId);
-        Assert.Equal("corr-leadtech", recorded.CorrelationId);
-        Assert.Equal(BookingActorContext.SourceLeadTech, recorded.SourceSystem);
+        Assert.Equal(LifecycleActors.Partner, recorded.ActorType);
+        Assert.Equal("partner-user", recorded.ActorId);
+        Assert.Equal("PartnerCo", recorded.PartnerName);
+        Assert.Equal("corr-partner", recorded.CorrelationId);
+        Assert.Equal(BookingActorContext.SourcePartner, recorded.SourceSystem);
     }
 
     [Fact]

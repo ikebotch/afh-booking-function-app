@@ -13,7 +13,7 @@ public sealed class NoShowBookingService : INoShowBookingService
     {
         LifecycleActors.System,
         LifecycleActors.Client,
-        LifecycleActors.LeadTech,
+        LifecycleActors.Partner,
         LifecycleActors.Adviser,
         LifecycleActors.Unknown
     };
@@ -116,7 +116,8 @@ public sealed class NoShowBookingService : INoShowBookingService
             RelatedBookingId: null,
             PreviousState: LifecycleStates.Booked,
             NewState: LifecycleStates.NoShow,
-            TriggerReason: workflowKey), ct);
+            TriggerReason: workflowKey,
+            PartnerName: cmd.ActorContext?.PartnerName), ct);
 
         await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.SqlAudit,

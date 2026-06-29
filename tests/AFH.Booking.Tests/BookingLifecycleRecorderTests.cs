@@ -22,9 +22,10 @@ public sealed class BookingLifecycleRecorderTests
             .Callback<LifecycleAuditEntry, CancellationToken>((entry, _) => captured = entry)
             .ReturnsAsync("event-1");
         var recorder = new BookingLifecycleRecorder(audit.Object);
-        var actor = BookingActorContext.LeadTech(
-            actorId: "leadtech-user",
-            displayName: "LeadTech User",
+        var actor = BookingActorContext.Partner(
+            partnerName: "PartnerCo",
+            actorId: "partner-user",
+            displayName: "Partner User",
             correlationId: "ctx-corr");
 
         var eventId = await recorder.RecordEventAsync(new BookingLifecycleEventRecord(
@@ -46,10 +47,11 @@ public sealed class BookingLifecycleRecorderTests
         Assert.NotNull(captured);
         Assert.Equal(eventType, captured!.EventType);
         Assert.Equal(expectedState, captured.NewState);
-        Assert.Equal(LifecycleActors.LeadTech, captured.ActorType);
-        Assert.Equal("leadtech-user", captured.ActorId);
+        Assert.Equal(LifecycleActors.Partner, captured.ActorType);
+        Assert.Equal("partner-user", captured.ActorId);
+        Assert.Equal("PartnerCo", captured.PartnerName);
         Assert.Equal("ctx-corr", captured.CorrelationId);
-        Assert.Equal(BookingActorContext.SourceLeadTech, captured.SourceSystem);
+        Assert.Equal(BookingActorContext.SourcePartner, captured.SourceSystem);
     }
 
     [Fact]

@@ -47,7 +47,7 @@ Still remaining:
 
 ## Executive Summary
 
-The booking system is already partly aligned with the target principle. Most endpoint functions authenticate, validate route/body shape, build commands, and delegate into application services. Cancellation and final rearrangement are the strongest areas: self-service, LeadTech, admin/internal, and adviser-approval execution paths all converge on shared application orchestrators.
+The booking system is already partly aligned with the target principle. Most endpoint functions authenticate, validate route/body shape, build commands, and delegate into application services. Cancellation and final rearrangement are the strongest areas: self-service, partner, admin/internal, and adviser-approval execution paths all converge on shared application orchestrators.
 
 The main gaps are not isolated business engines in every caller. The larger risks are:
 
@@ -70,13 +70,13 @@ The recommended migration is incremental: introduce `BookingActorContext`, add a
 | `Holds_Cleanup` | Timer every 2 minutes | System job | `IBookingHoldRepository.GetExpiredActiveAsync` then `IReleaseHoldService.HandleAsync` | Uses shared release service, which is good. However expiry is indistinguishable from manual release because the service has no actor/reason command. |
 | `Bookings_CancelBooking` | `POST /v1/bookings/{bookingId}/cancel` | Internal/admin-style function route | `ICancelBookingService.HandleAsync` | Thin endpoint. Cancellation delegates to shared service/orchestrator. Defaults `RequestedBy` to `Client`, which is risky for an internal route. |
 | `Bookings_SelfServiceCancel` | `POST /v1/self-service/bookings/{bookingId}/cancel?token=...` | Self-service client | `IBookingChangeAccessService` then `ICancelBookingService.HandleAsync` | Correctly validates token against route booking id before shared cancellation. Public-safe problem mapping is present, but service messages still surface directly. |
-| `Bookings_LeadTechCancel` | `POST /v1/leadtech/bookings/{bookingId}/cancel` | LeadTech | `ICancelBookingService.HandleAsync` | Thin endpoint. Access policy requires authenticated user and `CancelAsLeadTech`; business logic is shared. |
+| `Bookings_PartnerCancel` | `POST /v1/partners/{partnerName}/bookings/{bookingId}/cancel` | partner | `ICancelBookingService.HandleAsync` | Thin endpoint. Access policy requires authenticated user and `CancelAsPartner`; business logic is shared. |
 | `Bookings_GetRearrangementOptions` | `POST /v1/bookings/{bookingId}/rearrangement/options` | Internal/admin-style function route | `IRearrangementOptionsService.HandleAsync` | Thin endpoint. Options are shared. Caller context is not explicit. |
 | `Bookings_SelfServiceRearrangementOptions` | `POST /v1/self-service/bookings/{bookingId}/rearrangement/options?token=...` | Self-service client | `IBookingChangeAccessService` then `IRearrangementOptionsService.HandleAsync` | Correctly validates token first. Service uses original booking transaction ref for in-person client lookup and availability option transactions for slots. |
-| `Bookings_LeadTechRearrangementOptions` | `POST /v1/leadtech/bookings/{bookingId}/rearrangement/options` | LeadTech | `IRearrangementOptionsService.HandleAsync` | Thin endpoint. Access policy requires authenticated user and `RearrangementOptionsRead`. |
+| `Bookings_PartnerRearrangementOptions` | `POST /v1/partners/{partnerName}/bookings/{bookingId}/rearrangement/options` | partner | `IRearrangementOptionsService.HandleAsync` | Thin endpoint. Access policy requires authenticated user and `RearrangementOptionsRead`. |
 | `Bookings_Rearrange` | `POST /v1/bookings/{bookingId}/rearrange` | Internal/admin-style function route | `IRearrangeBookingService.HandleAsync` | Thin endpoint. Final rearrangement uses shared service/orchestrator. Defaults `RequestedBy` to `Client`, which is risky for an internal route. |
 | `Bookings_SelfServiceRearrange` | `POST /v1/self-service/bookings/{bookingId}/rearrange?token=...` | Self-service client | `IBookingChangeAccessService` then `IRearrangeBookingService.HandleAsync` | Correct route/current booking id contract. Body requires only `newSlotId`; option transaction resolution is backend-owned. |
-| `Bookings_LeadTechRearrange` | `POST /v1/leadtech/bookings/{bookingId}/rearrange` | LeadTech | `IRearrangeBookingService.HandleAsync` | Thin endpoint. Access policy requires authenticated user and `RearrangeAsLeadTech`; business logic is shared. |
+| `Bookings_PartnerRearrange` | `POST /v1/partners/{partnerName}/bookings/{bookingId}/rearrange` | partner | `IRearrangeBookingService.HandleAsync` | Thin endpoint. Access policy requires authenticated user and `RearrangeAsPartner`; business logic is shared. |
 | `Bookings_RecordNoShow` | `POST /v1/bookings/{bookingId}/no-show` | Internal/service route | `INoShowBookingService.HandleAsync` | Thin endpoint. Service validates confirmed state and writes lifecycle audit. No notification/calendar policy step. |
 | `Bookings_RemediateShowAs` | `POST /v1/bookings/{bookingId}/calendar/remediate-showas` | Internal/admin | `IBookingShowAsRemediationService.HandleAsync` | Technical remediation, not a booking lifecycle transition. Calendar update is isolated in an application service. |
 | `Bookings_GetBooking` | `GET /v1/bookings/{bookingId}` | Internal/admin | `IBookingDetailsService.GetAsync` | Read-only; not lifecycle-changing. |
@@ -112,14 +112,14 @@ The recommended migration is incremental: introduce `BookingActorContext`, add a
 2. Which endpoints already delegate properly to shared services?
    - Create hold, confirm hold, release hold, cancellation, rearrangement options, final rearrangement, no-show, booking details, approval review, and show-as remediation all delegate to application services.
    - Self-service functions correctly validate token access before invoking shared services.
-   - LeadTech functions delegate into the same cancellation/rearrangement services as other actors.
+   - partner functions delegate into the same cancellation/rearrangement services as other actors.
 
-3. Are self-service, LeadTech and admin paths using the same workflow for cancellation?
+3. Are self-service, partner and admin paths using the same workflow for cancellation?
    - Yes for active cancellation: all call `ICancelBookingService.HandleAsync`, which delegates to `ICancellationOrchestrator.CancelAsync`.
    - Adviser approval execution calls `ICancellationOrchestrator.CancelAsync` directly after approval.
    - Gap: route-specific actor/source context is passed as ad-hoc command fields, and internal function-route defaults can mislabel actor type.
 
-4. Are self-service, LeadTech and admin paths using the same workflow for rearrangement?
+4. Are self-service, partner and admin paths using the same workflow for rearrangement?
    - Yes for final submit: all call `IRearrangeBookingService.HandleAsync`, which delegates to `IRearrangementOrchestrator.RearrangeAsync`.
    - Adviser approval execution calls `IRearrangementOrchestrator.RearrangeAsync` directly after approval.
    - Rearrangement options are shared through `IRearrangementOptionsService`.
@@ -181,9 +181,9 @@ The recommended migration is incremental: introduce `BookingActorContext`, add a
     - In-person rearrangement options use original booking `TransactionRef` for client/prospect lookup and option transactions only for availability/slot lookup.
     - The naming in `GetAvailabilityQuery` is still overloaded: `TransactionId` can be used as an availability transaction context while `ClientLookupRef` is needed for leads lookup. This should be documented in types or replaced with clearer value objects.
 
-14. Are there places where LeadTech/self-service/admin use different validation logic for the same business action?
+14. Are there places where partner/self-service/admin use different validation logic for the same business action?
     - Business validation for cancellation and final rearrangement is shared.
-    - Caller access validation differs by design: self-service token, LeadTech permission, internal function auth.
+    - Caller access validation differs by design: self-service token, partner permission, internal function auth.
     - The remaining differences are metadata/defaults, not core rules: `RequestedBy` defaults, actor ids, and public error shaping.
     - Adviser approval adds pre-approval validation before executing shared cancellation/rearrangement.
 
@@ -265,10 +265,10 @@ Endpoint/function layer should own construction:
   - `ActorId` from token envelope
   - `IsSelfService = true`
   - no override capability
-- LeadTech:
+- partner:
   - validates authenticated user and permission
-  - `SourceApplication = "LeadTech"`
-  - `ActorType = LifecycleActors.LeadTech`
+  - `SourceApplication = "Partner"`
+  - `ActorType = LifecycleActors.Partner`
   - actor id/display name from auth principal when available
 - Admin / booking agent:
   - validates authenticated user and permission
@@ -367,7 +367,7 @@ Recommendation: Option B is safer if reports currently assume lifecycle state st
 - Add non-breaking overloads or optional properties to `CreateHoldCommand`, `ConfirmBookingCommand`, `CancelBookingCommand`, `RearrangeBookingCommand`, `GetRearrangementOptionsCommand`, `RecordNoShowCommand`, and release/expiry commands.
 - Add endpoint mapping helpers:
   - self-service token to actor context
-  - LeadTech/user-auth to actor context
+  - partner user-auth to actor context
   - internal/system to actor context
 - Keep old command fields temporarily and derive them from context for compatibility.
 - Add tests that context flows to lifecycle actor/source/correlation fields.
@@ -422,7 +422,7 @@ Recommendation: Option B is safer if reports currently assume lifecycle state st
 - Add explicit admin/internal actor mapping.
 - Keep adviser approval requirement in `CancelBookingService` until approval workflow is formalised.
 - Tests:
-  - self-service, LeadTech, admin, adviser approval all produce expected actor/source
+  - self-service, partner, admin, adviser approval all produce expected actor/source
   - already-cancelled behaviour remains unchanged by actor type
   - calendar failure still records failed Outlook step
 
@@ -436,7 +436,7 @@ Recommendation: Option B is safer if reports currently assume lifecycle state st
   - no self-service hold endpoint
 - Keep original booking transaction ref/client lookup ref distinct from availability option transaction id.
 - Tests:
-  - self-service/LeadTech/admin/adviser approval actor/source recorded consistently
+  - self-service/partner/admin/adviser approval actor/source recorded consistently
   - assigned and alternative option transactions resolve internally
   - in-person client lookup uses original booking transaction ref
   - wrong booking token cannot use another booking's option
@@ -472,7 +472,7 @@ Recommendation: Option B is safer if reports currently assume lifecycle state st
 
 ### Commit 10: `test(booking): cover shared workflow behaviour across actors`
 
-- Add matrix tests for self-service, LeadTech, admin, adviser approval, and system jobs.
+- Add matrix tests for self-service, partner, admin, adviser approval, and system jobs.
 - Keep endpoint tests thin: verify auth/token/permission mapping and DTO shape.
 - Add application workflow tests for business behaviour and side effects.
 
@@ -506,7 +506,7 @@ Manual smoke after implementation:
 - Create hold creates a tentative calendar event and lifecycle hold event.
 - Confirm hold updates calendar event to busy and sends booking confirmed notification.
 - Self-service cancel validates token and uses shared cancellation workflow.
-- LeadTech cancel uses same cancellation workflow with LeadTech actor/source.
+- partner cancel uses same cancellation workflow with partner actor/source.
 - Self-service rearrange options for remote and in-person bookings load correctly.
 - Final self-service rearrange submits only `newSlotId` and resolves option transaction internally.
 - Cleanup job records hold expiry distinctly from manual release.

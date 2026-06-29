@@ -8,10 +8,11 @@ public sealed record BookingActorContext(
     string? CorrelationId,
     bool IsSelfService,
     bool CanOverrideRules,
-    IReadOnlySet<string> Permissions)
+    IReadOnlySet<string> Permissions,
+    string? PartnerName = null)
 {
     public const string SourceSelfService = "SelfService";
-    public const string SourceLeadTech = "LeadTech";
+    public const string SourcePartner = "Partner";
     public const string SourceAdviserPortal = "AdviserPortal";
     public const string SourceManagerPortal = "ManagerPortal";
     public const string SourceInternalAdmin = "InternalAdmin";
@@ -19,7 +20,7 @@ public sealed record BookingActorContext(
     public const string SourceSystemJob = "SystemJob";
 
     public const string ActorClient = "Client";
-    public const string ActorLeadTech = "LeadTech";
+    public const string ActorPartner = "Partner";
     public const string ActorInternalAdmin = "InternalAdmin";
     public const string ActorAdviser = "Adviser";
     public const string ActorManager = "Manager";
@@ -38,20 +39,23 @@ public sealed record BookingActorContext(
             canOverrideRules: false,
             permissions: null);
 
-    public static BookingActorContext LeadTech(
+    public static BookingActorContext Partner(
+        string partnerName,
         string? actorId = null,
         string? displayName = null,
         string? correlationId = null,
-        IEnumerable<string>? permissions = null)
+        IEnumerable<string>? permissions = null,
+        string sourceApplication = SourcePartner)
         => Create(
-            SourceLeadTech,
-            ActorLeadTech,
+            sourceApplication,
+            ActorPartner,
             actorId,
-            displayName,
+            displayName ?? partnerName,
             correlationId,
             isSelfService: false,
             canOverrideRules: false,
-            permissions);
+            permissions,
+            partnerName);
 
     public static BookingActorContext InternalAdmin(
         string? actorId = null,
@@ -145,7 +149,8 @@ public sealed record BookingActorContext(
         string? correlationId,
         bool isSelfService,
         bool canOverrideRules,
-        IEnumerable<string>? permissions)
+        IEnumerable<string>? permissions,
+        string? partnerName = null)
         => new(
             NormalizeRequired(sourceApplication, nameof(sourceApplication)),
             NormalizeRequired(actorType, nameof(actorType)),
@@ -154,7 +159,8 @@ public sealed record BookingActorContext(
             NormalizeOptional(correlationId),
             isSelfService,
             canOverrideRules,
-            NormalizePermissions(permissions));
+            NormalizePermissions(permissions),
+            NormalizeOptional(partnerName));
 
     private static string NormalizeRequired(string value, string name)
     {

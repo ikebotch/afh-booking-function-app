@@ -19,7 +19,7 @@ public static class DomainUserCapabilities
             {
                 capabilitySet.Add(BookingChangeRequest);
             }
-            else if (string.Equals(role, DomainUserRoles.LeadTech, StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(role, DomainUserRoles.Partner, StringComparison.OrdinalIgnoreCase))
             {
                 capabilitySet.Add(BookingCancelDirect);
                 capabilitySet.Add(BookingRearrangeDirect);

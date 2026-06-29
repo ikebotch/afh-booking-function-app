@@ -34,9 +34,9 @@ internal static class MockAdviserUserContextFactory
                 [
                     "Dashboard.Read",
                     "Bookings.Admin.Read",
-                    "Bookings.Cancel.AsLeadTech",
+                    "Bookings.Cancel.AsPartner",
                     "Bookings.RearrangementOptions.Read",
-                    "Bookings.Rearrange.AsLeadTech",
+                    "Bookings.Rearrange.AsPartner",
                     "Bookings.Rearrange.Direct",
                     "Bookings.Approvals.Read",
                     "Bookings.Approvals.Review",

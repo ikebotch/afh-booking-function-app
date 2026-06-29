@@ -153,8 +153,8 @@ internal static class BookingFunctionActorContext
         => user.Permissions.Contains(Domain.Auth.BookingPermissionNames.AdminRead, StringComparer.OrdinalIgnoreCase)
             || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.CancelDirect, StringComparer.OrdinalIgnoreCase)
             || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.RearrangeDirect, StringComparer.OrdinalIgnoreCase)
-            || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.CancelAsLeadTech, StringComparer.OrdinalIgnoreCase)
-            || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.RearrangeAsLeadTech, StringComparer.OrdinalIgnoreCase);
+            || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.CancelAsPartner, StringComparer.OrdinalIgnoreCase)
+            || user.Permissions.Contains(Domain.Auth.BookingPermissionNames.RearrangeAsPartner, StringComparer.OrdinalIgnoreCase);
 
     private static bool IsManager(AdviserUserContext user)
         => user.Roles.Any(role =>

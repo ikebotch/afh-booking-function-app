@@ -9,8 +9,10 @@ using AFH.Notification.Infrastructure.Options;
 using AFH.Notification.Infrastructure.Persistence;
 using AFH.Notification.Infrastructure.Queue;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 namespace AFH.Notification.Infrastructure.Composition;
 
@@ -37,7 +39,9 @@ public static class ServiceCollectionExtensions
                 $"{NotificationDbOptions.SectionName}:ConnectionString is required (or ConnectionStrings:NotificationDb).");
 
         services.AddDbContext<NotificationDbContext>(options =>
-            options.UseSqlServer(connectionString));
+            options
+                .UseSqlServer(connectionString)
+                .ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning)));
 
         services.AddScoped<INotificationOutboxStore, NotificationOutboxStore>();
         AddQueuePublisher(services, configuration);
@@ -48,6 +52,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<INotificationTemplateAdminStore, NotificationTemplateAdminStore>();
         services.AddScoped<INotificationSettingsService, NotificationSettingsService>();
         services.AddScoped<INotificationStatusService, NotificationStatusService>();
+        services.AddHostedService<NotificationOperationalStoreInitializer>();
         AddEmailDeliveryGateway(services, configuration);
         AddSmsDeliveryGateway(services, configuration);
         services.AddScoped<IContactCentreRoutingResolver, ContactCentreRoutingResolver>();

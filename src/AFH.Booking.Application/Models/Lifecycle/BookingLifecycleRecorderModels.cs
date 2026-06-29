@@ -19,7 +19,8 @@ public sealed record BookingLifecycleEventRecord(
     string? RelatedBookingId = null,
     string? PreviousState = null,
     string? NewState = null,
-    string? TriggerReason = null);
+    string? TriggerReason = null,
+    string? PartnerName = null);
 
 public sealed record BookingLifecycleStepRecord(
     string StepName,

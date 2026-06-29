@@ -15,22 +15,23 @@ namespace AFH.Booking.Tests;
 public sealed class BookingFunctionActorMatrixTests
 {
     [Fact]
-    public async Task LeadTechCancel_MapsLeadTechActorAndUsesSharedCancelService()
+    public async Task PartnerCancel_MapsPartnerActorAndUsesSharedCancelService()
     {
         var service = new CapturingCancelBookingService();
-        var sut = new LeadTechCancelBookingFunction(service);
-        var request = CreateJsonRequest("""{"reasonCode":"LEADTECH_REQUEST","reasonDetail":"Client called LeadTech"}""");
-        request.Headers.Add("x-correlation-id", "corr-leadtech");
+        var sut = new PartnerCancelBookingFunction(service);
+        var request = CreateJsonRequest("""{"reasonCode":"PARTNER_REQUEST","reasonDetail":"Client called Partner"}""");
+        request.Headers.Add("x-correlation-id", "corr-partner");
 
-        var response = await sut.Run(request, " booking-1 ", CancellationToken.None);
+        var response = await sut.Run(request, "PartnerCo", " booking-1 ", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("booking-1", service.LastCommand?.BookingId);
-        Assert.Equal(LifecycleActors.LeadTech, service.LastCommand?.RequestedBy);
-        Assert.Equal(BookingActorContext.SourceLeadTech, service.LastCommand?.ActorContext?.SourceApplication);
-        Assert.Equal(LifecycleActors.LeadTech, service.LastCommand?.ActorContext?.ActorType);
-        Assert.Equal("corr-leadtech", service.LastCommand?.CorrelationId);
-        Assert.Equal("LEADTECH_REQUEST", service.LastCommand?.ReasonCode);
+        Assert.Equal(LifecycleActors.Partner, service.LastCommand?.RequestedBy);
+        Assert.Equal(BookingActorContext.SourcePartner, service.LastCommand?.ActorContext?.SourceApplication);
+        Assert.Equal(LifecycleActors.Partner, service.LastCommand?.ActorContext?.ActorType);
+        Assert.Equal("PartnerCo", service.LastCommand?.ActorContext?.PartnerName);
+        Assert.Equal("corr-partner", service.LastCommand?.CorrelationId);
+        Assert.Equal("PARTNER_REQUEST", service.LastCommand?.ReasonCode);
     }
 
     [Fact]
@@ -113,22 +114,23 @@ public sealed class BookingFunctionActorMatrixTests
     }
 
     [Fact]
-    public async Task LeadTechRearrange_MapsLeadTechActorAndUsesSharedRearrangeService()
+    public async Task PartnerRearrange_MapsPartnerActorAndUsesSharedRearrangeService()
     {
         var service = new CapturingRearrangeBookingService();
-        var sut = new LeadTechRearrangeBookingFunction(service);
-        var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"LEADTECH_RESCHEDULE"}""");
-        request.Headers.Add("x-correlation-id", "corr-leadtech");
+        var sut = new PartnerRearrangeBookingFunction(service);
+        var request = CreateJsonRequest("""{"newSlotId":"slot-new","reasonCode":"PARTNER_RESCHEDULE"}""");
+        request.Headers.Add("x-correlation-id", "corr-partner");
 
-        var response = await sut.Run(request, " booking-old ", CancellationToken.None);
+        var response = await sut.Run(request, "PartnerCo", " booking-old ", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("booking-old", service.LastCommand?.BookingId);
         Assert.Equal("slot-new", service.LastCommand?.NewSlotId);
-        Assert.Equal(LifecycleActors.LeadTech, service.LastCommand?.RequestedBy);
-        Assert.Equal(BookingActorContext.SourceLeadTech, service.LastCommand?.ActorContext?.SourceApplication);
-        Assert.Equal(LifecycleActors.LeadTech, service.LastCommand?.ActorContext?.ActorType);
-        Assert.Equal("corr-leadtech", service.LastCommand?.CorrelationId);
+        Assert.Equal(LifecycleActors.Partner, service.LastCommand?.RequestedBy);
+        Assert.Equal(BookingActorContext.SourcePartner, service.LastCommand?.ActorContext?.SourceApplication);
+        Assert.Equal(LifecycleActors.Partner, service.LastCommand?.ActorContext?.ActorType);
+        Assert.Equal("PartnerCo", service.LastCommand?.ActorContext?.PartnerName);
+        Assert.Equal("corr-partner", service.LastCommand?.CorrelationId);
     }
 
     [Fact]

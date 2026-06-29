@@ -7,7 +7,7 @@ internal static class BookingChangeValidation
     private static readonly HashSet<string> SupportedActors = new(StringComparer.OrdinalIgnoreCase)
     {
         LifecycleActors.Client,
-        LifecycleActors.LeadTech,
+        LifecycleActors.Partner,
         LifecycleActors.Adviser,
         LifecycleActors.System,
         BookingActorContext.ActorManager,
@@ -41,7 +41,7 @@ internal static class BookingChangeValidation
 
     private static bool IsHumanActor(string actorType) =>
         actorType.Equals(LifecycleActors.Client, StringComparison.OrdinalIgnoreCase) ||
-        actorType.Equals(LifecycleActors.LeadTech, StringComparison.OrdinalIgnoreCase) ||
+        actorType.Equals(LifecycleActors.Partner, StringComparison.OrdinalIgnoreCase) ||
         actorType.Equals(LifecycleActors.Adviser, StringComparison.OrdinalIgnoreCase) ||
         actorType.Equals(BookingActorContext.ActorManager, StringComparison.OrdinalIgnoreCase);
 }

@@ -122,7 +122,9 @@ public sealed class NotificationSettingsService : INotificationSettingsService
     public async Task<IReadOnlyList<NotificationLifecycleEventItem>> ListLifecycleEventsAsync(CancellationToken ct)
     {
         var items = await ListPayloadSettingsAsync<NotificationLifecycleEventItem>(LifecycleEventsCategory, ct);
-        return items.Length == 0 ? DefaultLifecycleEvents() : items;
+        return items.Length == 0
+            ? DefaultLifecycleEvents()
+            : items.Select(WithTemplateVariables).ToArray();
     }
 
     public async Task<IReadOnlyList<NotificationRetryPolicyItem>> ListRetryPoliciesAsync(CancellationToken ct)
@@ -223,13 +225,27 @@ public sealed class NotificationSettingsService : INotificationSettingsService
     private static IReadOnlyList<NotificationLifecycleEventItem> DefaultLifecycleEvents()
         =>
         [
-            new("booking-confirmed", "Booking Confirmed", "Booking Service", "Sent after a booking is confirmed and recipients are resolved.", "Active"),
-            new("booking-reminder", "Booking Reminder", "Notification Service", "Sent before the appointment when reminder settings are enabled.", "Active"),
-            new("booking-cancelled", "Booking Cancelled", "Booking Service", "Sent when a booking is cancelled.", "Active"),
-            new("booking-rearranged", "Booking Rearranged", "Booking Service", "Sent when appointment date, time, or adviser changes.", "Active"),
-            new("approval-requested", "Approval Requested", "Booking Service", "Sent when a booking needs manager or operations approval.", "Active"),
-            new("delivery-failed", "Delivery Failed", "Notification Service", "Creates failed dispatch records and drives retry policy.", "Active")
+            Event("booking-confirmed", "Booking Confirmed", "Booking Service", "Sent after a booking is confirmed and recipients are resolved.", "Active"),
+            Event("booking-reminder", "Booking Reminder", "Notification Service", "Sent before the appointment when reminder settings are enabled.", "Active"),
+            Event("booking-cancelled", "Booking Cancelled", "Booking Service", "Sent when a booking is cancelled.", "Active"),
+            Event("booking-rearranged", "Booking Rearranged", "Booking Service", "Sent when appointment date, time, or adviser changes.", "Active"),
+            Event("adviser-request-outcome", "Adviser Request Outcome", "Booking Service", "Sent when an adviser change request is approved or rejected.", "Active"),
+            Event("delivery-failed", "Delivery Failed", "Notification Service", "Creates failed dispatch records and drives retry policy.", "Active")
         ];
+
+    private static NotificationLifecycleEventItem Event(
+        string id,
+        string @event,
+        string owner,
+        string description,
+        string status)
+        => new(id, @event, owner, description, status, NotificationTemplateVariableCatalog.ForLifecycleEvent(@event));
+
+    private static NotificationLifecycleEventItem WithTemplateVariables(NotificationLifecycleEventItem item)
+    {
+        var variables = NotificationTemplateVariableCatalog.ForLifecycleEvent(item.Event);
+        return variables.Count == 0 ? item : item with { Variables = variables };
+    }
 
     private static IReadOnlyList<NotificationRetryPolicyItem> DefaultRetryPolicies()
         =>

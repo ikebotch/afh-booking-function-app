@@ -24,7 +24,8 @@ public sealed record NotificationLifecycleEventItem(
     string Event,
     string Owner,
     string Description,
-    string Status);
+    string Status,
+    IReadOnlyList<string> Variables);
 
 public sealed record NotificationRetryPolicyItem(
     string Id,

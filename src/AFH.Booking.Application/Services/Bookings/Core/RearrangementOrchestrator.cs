@@ -290,7 +290,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             RelatedBookingId: existingBooking.Hold.Id,
             PreviousState: LifecycleStates.Booked,
             NewState: LifecycleStates.Rearranged,
-            TriggerReason: workflowKey), ct);
+            TriggerReason: workflowKey,
+            PartnerName: cmd.ActorContext?.PartnerName), ct);
 
         var now = _clock.UtcNow;
         await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
@@ -340,7 +341,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
                     newBookingId,
                     ResolveNotificationActorType(cmd),
                     BuildBookingRescheduledRecipients(client),
-                    BuildBookingRescheduledNotificationData(cmd, existingBooking, newBooking, eventId, notificationSummary)),
+                    BuildBookingRescheduledNotificationData(cmd, existingBooking, newBooking, eventId, notificationSummary, client)),
                 ct);
         }
         catch (Exception)
@@ -395,7 +396,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         ExistingBookingContext existingBooking,
         ConfirmedBookingContext newBooking,
         string eventId,
-        string notificationSummary)
+        string notificationSummary,
+        Domain.Client.ClientDirectoryItem? client)
     {
         var note = AppendReason(notificationSummary, cmd);
         var template = BookingNotificationEmailTemplate.Build(
@@ -413,7 +415,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             .Where(parts => parts.Length == 2)
             .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.OrdinalIgnoreCase);
 
-        return new Dictionary<string, string>
+        var data = new Dictionary<string, string>
         {
             ["eventId"] = eventId,
             ["previousBookingId"] = existingBooking.Hold.Id,
@@ -430,7 +432,50 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             ["note"] = note,
             ["manageBookingLinks"] = string.Empty
         };
+
+        AddClientAndMeetingLocation(data, existingBooking.Transaction, client);
+        return data;
     }
+
+    private static void AddClientAndMeetingLocation(
+        Dictionary<string, string> data,
+        BookingTransaction transaction,
+        Domain.Client.ClientDirectoryItem? client)
+    {
+        data["clientName"] = FirstNonEmpty(
+            transaction.ClientName,
+            BuildClientDisplayName(client));
+        data["clientEmail"] = FirstNonEmpty(transaction.ClientEmail, client?.Email);
+        data["clientPhone"] = client?.Phone?.Trim() ?? string.Empty;
+        data["meetingAddressLine1"] = FirstNonEmpty(transaction.ClientAddressLine1, client?.StreetName1);
+        data["meetingAddressLine2"] = FirstNonEmpty(transaction.ClientAddressLine2, client?.StreetName2);
+        data["meetingTown"] = FirstNonEmpty(transaction.ClientTown, client?.Town);
+        data["meetingCounty"] = FirstNonEmpty(transaction.ClientCounty, client?.County);
+        data["meetingPostcode"] = FirstNonEmpty(transaction.ClientPostcode, client?.PostalCode);
+        data["meetingAddress"] = BuildMeetingAddress(data);
+    }
+
+    private static string BuildClientDisplayName(Domain.Client.ClientDirectoryItem? client)
+        => client is null
+            ? string.Empty
+            : FirstNonEmpty($"{client.FirstName} {client.LastName}".Trim(), client.Email);
+
+    private static string BuildMeetingAddress(Dictionary<string, string> data)
+    {
+        string Get(string key) => data.TryGetValue(key, out var value) ? value : string.Empty;
+
+        return string.Join(", ", new[]
+        {
+            Get("meetingAddressLine1"),
+            Get("meetingAddressLine2"),
+            Get("meetingTown"),
+            Get("meetingCounty"),
+            Get("meetingPostcode")
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static string FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
 
     private async Task PublishRearrangementUpdateAsync(
         RearrangeBookingCommand cmd,

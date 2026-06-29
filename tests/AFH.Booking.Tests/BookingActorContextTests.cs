@@ -30,17 +30,19 @@ public sealed class BookingActorContextTests
     }
 
     [Fact]
-    public void ActorContext_LeadTech_MapsLeadTechSource()
+    public void ActorContext_Partner_MapsPartnerSource()
     {
-        var context = BookingActorContext.LeadTech(
-            actorId: "leadtech-user",
-            displayName: "LeadTech User",
+        var context = BookingActorContext.Partner(
+            partnerName: "PartnerCo",
+            actorId: "partner-user",
+            displayName: "Partner User",
             correlationId: "corr-1",
             permissions: ["booking.cancel"]);
 
-        Assert.Equal(BookingActorContext.SourceLeadTech, context.SourceApplication);
-        Assert.Equal(LifecycleActors.LeadTech, context.ActorType);
-        Assert.Equal("leadtech-user", context.ActorId);
+        Assert.Equal(BookingActorContext.SourcePartner, context.SourceApplication);
+        Assert.Equal(LifecycleActors.Partner, context.ActorType);
+        Assert.Equal("partner-user", context.ActorId);
+        Assert.Equal("PartnerCo", context.PartnerName);
         Assert.Contains("booking.cancel", context.Permissions);
         Assert.False(context.IsSelfService);
     }
@@ -70,8 +72,9 @@ public sealed class BookingActorContextTests
     [Fact]
     public void ActorContext_CommandCompatibility_DerivesLegacyFields()
     {
-        var actor = BookingActorContext.LeadTech(
-            actorId: "leadtech-user",
+        var actor = BookingActorContext.Partner(
+            partnerName: "PartnerCo",
+            actorId: "partner-user",
             correlationId: "corr-1");
 
         var cancel = new CancelBookingCommand
@@ -102,31 +105,32 @@ public sealed class BookingActorContextTests
             CorrelationId = "legacy-corr"
         };
 
-        Assert.Equal(LifecycleActors.LeadTech, cancel.RequestedBy);
-        Assert.Equal("leadtech-user", cancel.ActorId);
+        Assert.Equal(LifecycleActors.Partner, cancel.RequestedBy);
+        Assert.Equal("partner-user", cancel.ActorId);
         Assert.Equal("corr-1", cancel.CorrelationId);
-        Assert.Equal(LifecycleActors.LeadTech, rearrange.RequestedBy);
-        Assert.Equal("leadtech-user", rearrange.ActorId);
+        Assert.Equal(LifecycleActors.Partner, rearrange.RequestedBy);
+        Assert.Equal("partner-user", rearrange.ActorId);
         Assert.Equal("corr-1", rearrange.CorrelationId);
-        Assert.Equal(LifecycleActors.LeadTech, noShow.RequestedBy);
-        Assert.Equal("leadtech-user", noShow.ActorId);
+        Assert.Equal(LifecycleActors.Partner, noShow.RequestedBy);
+        Assert.Equal("partner-user", noShow.ActorId);
         Assert.Equal("corr-1", noShow.CorrelationId);
     }
 
     [Fact]
-    public async Task LeadTechCancelFunction_AddsLeadTechActorContext()
+    public async Task PartnerCancelFunction_AddsPartnerActorContext()
     {
         var service = new StubCancelBookingService();
-        var sut = new LeadTechCancelBookingFunction(service);
-        var request = CreateJsonRequest("""{"reasonCode":"LEADTECH_REQUEST"}""");
-        request.Headers.Add("x-correlation-id", "corr-leadtech");
+        var sut = new PartnerCancelBookingFunction(service);
+        var request = CreateJsonRequest("""{"reasonCode":"PARTNER_REQUEST"}""");
+        request.Headers.Add("x-correlation-id", "corr-partner");
 
-        var response = await sut.Run(request, "booking-1", CancellationToken.None);
+        var response = await sut.Run(request, "PartnerCo", "booking-1", CancellationToken.None);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(BookingActorContext.SourceLeadTech, service.LastCommand?.ActorContext?.SourceApplication);
-        Assert.Equal(LifecycleActors.LeadTech, service.LastCommand?.ActorContext?.ActorType);
-        Assert.Equal("corr-leadtech", service.LastCommand?.CorrelationId);
+        Assert.Equal(BookingActorContext.SourcePartner, service.LastCommand?.ActorContext?.SourceApplication);
+        Assert.Equal(LifecycleActors.Partner, service.LastCommand?.ActorContext?.ActorType);
+        Assert.Equal("PartnerCo", service.LastCommand?.ActorContext?.PartnerName);
+        Assert.Equal("corr-partner", service.LastCommand?.CorrelationId);
     }
 
     [Fact]

@@ -7,7 +7,7 @@ public sealed class BookingSlot
     private BookingSlot() { }
 
     public string Id { get; private set; } = default!;                 // SlotId
-    public string TransactionId { get; private set; } = default!;      // LeadTech transactionId OR clientId
+    public string TransactionId { get; private set; } = default!;      // partner transactionId OR clientId
 
     public string AdviserId { get; private set; } = default!;           // internal id (NOT email)
     public string AdviserName { get; private set; } = default!;         // snapshot

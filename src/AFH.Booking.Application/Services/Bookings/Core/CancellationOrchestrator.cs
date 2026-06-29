@@ -222,7 +222,8 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             RelatedBookingId: null,
             PreviousState: ResolveLifecycleStateBeforeCancellation(before),
             NewState: LifecycleStates.Cancelled,
-            TriggerReason: workflowKey), ct);
+            TriggerReason: workflowKey,
+            PartnerName: cmd.ActorContext?.PartnerName), ct);
 
         await _lifecycle.RecordStepAsync(eventId, new BookingLifecycleStepRecord(
             LifecycleStepNames.Outlook,
@@ -277,7 +278,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
                         context.Hold.Id,
                         ResolveNotificationActorType(cmd),
                         BuildBookingCancelledRecipients(client),
-                        BuildBookingCancelledNotificationData(cmd, context, eventId)),
+                        BuildBookingCancelledNotificationData(cmd, context, eventId, client)),
                     ct);
             }
             catch (Exception ex)
@@ -447,7 +448,8 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
     private static IReadOnlyDictionary<string, string> BuildBookingCancelledNotificationData(
         CancelBookingCommand cmd,
         CancellationContext context,
-        string eventId)
+        string eventId,
+        Domain.Client.ClientDirectoryItem? client)
     {
         var notificationMessage = BuildCancellationNotification(context.Slot, cmd);
         var template = BookingNotificationEmailTemplate.Build(
@@ -465,7 +467,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             .Where(parts => parts.Length == 2)
             .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.OrdinalIgnoreCase);
 
-        return new Dictionary<string, string>
+        var data = new Dictionary<string, string>
         {
             ["eventId"] = eventId,
             ["bookingId"] = context.Hold.Id,
@@ -484,7 +486,50 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             ["reasonCode"] = cmd.ReasonCode ?? string.Empty,
             ["reasonDetail"] = cmd.ReasonDetail ?? cmd.Reason ?? string.Empty
         };
+
+        AddClientAndMeetingLocation(data, context.Transaction, client);
+        return data;
     }
+
+    private static void AddClientAndMeetingLocation(
+        Dictionary<string, string> data,
+        BookingTransaction transaction,
+        Domain.Client.ClientDirectoryItem? client)
+    {
+        data["clientName"] = FirstNonEmpty(
+            transaction.ClientName,
+            BuildClientDisplayName(client));
+        data["clientEmail"] = FirstNonEmpty(transaction.ClientEmail, client?.Email);
+        data["clientPhone"] = client?.Phone?.Trim() ?? string.Empty;
+        data["meetingAddressLine1"] = FirstNonEmpty(transaction.ClientAddressLine1, client?.StreetName1);
+        data["meetingAddressLine2"] = FirstNonEmpty(transaction.ClientAddressLine2, client?.StreetName2);
+        data["meetingTown"] = FirstNonEmpty(transaction.ClientTown, client?.Town);
+        data["meetingCounty"] = FirstNonEmpty(transaction.ClientCounty, client?.County);
+        data["meetingPostcode"] = FirstNonEmpty(transaction.ClientPostcode, client?.PostalCode);
+        data["meetingAddress"] = BuildMeetingAddress(data);
+    }
+
+    private static string BuildClientDisplayName(Domain.Client.ClientDirectoryItem? client)
+        => client is null
+            ? string.Empty
+            : FirstNonEmpty($"{client.FirstName} {client.LastName}".Trim(), client.Email);
+
+    private static string BuildMeetingAddress(Dictionary<string, string> data)
+    {
+        string Get(string key) => data.TryGetValue(key, out var value) ? value : string.Empty;
+
+        return string.Join(", ", new[]
+        {
+            Get("meetingAddressLine1"),
+            Get("meetingAddressLine2"),
+            Get("meetingTown"),
+            Get("meetingCounty"),
+            Get("meetingPostcode")
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+    }
+
+    private static string FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
 
     private static Result<T> FailLike<T>(Result failure)
     {

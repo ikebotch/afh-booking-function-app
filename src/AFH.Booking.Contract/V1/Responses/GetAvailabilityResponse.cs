@@ -7,7 +7,7 @@ namespace AFH.Booking.Contracts.V1.Responses;
 
 public sealed class GetAvailabilityResponse
 {
-    //public string TransactionRef { get; set; } = default!;   // external LeadTech ref (TX-123 or clientId)
+    //public string TransactionRef { get; set; } = default!;   // external partner ref (TX-123 or clientId)
     public string TransactionId { get; set; } = default!;    // internal DB transaction id (Guid "N")
 
     public List<AdviserSlotsDto> Advisers { get; set; } = new();
@@ -75,4 +75,3 @@ public sealed class AvailabilitySlotDto
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? HoldMessage { get; set; } 
 }
-

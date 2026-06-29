@@ -22,7 +22,7 @@ public static class LifecycleStates
 public static class LifecycleActors
 {
     public const string Client = "Client";
-    public const string LeadTech = "LeadTech";
+    public const string Partner = "Partner";
     public const string Adviser = "Adviser";
     public const string System = "System";
     public const string Unknown = "Unknown";

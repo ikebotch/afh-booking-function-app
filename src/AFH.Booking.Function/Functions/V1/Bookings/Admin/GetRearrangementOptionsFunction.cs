@@ -1,4 +1,5 @@
 using AFH.Booking.Application.Abstractions.Bookings;
+using AFH.Booking.Application.Models.Common;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Auth;
@@ -7,6 +8,9 @@ using AFH.Booking.Function.Auth;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
 
@@ -15,13 +19,16 @@ public sealed class GetRearrangementOptionsFunction
 {
     private readonly IRearrangementOptionsService _service;
     private readonly IBookingDetailsService _details;
+    private readonly ILogger<GetRearrangementOptionsFunction> _logger;
 
     public GetRearrangementOptionsFunction(
         IRearrangementOptionsService service,
-        IBookingDetailsService details)
+        IBookingDetailsService details,
+        ILogger<GetRearrangementOptionsFunction>? logger = null)
     {
         _service = service;
         _details = details;
+        _logger = logger ?? NullLogger<GetRearrangementOptionsFunction>.Instance;
     }
 
     [Function("Bookings_GetRearrangementOptions")]
@@ -82,7 +89,24 @@ public sealed class GetRearrangementOptionsFunction
             Cursor = body?.Cursor
         };
 
-        var result = await _service.HandleAsync(cmd, ct);
+        Result<AFH.Booking.Application.Models.Bookings.RearrangementOptionsResponse> result;
+        try
+        {
+            result = await _service.HandleAsync(cmd, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get admin rearrangement options. BookingId={BookingId}", bookingId);
+            return await req.ProblemAsync(
+                HttpStatusCode.BadGateway,
+                "Unable to get rearrangement options.",
+                ct,
+                Errors.AvailabilityLookupFailed);
+        }
 
         if (!result.IsSuccess)
         {

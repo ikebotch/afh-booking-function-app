@@ -1,6 +1,7 @@
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Client;
 using AFH.Booking.Domain.Bookings.Queries;
 using AFH.Booking.Infrastructure.Persistence.Models;
@@ -11,10 +12,6 @@ namespace AFH.Booking.Infrastructure.Persistence.Repositories;
 
 public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
 {
-    private const string OnlineMode = "Online";
-    private const string InPersonMode = "In-Person";
-    private const string PhoneMode = "Phone";
-
     private readonly BookingDbContext _db;
     private readonly IClientDirectory _clients;
     private readonly ILogger<AdminBookingSearchRepository> _logger;
@@ -43,7 +40,7 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
         var totalPages = totalItems == 0 ? 0 : (int)Math.Ceiling(totalItems / (double)pageSize);
 
         var items = await rows
-            .OrderBy(x => x.Slot.StartUtc)
+            .OrderByDescending(x => x.Slot.StartUtc)
             .ThenBy(x => x.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -246,16 +243,16 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
         if (query.Modes.Count > 0)
         {
             var modes = Normalize(query.Modes);
-            var includeOnline = modes.Contains(OnlineMode, StringComparer.Ordinal);
-            var includeInPerson = modes.Contains(InPersonMode, StringComparer.Ordinal);
-            var includePhone = modes.Contains(PhoneMode, StringComparer.Ordinal);
+            var includeOnline = modes.Contains(BookingModeScalars.Online, StringComparer.Ordinal);
+            var includeInPerson = modes.Contains(BookingModeScalars.InPerson, StringComparer.Ordinal);
+            var includePhone = modes.Contains(BookingModeScalars.Phone, StringComparer.Ordinal);
 
             if (includeOnline || includeInPerson || includePhone)
             {
                 rows = rows.Where(x =>
-                    (includeOnline && x.Slot.Transaction.IsRemote && x.Slot.Transaction.MeetingType != PhoneMode)
+                    (includeOnline && x.Slot.Transaction.IsRemote && x.Slot.Transaction.MeetingType != BookingModeScalars.Phone)
                     || (includeInPerson && !x.Slot.Transaction.IsRemote)
-                    || (includePhone && x.Slot.Transaction.IsRemote && x.Slot.Transaction.MeetingType == PhoneMode));
+                    || (includePhone && x.Slot.Transaction.IsRemote && x.Slot.Transaction.MeetingType == BookingModeScalars.Phone));
             }
             else
             {

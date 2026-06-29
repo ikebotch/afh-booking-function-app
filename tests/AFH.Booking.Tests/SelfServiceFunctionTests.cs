@@ -178,6 +178,22 @@ public sealed class SelfServiceFunctionTests
     }
 
     [Fact]
+    public async Task RearrangementOptions_WorkflowThrows_ReturnsBadGatewayProblem()
+    {
+        var access = new StubAccessService();
+        var service = new StubRearrangementOptionsService(new InvalidOperationException("Availability dependency failed."));
+        var sut = new SelfServiceRearrangementOptionsFunction(access, service);
+        var request = CreateJsonRequest("""{"duration":45,"limit":5}""");
+        request.Headers.Add("x-booking-access-token", "client-token");
+
+        var response = await sut.Run(request, "booking-1", CancellationToken.None);
+
+        var json = await ReadJsonAsync(response);
+        Assert.Equal(HttpStatusCode.BadGateway, response.StatusCode);
+        Assert.Equal(Errors.AvailabilityLookupFailed, GetData(json)["code"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task RearrangeBooking_ValidToken_UsesClientActor()
     {
         var access = new StubAccessService();
@@ -364,11 +380,20 @@ public sealed class SelfServiceFunctionTests
 
     private sealed class StubRearrangementOptionsService : IRearrangementOptionsService
     {
+        private readonly Exception? _exception;
         public GetRearrangementOptionsCommand? LastCommand { get; private set; }
+
+        public StubRearrangementOptionsService(Exception? exception = null)
+        {
+            _exception = exception;
+        }
 
         public Task<Result<RearrangementOptionsResponse>> HandleAsync(GetRearrangementOptionsCommand cmd, CancellationToken ct)
         {
             LastCommand = cmd;
+            if (_exception is not null)
+                return Task.FromException<Result<RearrangementOptionsResponse>>(_exception);
+
             return Task.FromResult(Result<RearrangementOptionsResponse>.Ok(new RearrangementOptionsResponse
             {
                 BookingId = cmd.BookingId,

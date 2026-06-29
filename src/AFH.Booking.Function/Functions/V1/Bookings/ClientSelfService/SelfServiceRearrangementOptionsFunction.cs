@@ -1,10 +1,14 @@
 using AFH.Booking.Application.Abstractions.Bookings;
+using AFH.Booking.Application.Models.Common;
 using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Net;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
 
@@ -13,13 +17,16 @@ public sealed class SelfServiceRearrangementOptionsFunction
 {
     private readonly IBookingChangeAccessService _accessService;
     private readonly IRearrangementOptionsService _service;
+    private readonly ILogger<SelfServiceRearrangementOptionsFunction> _logger;
 
     public SelfServiceRearrangementOptionsFunction(
         IBookingChangeAccessService accessService,
-        IRearrangementOptionsService service)
+        IRearrangementOptionsService service,
+        ILogger<SelfServiceRearrangementOptionsFunction>? logger = null)
     {
         _accessService = accessService;
         _service = service;
+        _logger = logger ?? NullLogger<SelfServiceRearrangementOptionsFunction>.Instance;
     }
 
     [Function("Bookings_SelfServiceRearrangementOptions")]
@@ -52,19 +59,36 @@ public sealed class SelfServiceRearrangementOptionsFunction
 
         var body = await req.ReadJsonAsync<RearrangementOptionsRequest>(ct);
         var correlationId = BookingChangeRequestContext.GetCorrelationId(req) ?? access.Value?.CorrelationId;
-        var result = await _service.HandleAsync(new GetRearrangementOptionsCommand
+        Result<AFH.Booking.Application.Models.Bookings.RearrangementOptionsResponse> result;
+        try
         {
-            BookingId = bookingId,
-            ActorContext = BookingActorContext.SelfServiceClient(
-                access.Value?.ActorId,
-                correlationId),
-            PreferredStartUtc = body?.PreferredStartUtc,
-            Duration = body?.Duration,
-            IsRemote = body?.IsRemote,
-            MeetingType = body?.MeetingType,
-            Limit = body?.Limit,
-            Cursor = body?.Cursor
-        }, ct);
+            result = await _service.HandleAsync(new GetRearrangementOptionsCommand
+            {
+                BookingId = bookingId,
+                ActorContext = BookingActorContext.SelfServiceClient(
+                    access.Value?.ActorId,
+                    correlationId),
+                PreferredStartUtc = body?.PreferredStartUtc,
+                Duration = body?.Duration,
+                IsRemote = body?.IsRemote,
+                MeetingType = body?.MeetingType,
+                Limit = body?.Limit,
+                Cursor = body?.Cursor
+            }, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get self-service rearrangement options. BookingId={BookingId}", bookingId);
+            return await req.ProblemAsync(
+                HttpStatusCode.BadGateway,
+                "Unable to get rearrangement options.",
+                ct,
+                Errors.AvailabilityLookupFailed);
+        }
 
         if (!result.IsSuccess)
             return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);

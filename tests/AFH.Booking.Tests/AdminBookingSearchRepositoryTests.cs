@@ -23,7 +23,7 @@ public sealed class AdminBookingSearchRepositoryTests
 
         Assert.Equal(3, result.TotalItems);
         Assert.Equal(2, result.TotalPages);
-        Assert.Equal(["booking-2", "booking-1"], result.Items.Select(x => x.BookingId).ToArray());
+        Assert.Equal(["booking-3", "booking-1"], result.Items.Select(x => x.BookingId).ToArray());
         Assert.Equal("Confirmed", result.Items[1].Status);
         Assert.Equal("client-1", result.Items[1].ClientRef);
     }
@@ -67,7 +67,7 @@ public sealed class AdminBookingSearchRepositoryTests
             PageSize = 25
         }, CancellationToken.None);
 
-        Assert.Equal(["booking-2", "booking-3"], result.Items.Select(x => x.BookingId).ToArray());
+        Assert.Equal(["booking-3", "booking-2"], result.Items.Select(x => x.BookingId).ToArray());
     }
 
     private static BookingDbContext CreateDbContext()

@@ -11,6 +11,10 @@ namespace AFH.Booking.Infrastructure.Persistence.Repositories;
 
 public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
 {
+    private const string OnlineMode = "Online";
+    private const string InPersonMode = "In-Person";
+    private const string PhoneMode = "Phone";
+
     private readonly BookingDbContext _db;
     private readonly IClientDirectory _clients;
     private readonly ILogger<AdminBookingSearchRepository> _logger;
@@ -161,6 +165,24 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
                     && profile.AdviserId == x.Slot.AdviserId));
         }
 
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim().ToLower();
+            rows = rows.Where(x =>
+                (x.Id != null && x.Id.ToLower().Contains(search))
+                || (x.Reference != null && x.Reference.ToLower().Contains(search))
+                || (x.Slot.Transaction.BookingReference != null && x.Slot.Transaction.BookingReference.ToLower().Contains(search))
+                || (x.Slot.Transaction.TransactionRef != null && x.Slot.Transaction.TransactionRef.ToLower().Contains(search))
+                || (x.UserId != null && x.UserId.ToLower().Contains(search))
+                || (x.Slot.Transaction.ClientName != null && x.Slot.Transaction.ClientName.ToLower().Contains(search))
+                || (x.Slot.Transaction.ClientEmail != null && x.Slot.Transaction.ClientEmail.ToLower().Contains(search))
+                || (x.Slot.AdviserName != null && x.Slot.AdviserName.ToLower().Contains(search))
+                || (x.Slot.AdviserId != null && x.Slot.AdviserId.ToLower().Contains(search))
+                || (x.Slot.Transaction.MeetingType != null && x.Slot.Transaction.MeetingType.ToLower().Contains(search))
+                || (x.Slot.LocationRef != null && x.Slot.LocationRef.ToLower().Contains(search))
+                || (x.Slot.Transaction.LocationRef != null && x.Slot.Transaction.LocationRef.ToLower().Contains(search)));
+        }
+
         if (query.BookingIds.Count > 0)
         {
             var bookingIds = Normalize(query.BookingIds);
@@ -197,6 +219,12 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             rows = rows.Where(x => adviserIds.Contains(x.Slot.AdviserId));
         }
 
+        if (query.AdviserNames.Count > 0)
+        {
+            var adviserNames = Normalize(query.AdviserNames);
+            rows = rows.Where(x => adviserNames.Contains(x.Slot.AdviserName));
+        }
+
         if (query.ClientRefs.Count > 0)
         {
             var clientRefs = Normalize(query.ClientRefs);
@@ -213,6 +241,26 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
         {
             var meetingTypes = Normalize(query.MeetingTypes);
             rows = rows.Where(x => meetingTypes.Contains(x.Slot.Transaction.MeetingType!));
+        }
+
+        if (query.Modes.Count > 0)
+        {
+            var modes = Normalize(query.Modes);
+            var includeOnline = modes.Contains(OnlineMode, StringComparer.Ordinal);
+            var includeInPerson = modes.Contains(InPersonMode, StringComparer.Ordinal);
+            var includePhone = modes.Contains(PhoneMode, StringComparer.Ordinal);
+
+            if (includeOnline || includeInPerson || includePhone)
+            {
+                rows = rows.Where(x =>
+                    (includeOnline && x.Slot.Transaction.IsRemote && x.Slot.Transaction.MeetingType != PhoneMode)
+                    || (includeInPerson && !x.Slot.Transaction.IsRemote)
+                    || (includePhone && x.Slot.Transaction.IsRemote && x.Slot.Transaction.MeetingType == PhoneMode));
+            }
+            else
+            {
+                rows = rows.Where(_ => false);
+            }
         }
 
         if (query.FromUtc.HasValue)

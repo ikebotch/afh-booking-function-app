@@ -220,7 +220,10 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         if (newSlot is null)
             return Result<ConfirmedBookingContext>.Fail(HttpStatusCode.Conflict, "New slot was not found after confirmation.", Errors.Conflict);
 
-        return Result<ConfirmedBookingContext>.Ok(new ConfirmedBookingContext(newHold, newSlot));
+        return Result<ConfirmedBookingContext>.Ok(new ConfirmedBookingContext(
+            newHold,
+            newSlot,
+            confirmResult.Value.BookingReference ?? holdResult.Value.BookingReference));
     }
 
     private async Task<Result> CancelPreviousBookingAsync(
@@ -462,9 +465,9 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         return Result<RearrangeBookingResponse>.Ok(new RearrangeBookingResponse
         {
             PreviousBookingId = existingBooking.Hold.Id,
-            PreviousBookingReference = existingBooking.Hold.Reference,
+            PreviousBookingReference = existingBooking.Transaction.BookingReference ?? existingBooking.Hold.Reference,
             NewBookingId = newBooking.Hold.Id,
-            NewBookingReference = newBooking.Hold.Reference,
+            NewBookingReference = newBooking.BookingReference ?? newBooking.Hold.Reference,
             NewSlotId = newBooking.Slot.Id,
             PreviousAdviserId = existingBooking.Slot.AdviserId,
             PreviousAdviserName = existingBooking.Slot.AdviserName,
@@ -616,7 +619,8 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
 
     private sealed record ConfirmedBookingContext(
         BookingHold Hold,
-        BookingSlot Slot);
+        BookingSlot Slot,
+        string? BookingReference);
 
     private sealed record RearrangedSnapshot(
         string? previousBookingId,

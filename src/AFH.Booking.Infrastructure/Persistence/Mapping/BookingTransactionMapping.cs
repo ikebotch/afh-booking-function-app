@@ -15,6 +15,14 @@ internal static class BookingTransactionPersistenceMapping
         return BookingTransaction.Rehydrate(
             id: m.Id,
             transactionRef: m.TransactionRef,
+            bookingReference: m.BookingReference,
+            clientName: m.ClientName,
+            clientEmail: m.ClientEmail,
+            clientAddressLine1: m.ClientAddressLine1,
+            clientAddressLine2: m.ClientAddressLine2,
+            clientTown: m.ClientTown,
+            clientCounty: m.ClientCounty,
+            clientPostcode: m.ClientPostcode,
             proposedStartUtc: m.ProposedStartUtc,
             duration: TimeSpan.FromMinutes(m.DurationMinutes),
             timezone: m.Timezone,
@@ -41,6 +49,14 @@ internal static class BookingTransactionPersistenceMapping
         {
             Id = tx.Id,
             TransactionRef = tx.TransactionRef,
+            BookingReference = tx.BookingReference,
+            ClientName = tx.ClientName,
+            ClientEmail = tx.ClientEmail,
+            ClientAddressLine1 = tx.ClientAddressLine1,
+            ClientAddressLine2 = tx.ClientAddressLine2,
+            ClientTown = tx.ClientTown,
+            ClientCounty = tx.ClientCounty,
+            ClientPostcode = tx.ClientPostcode,
 
             ProposedStartUtc = tx.ProposedStartUtc,
             DurationMinutes = (int)Math.Round(tx.Duration.TotalMinutes),
@@ -74,6 +90,14 @@ internal static class BookingTransactionPersistenceMapping
 
         // Id is immutable once created
         m.TransactionRef = tx.TransactionRef;
+        m.BookingReference = tx.BookingReference;
+        m.ClientName = tx.ClientName;
+        m.ClientEmail = tx.ClientEmail;
+        m.ClientAddressLine1 = tx.ClientAddressLine1;
+        m.ClientAddressLine2 = tx.ClientAddressLine2;
+        m.ClientTown = tx.ClientTown;
+        m.ClientCounty = tx.ClientCounty;
+        m.ClientPostcode = tx.ClientPostcode;
 
         m.ProposedStartUtc = tx.ProposedStartUtc;
         m.DurationMinutes = (int)Math.Round(tx.Duration.TotalMinutes);

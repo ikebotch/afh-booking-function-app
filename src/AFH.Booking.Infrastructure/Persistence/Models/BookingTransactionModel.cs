@@ -7,6 +7,14 @@ public sealed class BookingTransactionModel
 
   
     public string TransactionRef { get; set; } = default!;
+    public string? BookingReference { get; set; }
+    public string? ClientName { get; set; }
+    public string? ClientEmail { get; set; }
+    public string? ClientAddressLine1 { get; set; }
+    public string? ClientAddressLine2 { get; set; }
+    public string? ClientTown { get; set; }
+    public string? ClientCounty { get; set; }
+    public string? ClientPostcode { get; set; }
 
     public DateTime ProposedStartUtc { get; set; }
     public int DurationMinutes { get; set; }             

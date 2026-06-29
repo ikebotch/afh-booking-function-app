@@ -40,7 +40,7 @@ internal static class BookingFunctionActorContext
                 await req.ProblemAsync(HttpStatusCode.Unauthorized, "Authenticated manager/admin identity is required.", ct, "Unauthorized"));
         }
 
-        if (!user.Permissions.Contains(requiredPermission, StringComparer.OrdinalIgnoreCase))
+        if (!HasPermission(user, requiredPermission))
         {
             return BookingFunctionActorContextResult.Fail(
                 await req.ProblemAsync(HttpStatusCode.Forbidden, $"Permission '{requiredPermission}' is required.", ct, "Forbidden"));
@@ -144,6 +144,10 @@ internal static class BookingFunctionActorContext
     private static bool IsAreaMatch(string? scopeArea, string area)
         => string.Equals(scopeArea, "*", StringComparison.OrdinalIgnoreCase)
             || string.Equals(scopeArea, area, StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasPermission(AdviserUserContext user, string requiredPermission)
+        => user.Permissions.Contains("*", StringComparer.OrdinalIgnoreCase)
+            || user.Permissions.Contains(requiredPermission, StringComparer.OrdinalIgnoreCase);
 
     private static bool HasLegacyBroadBookingPermission(AdviserUserContext user)
         => user.Permissions.Contains(Domain.Auth.BookingPermissionNames.AdminRead, StringComparer.OrdinalIgnoreCase)

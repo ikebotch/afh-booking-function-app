@@ -23,7 +23,8 @@ public sealed class CurrentUserPermissionClient : ICurrentUserPermissionClient
         if (user is null)
             return CurrentUserPermissionResult.Unavailable("Unable to resolve current user permissions.");
 
-        return user.Permissions.Contains(requiredPermission, StringComparer.OrdinalIgnoreCase)
+        return user.Permissions.Contains("*", StringComparer.OrdinalIgnoreCase)
+            || user.Permissions.Contains(requiredPermission, StringComparer.OrdinalIgnoreCase)
             ? CurrentUserPermissionResult.Authorised(user)
             : CurrentUserPermissionResult.Forbidden(user, requiredPermission);
     }
@@ -40,6 +41,10 @@ public sealed class CurrentUserPermissionClient : ICurrentUserPermissionClient
 
     private Task<AdviserUserContext?> ResolveCurrentUserAsync(string bearerToken, CancellationToken ct)
     {
+        var mockUser = MockAdviserUserContextFactory.TryCreate(bearerToken);
+        if (mockUser is not null)
+            return Task.FromResult<AdviserUserContext?>(mockUser);
+
         if (_cachedUserContext is not null && string.Equals(_cachedBearerToken, bearerToken, StringComparison.Ordinal))
             return _cachedUserContext;
 

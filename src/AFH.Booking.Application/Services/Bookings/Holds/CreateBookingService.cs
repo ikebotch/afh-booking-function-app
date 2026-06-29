@@ -314,7 +314,7 @@ public sealed class CreateBookingService : ICreateBookingService
         return new CreateBookingResponse
         {
             BookingId = hold.Id,
-            BookingReference = hold.Reference,
+            BookingReference = tx.BookingReference ?? hold.Reference,
             SlotId = hold.SlotId,
             HoldExpiresUtc = hold.ExpiresUtc,
             CompanyBufferMinutes = tx.IsRemote

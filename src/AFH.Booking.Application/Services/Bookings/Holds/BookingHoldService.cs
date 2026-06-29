@@ -73,7 +73,7 @@ public sealed class BookingHoldService : IBookingHoldService
                 DefaultHoldWindow,
                 context.CalendarUserId);
 
-            await EnsureReferenceAsync(slotHold, ct);
+            await EnsureTransactionReferenceAsync(context.Transaction, slotHold, ct);
 
             context.Transaction.ExtendExpiry(slotHold.ExpiresUtc);
 
@@ -107,7 +107,7 @@ public sealed class BookingHoldService : IBookingHoldService
             utcNow: utcNow,
             holdDuration: DefaultHoldWindow);
 
-        await EnsureReferenceAsync(newHold, ct);
+        await EnsureTransactionReferenceAsync(context.Transaction, newHold, ct);
 
         context.Transaction.ExtendExpiry(newHold.ExpiresUtc);
 
@@ -118,16 +118,21 @@ public sealed class BookingHoldService : IBookingHoldService
         return Result<BookingHold>.Ok(newHold);
     }
 
-    private async Task EnsureReferenceAsync(BookingHold hold, CancellationToken ct)
+    private async Task EnsureTransactionReferenceAsync(
+        BookingTransaction transaction,
+        BookingHold? legacyHold,
+        CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(hold.Reference))
+        if (!string.IsNullOrWhiteSpace(transaction.BookingReference))
             return;
 
-        var reference = _references is null
-            ? BookingReferenceFallback.CreateBookingReference(hold.Id)
-            : await _references.GenerateBookingReferenceAsync(hold.Id, ct);
+        var reference = !string.IsNullOrWhiteSpace(legacyHold?.Reference)
+            ? legacyHold.Reference
+            : _references is null
+                ? BookingReferenceFallback.CreateBookingReference(transaction.Id)
+                : await _references.GenerateBookingReferenceAsync(transaction.Id, ct);
 
-        hold.AssignReference(reference);
+        transaction.AssignBookingReference(reference);
     }
 
     private async Task CancelCalendarEventIfExistsAsync(

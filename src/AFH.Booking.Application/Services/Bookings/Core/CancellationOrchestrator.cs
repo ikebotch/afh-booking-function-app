@@ -123,7 +123,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
 
         await PublishCancellationUpdateAsync(cmd, context, eventId, ct);
 
-        return OkResponse(context.Hold, utcNow);
+        return OkResponse(context.Hold, context.Transaction, utcNow);
     }
 
     private async Task<Result<BookingHold>> LoadCancellationHoldAsync(
@@ -330,6 +330,17 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
                 lifecycleEventId = eventId
             }),
             ct: ct);
+    }
+
+    private static Result<CancelBookingResponse> OkResponse(BookingHold hold, BookingTransaction tx, DateTime utcNow)
+    {
+        return Result<CancelBookingResponse>.Ok(new CancelBookingResponse
+        {
+            BookingId = hold.Id,
+            BookingReference = tx.BookingReference ?? hold.Reference,
+            Status = hold.Status.ToString(),
+            CancelledUtc = hold.CancelledUtc ?? utcNow
+        });
     }
 
     private static Result<CancelBookingResponse> OkResponse(BookingHold hold, DateTime utcNow)

@@ -21,6 +21,14 @@ public sealed class BookingTransaction
 
     // External reference (transactionId OR clientId)
     public string TransactionRef { get; private set; } = default!;
+    public string? BookingReference { get; private set; }
+    public string? ClientName { get; private set; }
+    public string? ClientEmail { get; private set; }
+    public string? ClientAddressLine1 { get; private set; }
+    public string? ClientAddressLine2 { get; private set; }
+    public string? ClientTown { get; private set; }
+    public string? ClientCounty { get; private set; }
+    public string? ClientPostcode { get; private set; }
 
     // Request details used to generate slots
     public DateTime ProposedStartUtc { get; private set; }
@@ -102,6 +110,32 @@ public sealed class BookingTransaction
         _slots.Add(slot);
     }
 
+    public void AssignBookingReference(string reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference))
+            throw new DomainException("booking reference required.");
+
+        BookingReference = reference.Trim();
+    }
+
+    public void CaptureClientSnapshot(
+        string? clientName,
+        string? clientEmail,
+        string? addressLine1,
+        string? addressLine2,
+        string? town,
+        string? county,
+        string? postcode)
+    {
+        ClientName = Normalize(clientName);
+        ClientEmail = Normalize(clientEmail);
+        ClientAddressLine1 = Normalize(addressLine1);
+        ClientAddressLine2 = Normalize(addressLine2);
+        ClientTown = Normalize(town);
+        ClientCounty = Normalize(county);
+        ClientPostcode = Normalize(postcode);
+    }
+
     public BookingSlot? FindSlot(string slotId)
         => _slots.FirstOrDefault(s => string.Equals(s.Id, slotId, StringComparison.Ordinal));
 
@@ -152,6 +186,14 @@ public sealed class BookingTransaction
     public static BookingTransaction Rehydrate(
         string id,
         string transactionRef,
+        string? bookingReference,
+        string? clientName,
+        string? clientEmail,
+        string? clientAddressLine1,
+        string? clientAddressLine2,
+        string? clientTown,
+        string? clientCounty,
+        string? clientPostcode,
         DateTime proposedStartUtc,
         TimeSpan duration,
         string timezone,
@@ -167,6 +209,14 @@ public sealed class BookingTransaction
         {
             Id = id,
             TransactionRef = transactionRef,
+            BookingReference = bookingReference,
+            ClientName = clientName,
+            ClientEmail = clientEmail,
+            ClientAddressLine1 = clientAddressLine1,
+            ClientAddressLine2 = clientAddressLine2,
+            ClientTown = clientTown,
+            ClientCounty = clientCounty,
+            ClientPostcode = clientPostcode,
             ProposedStartUtc = DateTime.SpecifyKind(proposedStartUtc, DateTimeKind.Utc),
             Duration = duration,
             Timezone = timezone,
@@ -190,4 +240,7 @@ public sealed class BookingTransaction
 
         return tx;
     }
+
+    private static string? Normalize(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

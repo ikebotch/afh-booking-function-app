@@ -3,6 +3,7 @@
 public sealed class RecordNoShowResponse
 {
     public string BookingId { get; init; } = default!;
+    public string? BookingReference { get; init; }
     public string TransactionId { get; init; } = default!;
     public string LifecycleEventId { get; init; } = default!;
     public string PreviousState { get; init; } = default!;

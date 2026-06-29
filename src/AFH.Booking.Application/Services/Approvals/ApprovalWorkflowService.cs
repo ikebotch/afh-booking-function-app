@@ -74,7 +74,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         {
             Id = Guid.NewGuid().ToString("N"),
             BookingId = booking.Hold.Id,
-            BookingReference = booking.Hold.Reference,
+            BookingReference = booking.Transaction.BookingReference ?? booking.Hold.Reference,
             TransactionId = booking.Transaction.Id,
             ChangeType = request.ChangeType.Trim(),
             RequestedBy = requestedBy,

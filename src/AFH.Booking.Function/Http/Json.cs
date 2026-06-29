@@ -6,6 +6,7 @@ public static class Json
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         PropertyNameCaseInsensitive = true,
-        WriteIndented = false
+        WriteIndented = false,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() }
     };
 }

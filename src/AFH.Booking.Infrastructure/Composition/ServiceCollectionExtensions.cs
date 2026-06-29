@@ -133,24 +133,29 @@ public static class ServiceCollectionExtensions
             http.Timeout = TimeSpan.FromSeconds(30);
         });
 
-        // Leads integration
+        // Leads integration is optional for local/admin read flows; missing config just disables client enrichment.
         services.AddHttpClient<LeadsAccessToken>();
-        services.AddHttpClient<IClientDirectory, LeadsClientDirectory>((sp, http) =>
+        var leadsOptions = config.GetSection(LeadsOptions.SectionName).Get<LeadsOptions>() ?? new LeadsOptions();
+        if (string.IsNullOrWhiteSpace(leadsOptions.BaseUrl))
         {
-            var o = sp.GetRequiredService<IOptions<LeadsOptions>>().Value;
-
-            if (string.IsNullOrWhiteSpace(o.BaseUrl))
-                throw new InvalidOperationException($"{LeadsOptions.SectionName}:BaseUrl is required.");
-
-            http.BaseAddress = new Uri(o.BaseUrl, UriKind.Absolute);
-            http.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds <= 0 ? 30 : o.TimeoutSeconds);
-
-            if (!string.IsNullOrWhiteSpace(o.BearerToken))
+            services.AddSingleton<IClientDirectory, NoopClientDirectory>();
+        }
+        else
+        {
+            services.AddHttpClient<IClientDirectory, LeadsClientDirectory>((sp, http) =>
             {
-                http.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", o.BearerToken);
-            }
-        });
+                var o = sp.GetRequiredService<IOptions<LeadsOptions>>().Value;
+
+                http.BaseAddress = new Uri(o.BaseUrl, UriKind.Absolute);
+                http.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds <= 0 ? 30 : o.TimeoutSeconds);
+
+                if (!string.IsNullOrWhiteSpace(o.BearerToken))
+                {
+                    http.DefaultRequestHeaders.Authorization =
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", o.BearerToken);
+                }
+            });
+        }
 
         services.AddScoped<IClientEnricher, XPlanClientEnricher>();
 

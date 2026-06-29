@@ -51,8 +51,14 @@ public sealed class BookingDetailsResponse
     public string SlotId { get; init; } = default!;
     public string TransactionId { get; init; } = default!;
     public string TransactionRef { get; init; } = default!;
+    public string? ClientRef { get; init; }
     public string? ClientName { get; set; }
     public string? ClientEmail { get; set; }
+    public string? ClientAddressLine1 { get; set; }
+    public string? ClientAddressLine2 { get; set; }
+    public string? ClientTown { get; set; }
+    public string? ClientCounty { get; set; }
+    public string? ClientPostcode { get; set; }
     public string AdviserId { get; init; } = default!;
     public string AdviserName { get; init; } = default!;
     public string? AdviserRegion { get; init; }
@@ -90,6 +96,11 @@ public sealed class AdminBookingSearchItem
     public string ClientRef { get; init; } = default!;
     public string? ClientName { get; set; }
     public string? ClientEmail { get; set; }
+    public string? ClientAddressLine1 { get; set; }
+    public string? ClientAddressLine2 { get; set; }
+    public string? ClientTown { get; set; }
+    public string? ClientCounty { get; set; }
+    public string? ClientPostcode { get; set; }
     public string AdviserId { get; init; } = default!;
     public string AdviserName { get; init; } = default!;
     public DateTime StartUtc { get; init; }

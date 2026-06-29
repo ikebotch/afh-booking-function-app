@@ -1,7 +1,9 @@
 using AFH.Booking.Application.Abstractions.Availability;
 using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Models.Availability;
+using AFH.Booking.Application.Services.Bookings.Core;
 using AFH.Booking.Domain.Availability;
+using AFH.Booking.Domain.Client;
 using AFH.Booking.Domain.Common;
 
 namespace AFH.Booking.Application.Availability;
@@ -18,6 +20,7 @@ public sealed class AvailabilityService : IAvailabilityService
     private readonly IAdviserPoolBuilder _adviserPoolBuilder;
     private readonly IAvailabilitySlotProcessor _slotProcessor;
     private readonly IAvailabilityResponseBuilder _responseBuilder;
+    private readonly IBookingReferenceGenerator? _references;
 
     public AvailabilityService(
         IBookingTransactionRepository txRepo,
@@ -29,7 +32,8 @@ public sealed class AvailabilityService : IAvailabilityService
         ISlotStartBuilder slotStartBuilder,
         IAdviserPoolBuilder adviserPoolBuilder,
         IAvailabilitySlotProcessor slotProcessor,
-        IAvailabilityResponseBuilder responseBuilder)
+        IAvailabilityResponseBuilder responseBuilder,
+        IBookingReferenceGenerator? references = null)
     {
         _txRepo = txRepo;
         _uow = uow;
@@ -41,6 +45,7 @@ public sealed class AvailabilityService : IAvailabilityService
         _adviserPoolBuilder = adviserPoolBuilder;
         _slotProcessor = slotProcessor;
         _responseBuilder = responseBuilder;
+        _references = references;
     }
 
     public async Task<Result<GetAvailabilityResponse>> HandleAsync(GetAvailabilityQuery q, CancellationToken ct)
@@ -62,7 +67,7 @@ public sealed class AvailabilityService : IAvailabilityService
         if (slotStartsUtc.Count == 0)
             return _responseBuilder.Empty(nextCursor);
 
-        var txResult = CreateTransaction(q, slotStartsUtc[0], utcNow);
+        var txResult = await CreateTransactionAsync(q, prospectResult.Value, slotStartsUtc[0], utcNow, ct);
         if (txResult.Error is not null)
             return txResult.Error;
 
@@ -125,10 +130,12 @@ public sealed class AvailabilityService : IAvailabilityService
         return true;
     }
 
-    private (BookingTransaction? Value, Result<GetAvailabilityResponse>? Error) CreateTransaction(
+    private async Task<(BookingTransaction? Value, Result<GetAvailabilityResponse>? Error)> CreateTransactionAsync(
         GetAvailabilityQuery q,
+        ClientDirectoryItem? client,
         DateTime firstSlot,
-        DateTime utcNow)
+        DateTime utcNow,
+        CancellationToken ct)
     {
         try
         {
@@ -143,6 +150,19 @@ public sealed class AvailabilityService : IAvailabilityService
                 utcNow: utcNow,
                 expiresUtc: utcNow.AddMinutes(10));
 
+            tx.AssignBookingReference(_references is null
+                ? BookingReferenceFallback.CreateBookingReference(tx.Id)
+                : await _references.GenerateBookingReferenceAsync(tx.Id, ct));
+
+            tx.CaptureClientSnapshot(
+                BuildClientName(client),
+                client?.Email,
+                client?.StreetName1 ?? q.DestinationAddress?.Line1,
+                client?.StreetName2,
+                client?.Town ?? q.DestinationAddress?.Town,
+                client?.County,
+                client?.PostalCode ?? q.DestinationAddress?.Postcode);
+
             return (tx, null);
         }
         catch (DomainException ex)
@@ -153,5 +173,16 @@ public sealed class AvailabilityService : IAvailabilityService
                     ex.Message,
                     Errors.Validation));
         }
+    }
+
+    private static string? BuildClientName(ClientDirectoryItem? client)
+    {
+        if (client is null)
+            return null;
+
+        var first = string.IsNullOrWhiteSpace(client.FirstName) ? null : client.FirstName.Trim();
+        var last = string.IsNullOrWhiteSpace(client.LastName) ? null : client.LastName.Trim();
+        var value = string.Join(" ", new[] { first, last }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 }

@@ -147,7 +147,7 @@ public sealed class RearrangementOptionsService : IRearrangementOptionsService
         return Result<RearrangementOptionsResponse>.Ok(new RearrangementOptionsResponse
         {
             BookingId = hold.Id,
-            BookingReference = hold.Reference,
+            BookingReference = tx.BookingReference ?? hold.Reference,
             TransactionId = tx.Id,
             AssignedAdviserId = slot.AdviserId,
             AssignedAdviserName = slot.AdviserName,

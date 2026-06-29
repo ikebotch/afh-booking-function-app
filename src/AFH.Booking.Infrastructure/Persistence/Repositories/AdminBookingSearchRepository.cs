@@ -47,10 +47,17 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             {
                 BookingId = x.Id,
                 SlotId = x.SlotId,
-                BookingReference = x.Reference,
+                BookingReference = x.Slot.Transaction.BookingReference ?? x.Reference,
                 TransactionId = x.Slot.TransactionId,
                 TransactionRef = x.Slot.Transaction.TransactionRef,
-                ClientRef = x.UserId,
+                ClientRef = x.Slot.Transaction.TransactionRef,
+                ClientName = x.Slot.Transaction.ClientName,
+                ClientEmail = x.Slot.Transaction.ClientEmail,
+                ClientAddressLine1 = x.Slot.Transaction.ClientAddressLine1,
+                ClientAddressLine2 = x.Slot.Transaction.ClientAddressLine2,
+                ClientTown = x.Slot.Transaction.ClientTown,
+                ClientCounty = x.Slot.Transaction.ClientCounty,
+                ClientPostcode = x.Slot.Transaction.ClientPostcode,
                 AdviserId = x.Slot.AdviserId,
                 AdviserName = x.Slot.AdviserName,
                 StartUtc = x.Slot.StartUtc,
@@ -97,8 +104,13 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             if (client is null)
                 continue;
 
-            item.ClientName = BuildClientName(client);
-            item.ClientEmail = client.Email;
+            item.ClientName ??= BuildClientName(client);
+            item.ClientEmail ??= client.Email;
+            item.ClientAddressLine1 ??= client.StreetName1;
+            item.ClientAddressLine2 ??= client.StreetName2;
+            item.ClientTown ??= client.Town;
+            item.ClientCounty ??= client.County;
+            item.ClientPostcode ??= client.PostalCode;
         }
     }
 
@@ -152,7 +164,10 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
         if (query.BookingIds.Count > 0)
         {
             var bookingIds = Normalize(query.BookingIds);
-            rows = rows.Where(x => bookingIds.Contains(x.Id) || bookingIds.Contains(x.Reference!));
+            rows = rows.Where(x =>
+                bookingIds.Contains(x.Id)
+                || bookingIds.Contains(x.Reference!)
+                || bookingIds.Contains(x.Slot.Transaction.BookingReference!));
         }
 
         if (query.TransactionIds.Count > 0)
@@ -185,7 +200,7 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
         if (query.ClientRefs.Count > 0)
         {
             var clientRefs = Normalize(query.ClientRefs);
-            rows = rows.Where(x => clientRefs.Contains(x.UserId));
+            rows = rows.Where(x => clientRefs.Contains(x.Slot.Transaction.TransactionRef));
         }
 
         if (query.LocationRefs.Count > 0)

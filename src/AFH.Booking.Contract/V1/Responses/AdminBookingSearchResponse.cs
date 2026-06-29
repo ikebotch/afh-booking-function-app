@@ -19,6 +19,11 @@ public sealed class AdminBookingSearchItem
     public string ClientRef { get; init; } = default!;
     public string? ClientName { get; init; }
     public string? ClientEmail { get; init; }
+    public string? ClientAddressLine1 { get; init; }
+    public string? ClientAddressLine2 { get; init; }
+    public string? ClientTown { get; init; }
+    public string? ClientCounty { get; init; }
+    public string? ClientPostcode { get; init; }
     public string AdviserId { get; init; } = default!;
     public string AdviserName { get; init; } = default!;
     public DateTime StartUtc { get; init; }

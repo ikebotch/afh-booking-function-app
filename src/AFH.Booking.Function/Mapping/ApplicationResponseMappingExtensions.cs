@@ -33,6 +33,7 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             BookingId = response.BookingId,
+            BookingReference = response.BookingReference,
             SlotId = response.SlotId,
             HoldExpiresUtc = AsUtc(response.HoldExpiresUtc),
             CompanyBufferMinutes = response.CompanyBufferMinutes
@@ -42,6 +43,7 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             BookingId = response.BookingId,
+            BookingReference = response.BookingReference,
             SlotId = response.SlotId,
             TransactionId = response.TransactionId,
             TransactionRef = response.TransactionRef,
@@ -68,6 +70,7 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             BookingId = response.BookingId,
+            BookingReference = response.BookingReference,
             CancelledUtc = AsUtc(response.CancelledUtc),
             Status = response.Status
         };
@@ -80,8 +83,14 @@ public static class ApplicationResponseMappingExtensions
             SlotId = response.SlotId,
             TransactionId = response.TransactionId,
             TransactionRef = response.TransactionRef,
+            ClientRef = response.ClientRef,
             ClientName = response.ClientName,
             ClientEmail = response.ClientEmail,
+            ClientAddressLine1 = response.ClientAddressLine1,
+            ClientAddressLine2 = response.ClientAddressLine2,
+            ClientTown = response.ClientTown,
+            ClientCounty = response.ClientCounty,
+            ClientPostcode = response.ClientPostcode,
             AdviserId = response.AdviserId,
             AdviserName = response.AdviserName,
             AdviserRegion = response.AdviserRegion,
@@ -121,6 +130,11 @@ public static class ApplicationResponseMappingExtensions
             ClientRef = item.ClientRef,
             ClientName = item.ClientName,
             ClientEmail = item.ClientEmail,
+            ClientAddressLine1 = item.ClientAddressLine1,
+            ClientAddressLine2 = item.ClientAddressLine2,
+            ClientTown = item.ClientTown,
+            ClientCounty = item.ClientCounty,
+            ClientPostcode = item.ClientPostcode,
             AdviserId = item.AdviserId,
             AdviserName = item.AdviserName,
             StartUtc = AsUtc(item.StartUtc),
@@ -140,7 +154,9 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             PreviousBookingId = response.PreviousBookingId,
+            PreviousBookingReference = response.PreviousBookingReference,
             NewBookingId = response.NewBookingId,
+            NewBookingReference = response.NewBookingReference,
             NewSlotId = response.NewSlotId,
             PreviousAdviserId = response.PreviousAdviserId,
             PreviousAdviserName = response.PreviousAdviserName,
@@ -157,6 +173,7 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             BookingId = response.BookingId,
+            BookingReference = response.BookingReference,
             TransactionId = response.TransactionId,
             AssignedAdviserId = response.AssignedAdviserId,
             AssignedAdviserName = response.AssignedAdviserName,
@@ -169,6 +186,7 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             BookingId = response.BookingId,
+            BookingReference = response.BookingReference,
             TransactionId = response.TransactionId,
             LifecycleEventId = response.LifecycleEventId,
             PreviousState = response.PreviousState,

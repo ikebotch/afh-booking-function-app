@@ -20,6 +20,30 @@ public sealed class BookingTransactionModelConfiguration : IEntityTypeConfigurat
             .HasMaxLength(256)
             .IsRequired();
 
+        b.Property(x => x.BookingReference)
+            .HasMaxLength(32);
+
+        b.Property(x => x.ClientName)
+            .HasMaxLength(256);
+
+        b.Property(x => x.ClientEmail)
+            .HasMaxLength(256);
+
+        b.Property(x => x.ClientAddressLine1)
+            .HasMaxLength(256);
+
+        b.Property(x => x.ClientAddressLine2)
+            .HasMaxLength(256);
+
+        b.Property(x => x.ClientTown)
+            .HasMaxLength(128);
+
+        b.Property(x => x.ClientCounty)
+            .HasMaxLength(128);
+
+        b.Property(x => x.ClientPostcode)
+            .HasMaxLength(32);
+
         b.Property(x => x.ProposedStartUtc)
             .IsRequired();
 
@@ -55,6 +79,10 @@ public sealed class BookingTransactionModelConfiguration : IEntityTypeConfigurat
             .OnDelete(DeleteBehavior.Cascade);
 
         // Indexes (helps query by external ref)
+        b.HasIndex(x => x.BookingReference)
+            .IsUnique()
+            .HasFilter("[BookingReference] IS NOT NULL");
+
         b.HasIndex(x => x.TransactionRef);
         b.HasIndex(x => x.CreatedUtc);
 

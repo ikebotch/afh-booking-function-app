@@ -30,8 +30,13 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         var lookup = holdId.Trim();
         var m = await _db.Holds
             .Include(x => x.Slot)
+            .ThenInclude(x => x.Transaction)
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
+            .FirstOrDefaultAsync(x =>
+                x.Id == lookup
+                || x.Reference == lookup
+                || x.Slot.Transaction.BookingReference == lookup,
+                ct);
 
         return m is null ? null : m.ToDomain();
     }
@@ -44,7 +49,13 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         // tracked entity
         var lookup = holdId.Trim();
         var m = await _db.Holds
-            .FirstOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
+            .Include(x => x.Slot)
+            .ThenInclude(x => x.Transaction)
+            .FirstOrDefaultAsync(x =>
+                x.Id == lookup
+                || x.Reference == lookup
+                || x.Slot.Transaction.BookingReference == lookup,
+                ct);
 
         return m is null ? null : m.ToDomain();
     }
@@ -98,7 +109,13 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
 
         var lookup = holdId.Trim();
         var m = await _db.Holds
-            .FirstOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
+            .Include(x => x.Slot)
+            .ThenInclude(x => x.Transaction)
+            .FirstOrDefaultAsync(x =>
+                x.Id == lookup
+                || x.Reference == lookup
+                || x.Slot.Transaction.BookingReference == lookup,
+                ct);
 
         return m is null ? null : m.ToDomain();
     }

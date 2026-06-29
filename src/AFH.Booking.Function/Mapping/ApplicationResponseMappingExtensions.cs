@@ -76,9 +76,12 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             BookingId = response.BookingId,
+            BookingReference = response.BookingReference,
             SlotId = response.SlotId,
             TransactionId = response.TransactionId,
             TransactionRef = response.TransactionRef,
+            ClientName = response.ClientName,
+            ClientEmail = response.ClientEmail,
             AdviserId = response.AdviserId,
             AdviserName = response.AdviserName,
             AdviserRegion = response.AdviserRegion,
@@ -111,10 +114,13 @@ public static class ApplicationResponseMappingExtensions
         => new()
         {
             BookingId = item.BookingId,
+            BookingReference = item.BookingReference,
             SlotId = item.SlotId,
             TransactionId = item.TransactionId,
             TransactionRef = item.TransactionRef,
             ClientRef = item.ClientRef,
+            ClientName = item.ClientName,
+            ClientEmail = item.ClientEmail,
             AdviserId = item.AdviserId,
             AdviserName = item.AdviserName,
             StartUtc = AsUtc(item.StartUtc),

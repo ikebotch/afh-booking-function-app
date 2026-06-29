@@ -48,25 +48,61 @@ public sealed class LifecycleEventRepository : ILifecycleEventRepository
 
         return row is null
             ? null
-            : new LifecycleEventRecord
-            {
-                Id = row.Id,
-                BookingId = row.BookingId,
-                TransactionId = row.TransactionId,
-                EventType = row.EventType,
-                PreviousState = row.PreviousState,
-                NewState = row.NewState,
-                ActorType = row.ActorType,
-                ActorId = row.ActorId,
-                ReasonCode = row.ReasonCode,
-                ReasonNotes = row.ReasonNotes,
-                BeforeJson = row.BeforeJson,
-                AfterJson = row.AfterJson,
-                OccurredUtc = row.OccurredUtc,
-                CorrelationId = row.CorrelationId,
-                SourceSystem = row.SourceSystem,
-                RelatedBookingId = row.RelatedBookingId,
-                TriggerReason = row.TriggerReason
-            };
+            : Map(row);
     }
+
+    public async Task<IReadOnlyList<LifecycleEventRecord>> ListByBookingAsync(string bookingId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(bookingId))
+            return [];
+
+        var lookup = bookingId.Trim();
+        var rows = await _db.LifecycleEvents
+            .AsNoTracking()
+            .Include(x => x.Steps)
+            .Where(x => x.BookingId == lookup || x.RelatedBookingId == lookup)
+            .OrderByDescending(x => x.OccurredUtc)
+            .ThenByDescending(x => x.Id)
+            .ToListAsync(ct);
+
+        return rows.Select(Map).ToList();
+    }
+
+    private static LifecycleEventRecord Map(LifecycleEventModel row)
+        => new()
+        {
+            Id = row.Id,
+            BookingId = row.BookingId,
+            TransactionId = row.TransactionId,
+            EventType = row.EventType,
+            PreviousState = row.PreviousState,
+            NewState = row.NewState,
+            ActorType = row.ActorType,
+            ActorId = row.ActorId,
+            ReasonCode = row.ReasonCode,
+            ReasonNotes = row.ReasonNotes,
+            BeforeJson = row.BeforeJson,
+            AfterJson = row.AfterJson,
+            OccurredUtc = row.OccurredUtc,
+            CorrelationId = row.CorrelationId,
+            SourceSystem = row.SourceSystem,
+            RelatedBookingId = row.RelatedBookingId,
+            TriggerReason = row.TriggerReason,
+            Steps = row.Steps
+                .OrderBy(step => step.Sequence)
+                .Select(step => new LifecycleStepRecord
+                {
+                    Id = step.Id,
+                    LifecycleEventId = step.LifecycleEventId,
+                    StepName = step.StepName,
+                    Sequence = step.Sequence,
+                    Status = step.Status,
+                    StartedUtc = step.StartedUtc,
+                    CompletedUtc = step.CompletedUtc,
+                    ErrorCode = step.ErrorCode,
+                    ErrorDetails = step.ErrorDetails,
+                    CorrelationId = step.CorrelationId
+                })
+                .ToList()
+        };
 }

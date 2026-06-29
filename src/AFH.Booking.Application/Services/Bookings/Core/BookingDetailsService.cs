@@ -1,5 +1,7 @@
 using AFH.Booking.Application.Models.Bookings;
+using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Domain.Bookings.Commands;
+using AFH.Booking.Domain.Client;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Options;
 
@@ -12,6 +14,7 @@ public sealed class BookingDetailsService : IBookingDetailsService
     private readonly IBookingTransactionRepository _transactions;
     private readonly IAdviserProfileProjectionRepository _adviserProfiles;
     private readonly IBookingTokenService _tokenService;
+    private readonly IClientDirectory? _clients;
     private readonly NotificationsOptions _notificationOptions;
 
     public BookingDetailsService(
@@ -26,6 +29,7 @@ public sealed class BookingDetailsService : IBookingDetailsService
             transactions,
             NullAdviserProfileProjectionRepository.Instance,
             tokenService,
+            null,
             notificationOptions)
     {
     }
@@ -36,6 +40,7 @@ public sealed class BookingDetailsService : IBookingDetailsService
         IBookingTransactionRepository transactions,
         IAdviserProfileProjectionRepository adviserProfiles,
         IBookingTokenService tokenService,
+        IClientDirectory? clients,
         IOptions<NotificationsOptions> notificationOptions)
     {
         _holds = holds;
@@ -43,6 +48,7 @@ public sealed class BookingDetailsService : IBookingDetailsService
         _transactions = transactions;
         _adviserProfiles = adviserProfiles;
         _tokenService = tokenService;
+        _clients = clients;
         _notificationOptions = notificationOptions.Value;
     }
 
@@ -81,6 +87,7 @@ public sealed class BookingDetailsService : IBookingDetailsService
         var links = await BuildSelfServiceLinksAsync(hold.Id, ct);
         var canUseActionLinks = BookingSelfServiceStatusRules.CanUseActionLinks(hold.Status);
         var adviserProfile = await _adviserProfiles.GetAsync(slot.AdviserId, ct);
+        var client = await TryGetClientAsync(tx.TransactionRef, ct);
 
         var response = new BookingDetailsResponse
         {
@@ -89,6 +96,8 @@ public sealed class BookingDetailsService : IBookingDetailsService
             SlotId = slot.Id,
             TransactionId = tx.Id,
             TransactionRef = tx.TransactionRef,
+            ClientName = BuildClientName(client),
+            ClientEmail = client?.Email,
             AdviserId = slot.AdviserId,
             AdviserName = slot.AdviserName,
             AdviserRegion = adviserProfile?.Region,
@@ -108,6 +117,32 @@ public sealed class BookingDetailsService : IBookingDetailsService
         };
 
         return Result<BookingDetailsResponse>.Ok(response);
+    }
+
+    private async Task<ClientDirectoryItem?> TryGetClientAsync(string transactionRef, CancellationToken ct)
+    {
+        if (_clients is null || string.IsNullOrWhiteSpace(transactionRef))
+            return null;
+
+        try
+        {
+            return await _clients.GetAsync(transactionRef, ct);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? BuildClientName(ClientDirectoryItem? client)
+    {
+        if (client is null)
+            return null;
+
+        var first = string.IsNullOrWhiteSpace(client.FirstName) ? null : client.FirstName.Trim();
+        var last = string.IsNullOrWhiteSpace(client.LastName) ? null : client.LastName.Trim();
+        var value = string.Join(" ", new[] { first, last }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return string.IsNullOrWhiteSpace(value) ? null : value;
     }
 
     private async Task<BookingSelfServiceLinks?> BuildSelfServiceLinksAsync(string bookingId, CancellationToken ct)

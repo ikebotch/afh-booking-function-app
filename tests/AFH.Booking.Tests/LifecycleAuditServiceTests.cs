@@ -189,6 +189,12 @@ public sealed class LifecycleAuditServiceTests
                 .Where(x => x.TriggerReason == triggerReason)
                 .OrderByDescending(x => x.OccurredUtc)
                 .FirstOrDefault());
+
+        public Task<IReadOnlyList<LifecycleEventRecord>> ListByBookingAsync(string bookingId, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<LifecycleEventRecord>>(_items
+                .Where(x => x.BookingId == bookingId || x.RelatedBookingId == bookingId)
+                .OrderByDescending(x => x.OccurredUtc)
+                .ToList());
     }
 
     private sealed class InMemoryLifecycleStepRepository : ILifecycleStepRepository

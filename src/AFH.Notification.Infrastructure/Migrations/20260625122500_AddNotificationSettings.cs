@@ -1,10 +1,14 @@
 using System;
+using AFH.Notification.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace AFH.Notification.Infrastructure.Migrations;
 
+[DbContext(typeof(NotificationDbContext))]
+[Migration("20260625122500_AddNotificationSettings")]
 public partial class AddNotificationSettings : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

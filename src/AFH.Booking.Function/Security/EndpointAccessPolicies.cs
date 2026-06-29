@@ -63,6 +63,7 @@ public static class EndpointAccessPolicies
             ["Config_UpsertMeetingTopic"] = InternalOnly(),
             ["Bookings_CreateHold"] = Public(),
             ["Bookings_GetBooking"] = UserAuthenticated(),
+            ["Bookings_GetBookingLifecycle"] = UserAuthenticated(),
             ["Bookings_GetRearrangementOptions"] = UserPermission(BookingPermissionNames.RearrangementOptionsRead),
             ["Bookings_LeadTechCancel"] = UserPermission(BookingPermissionNames.CancelAsLeadTech),
             ["Bookings_LeadTechRearrange"] = UserPermission(BookingPermissionNames.RearrangeAsLeadTech),

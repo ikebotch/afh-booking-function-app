@@ -26,6 +26,7 @@ public static class EndpointAccessPolicies
             ["Admin_System_FeatureFlags_List"] = UserPermission(BookingPermissionNames.SystemRead),
             ["Admin_System_FeatureFlags_Upsert"] = UserPermission(BookingPermissionNames.SystemManage),
             ["Admin_System_Health"] = UserPermission(BookingPermissionNames.SystemRead),
+            ["Approvals_List"] = UserPermission(BookingPermissionNames.ApprovalsRead),
             ["Approvals_ListPending"] = UserPermission(BookingPermissionNames.ApprovalsRead),
             ["Approvals_Review"] = UserPermission(BookingPermissionNames.ApprovalsReview),
             ["Approvals_ListAdviserRequests"] = UserPermission(BookingPermissionNames.ApprovalRequestsReadOwn),

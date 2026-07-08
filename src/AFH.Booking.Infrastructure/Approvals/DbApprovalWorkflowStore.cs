@@ -1,19 +1,35 @@
+using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Models.Approvals;
+using AFH.Booking.Domain.Client;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Mapping;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AFH.Booking.Infrastructure.Approvals;
 
 public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
 {
     private readonly BookingDbContext _db;
+    private readonly IClientDirectory _clients;
+    private readonly ILogger<DbApprovalWorkflowStore> _logger;
 
     public DbApprovalWorkflowStore(BookingDbContext db)
+        : this(db, NullClientDirectory.Instance, NullLogger<DbApprovalWorkflowStore>.Instance)
+    {
+    }
+
+    public DbApprovalWorkflowStore(
+        BookingDbContext db,
+        IClientDirectory clients,
+        ILogger<DbApprovalWorkflowStore> logger)
     {
         _db = db;
+        _clients = clients;
+        _logger = logger;
     }
 
     public async Task<ApprovalBookingSnapshot> LoadBookingAsync(
@@ -221,7 +237,15 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
         var transactions = await _db.BookingTransactions
             .AsNoTracking()
             .Where(tx => transactionIds.Contains(tx.Id))
+            .Select(tx => new ApprovalTransactionEnrichment(
+                tx.Id,
+                tx.TransactionRef,
+                tx.BookingReference,
+                tx.ClientName,
+                tx.MeetingType))
             .ToDictionaryAsync(tx => tx.Id, StringComparer.OrdinalIgnoreCase, ct);
+
+        var clients = await LoadClientsAsync(transactions.Values, ct);
 
         var holdsByLookup = holds
             .SelectMany(hold => new[] { hold.Id, hold.Reference }
@@ -229,6 +253,8 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
                 .Select(value => new { Key = value!, Hold = hold }))
             .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(group => group.Key, group => group.First().Hold, StringComparer.OrdinalIgnoreCase);
+
+        var clientNameSyncs = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var record in records)
         {
@@ -239,13 +265,109 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
                 continue;
             }
 
-            record.BookingReference ??= tx.BookingReference ?? hold.Reference;
-            record.ClientName ??= tx.ClientName;
-            record.AdviserName ??= slot.AdviserName;
-            record.MeetingType ??= tx.MeetingType;
+            var directoryClientName = BuildClientName(GetClient(clients, tx.TransactionRef));
+            record.BookingReference = FirstNonBlank(record.BookingReference, tx.BookingReference, hold.Reference);
+            record.ClientName = FirstNonBlank(record.ClientName, tx.ClientName, directoryClientName);
+            record.AdviserName = FirstNonBlank(record.AdviserName, slot.AdviserName);
+            record.MeetingType = FirstNonBlank(record.MeetingType, tx.MeetingType);
+
+            if (string.IsNullOrWhiteSpace(tx.ClientName) && !string.IsNullOrWhiteSpace(directoryClientName))
+            {
+                clientNameSyncs[tx.Id] = directoryClientName;
+            }
         }
 
+        await SyncMissingTransactionClientNamesAsync(clientNameSyncs, ct);
+
         return records;
+    }
+
+    private async Task SyncMissingTransactionClientNamesAsync(
+        IReadOnlyDictionary<string, string> clientNameSyncs,
+        CancellationToken ct)
+    {
+        if (clientNameSyncs.Count == 0)
+            return;
+
+        var transactionIds = clientNameSyncs.Keys.ToArray();
+        var transactions = await _db.BookingTransactions
+            .Where(tx => transactionIds.Contains(tx.Id))
+            .ToListAsync(ct);
+
+        foreach (var transaction in transactions)
+        {
+            if (!string.IsNullOrWhiteSpace(transaction.ClientName) ||
+                !clientNameSyncs.TryGetValue(transaction.Id, out var clientName))
+            {
+                continue;
+            }
+
+            transaction.ClientName = Limit(clientName, 256);
+        }
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    private async Task<IReadOnlyDictionary<string, ClientDirectoryItem?>> LoadClientsAsync(
+        IEnumerable<ApprovalTransactionEnrichment> transactions,
+        CancellationToken ct)
+    {
+        var cache = new Dictionary<string, ClientDirectoryItem?>(StringComparer.OrdinalIgnoreCase);
+        var lookupRefs = transactions
+            .Select(tx => tx.TransactionRef)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Select(value => value!.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        foreach (var lookupRef in lookupRefs)
+        {
+            cache[lookupRef] = await TryGetClientAsync(lookupRef, ct);
+        }
+
+        return cache;
+    }
+
+    private async Task<ClientDirectoryItem?> TryGetClientAsync(string transactionRef, CancellationToken ct)
+    {
+        try
+        {
+            return await _clients.GetAsync(transactionRef, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Client lookup skipped while enriching approval requests. TransactionRef={TransactionRef}", transactionRef);
+            return null;
+        }
+    }
+
+    private static ClientDirectoryItem? GetClient(
+        IReadOnlyDictionary<string, ClientDirectoryItem?> clients,
+        string? transactionRef)
+    {
+        return !string.IsNullOrWhiteSpace(transactionRef) && clients.TryGetValue(transactionRef.Trim(), out var client)
+            ? client
+            : null;
+    }
+
+    private static string? BuildClientName(ClientDirectoryItem? client)
+    {
+        if (client is null)
+            return null;
+
+        var first = string.IsNullOrWhiteSpace(client.FirstName) ? null : client.FirstName.Trim();
+        var last = string.IsNullOrWhiteSpace(client.LastName) ? null : client.LastName.Trim();
+        var value = string.Join(" ", new[] { first, last }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        return string.IsNullOrWhiteSpace(value) ? null : value;
+    }
+
+    private static string? FirstNonBlank(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
+    private static string Limit(string value, int maxLength)
+    {
+        var trimmed = value.Trim();
+        return trimmed.Length <= maxLength ? trimmed : trimmed[..maxLength];
     }
 
     private static ApprovalRequestModel ToModel(ApprovalWorkflowRecord record)
@@ -293,5 +415,20 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
             Comments = record.Comments,
             OccurredUtc = record.OccurredUtc
         };
+    }
+
+    private sealed record ApprovalTransactionEnrichment(
+        string Id,
+        string? TransactionRef,
+        string? BookingReference,
+        string? ClientName,
+        string? MeetingType);
+
+    private sealed class NullClientDirectory : IClientDirectory
+    {
+        public static readonly NullClientDirectory Instance = new();
+
+        public Task<ClientDirectoryItem?> GetAsync(string transactionIdOrClientId, CancellationToken ct)
+            => Task.FromResult<ClientDirectoryItem?>(null);
     }
 }

@@ -1,8 +1,11 @@
+using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Models.Approvals;
+using AFH.Booking.Domain.Client;
 using AFH.Booking.Infrastructure.Approvals;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace AFH.Booking.Tests;
 
@@ -38,6 +41,77 @@ public sealed class DbApprovalWorkflowStoreTests
             ChangeTypes: []), CancellationToken.None);
 
         Assert.Equal(["request-3", "request-1"], results.Select(x => x.Id).ToArray());
+    }
+
+    [Fact]
+    public async Task ListAsync_EnrichesClientNameFromClientDirectoryWhenTransactionSnapshotIsEmpty()
+    {
+        await using var db = CreateDbContext();
+        await db.BookingTransactions.AddAsync(new BookingTransactionModel
+        {
+            Id = "tx-1",
+            TransactionRef = "client-ref-1",
+            BookingReference = "booking-ref-1",
+            ClientName = null,
+            ProposedStartUtc = new DateTime(2026, 7, 20, 9, 0, 0, DateTimeKind.Utc),
+            DurationMinutes = 60,
+            IsRemote = true,
+            MeetingType = "Online Video",
+            Status = 0,
+            CreatedUtc = new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc),
+            RowVersion = [1]
+        });
+        await db.BookingSlots.AddAsync(new BookingSlotModel
+        {
+            Id = "slot-1",
+            TransactionId = "tx-1",
+            AdviserId = "adv-1",
+            AdviserName = "Alex Adviser",
+            StartUtc = new DateTime(2026, 7, 20, 9, 0, 0, DateTimeKind.Utc),
+            EndUtc = new DateTime(2026, 7, 20, 10, 0, 0, DateTimeKind.Utc),
+            CreatedUtc = new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc)
+        });
+        await db.Holds.AddAsync(new BookingHoldModel
+        {
+            Id = "booking-1",
+            Reference = "booking-ref-1",
+            UserId = "user-1",
+            SlotId = "slot-1",
+            Status = HoldStatus.Confirmed,
+            CreatedUtc = new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc),
+            HoldExpiresUtc = new DateTime(2026, 7, 1, 9, 15, 0, DateTimeKind.Utc),
+            RowVersion = [1]
+        });
+        await db.ApprovalRequests.AddAsync(Request(
+            "request-1",
+            "booking-1",
+            "Cancel",
+            "adv-1",
+            "Pending",
+            new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc)));
+        await db.SaveChangesAsync();
+
+        var clients = new StubClientDirectory(new ClientDirectoryItem
+        {
+            FirstName = "Casey",
+            LastName = "Client"
+        });
+        var store = new DbApprovalWorkflowStore(db, clients, NullLogger<DbApprovalWorkflowStore>.Instance);
+
+        var results = await store.ListAsync(new ListApprovalWorkflowRequestsQuery(
+            RequesterId: "adv-1",
+            BookingIds: [],
+            Statuses: ["Pending"],
+            ChangeTypes: []), CancellationToken.None);
+
+        var result = Assert.Single(results);
+        Assert.Equal("Casey Client", result.ClientName);
+        Assert.Equal("Alex Adviser", result.AdviserName);
+        Assert.Equal("Online Video", result.MeetingType);
+        Assert.Equal("booking-ref-1", result.BookingReference);
+
+        var transaction = await db.BookingTransactions.AsNoTracking().SingleAsync(x => x.Id == "tx-1");
+        Assert.Equal("Casey Client", transaction.ClientName);
     }
 
     private static BookingDbContext CreateDbContext()
@@ -83,4 +157,12 @@ public sealed class DbApprovalWorkflowStoreTests
             ApproverTargetValue = "manager-1",
             ApproverTargetDisplayName = "Manager One"
         };
+
+    private sealed class StubClientDirectory(ClientDirectoryItem client) : IClientDirectory
+    {
+        public Task<ClientDirectoryItem?> GetAsync(string transactionIdOrClientId, CancellationToken ct)
+        {
+            return Task.FromResult(transactionIdOrClientId == "client-ref-1" ? client : null);
+        }
+    }
 }

@@ -7,6 +7,7 @@ public sealed class ApprovalRequestResponse
     public string TransactionId { get; init; } = default!;
     public string? ClientName { get; init; }
     public string? AdviserName { get; init; }
+    public DateTime? BookingDateTime { get; init; }
     public string? MeetingType { get; init; }
     public IReadOnlyList<string> Skills { get; init; } = Array.Empty<string>();
     public string ChangeType { get; init; } = default!;

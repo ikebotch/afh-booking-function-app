@@ -32,6 +32,7 @@ public sealed class ApprovalWorkflowRecord
     public string? ExecutionError { get; set; }
     public string? ClientName { get; set; }
     public string? AdviserName { get; set; }
+    public DateTime? BookingDateTime { get; set; }
     public string? MeetingType { get; set; }
     public IReadOnlyList<string> Skills { get; set; } = [];
 }

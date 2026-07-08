@@ -57,6 +57,7 @@ public sealed class ApprovalWorkflowServiceTests
         Assert.Equal("adviser-1", response.RequesterId);
         Assert.Equal("Alice Client", response.ClientName);
         Assert.Equal("Adviser One", response.AdviserName);
+        Assert.Equal(FixedNow.AddDays(1), response.BookingDateTime);
         Assert.Equal("Review", response.MeetingType);
         var note = Assert.Single(response.Notes);
         Assert.Equal("Adviser", note.ActorType);

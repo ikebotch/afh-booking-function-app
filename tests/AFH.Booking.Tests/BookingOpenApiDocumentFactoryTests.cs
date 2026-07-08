@@ -221,6 +221,13 @@ public class BookingOpenApiDocumentFactoryTests
         Assert.True(createSchemaProperties.ContainsKey("adviserNote"));
         Assert.True(createSchemaProperties.ContainsKey("proposedAlternativeTimes"));
 
+        var approvalResponseProperties = schemas["ApprovalRequestResponse"]!["properties"]!.AsObject();
+        Assert.True(approvalResponseProperties.ContainsKey("clientName"));
+        Assert.True(approvalResponseProperties.ContainsKey("adviserName"));
+        Assert.True(approvalResponseProperties.ContainsKey("bookingDateTime"));
+        Assert.True(approvalResponseProperties.ContainsKey("meetingType"));
+        Assert.True(approvalResponseProperties.ContainsKey("skills"));
+
         Assert.Equal("List adviser booking change requests", adviserListGet["summary"]!.GetValue<string>());
         Assert.Contains("authenticated adviser", adviserListGet["description"]!.GetValue<string>(), StringComparison.OrdinalIgnoreCase);
         Assert.Contains(adviserListGet["parameters"]!.AsArray(), x => x!["name"]!.GetValue<string>() == "bookingId");

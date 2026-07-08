@@ -202,6 +202,7 @@ public static class ApplicationResponseMappingExtensions
             TransactionId = response.TransactionId,
             ClientName = response.ClientName,
             AdviserName = response.AdviserName,
+            BookingDateTime = AsUtc(response.BookingDateTime),
             MeetingType = response.MeetingType,
             Skills = response.Skills,
             ChangeType = response.ChangeType,

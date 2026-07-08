@@ -269,6 +269,7 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
             record.BookingReference = FirstNonBlank(record.BookingReference, tx.BookingReference, hold.Reference);
             record.ClientName = FirstNonBlank(record.ClientName, tx.ClientName, directoryClientName);
             record.AdviserName = FirstNonBlank(record.AdviserName, slot.AdviserName);
+            record.BookingDateTime ??= DateTime.SpecifyKind(slot.StartUtc, DateTimeKind.Utc);
             record.MeetingType = FirstNonBlank(record.MeetingType, tx.MeetingType);
 
             if (string.IsNullOrWhiteSpace(tx.ClientName) && !string.IsNullOrWhiteSpace(directoryClientName))

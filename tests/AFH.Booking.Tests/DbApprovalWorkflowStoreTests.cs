@@ -107,6 +107,7 @@ public sealed class DbApprovalWorkflowStoreTests
         var result = Assert.Single(results);
         Assert.Equal("Casey Client", result.ClientName);
         Assert.Equal("Alex Adviser", result.AdviserName);
+        Assert.Equal(new DateTime(2026, 7, 20, 9, 0, 0, DateTimeKind.Utc), result.BookingDateTime);
         Assert.Equal("Online Video", result.MeetingType);
         Assert.Equal("booking-ref-1", result.BookingReference);
 

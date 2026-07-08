@@ -52,7 +52,7 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
             .OrderByDescending(x => x.RequestedUtc)
             .ToListAsync(ct);
 
-        return rows.Select(ToRecord).ToList();
+        return await EnrichAsync(rows.Select(ToRecord).ToList(), ct);
     }
 
     public async Task<IReadOnlyList<ApprovalWorkflowRecord>> ListAsync(
@@ -89,7 +89,7 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
             .OrderByDescending(x => x.RequestedUtc)
             .ToListAsync(ct);
 
-        return results.Select(ToRecord).ToList();
+        return await EnrichAsync(results.Select(ToRecord).ToList(), ct);
     }
 
     private static string[] Normalize(IReadOnlyList<string> values)
@@ -103,14 +103,22 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
     {
         var lookup = requestId.Trim();
         var row = await _db.ApprovalRequests.AsNoTracking().SingleOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
-        return row is null ? null : ToRecord(row);
+        if (row is null)
+            return null;
+
+        var enriched = await EnrichAsync([ToRecord(row)], ct);
+        return enriched.FirstOrDefault();
     }
 
     public async Task<ApprovalWorkflowRecord?> GetForUpdateAsync(string requestId, CancellationToken ct)
     {
         var lookup = requestId.Trim();
         var row = await _db.ApprovalRequests.SingleOrDefaultAsync(x => x.Id == lookup || x.Reference == lookup, ct);
-        return row is null ? null : ToRecord(row);
+        if (row is null)
+            return null;
+
+        var enriched = await EnrichAsync([ToRecord(row)], ct);
+        return enriched.FirstOrDefault();
     }
 
     public async Task UpdateAsync(ApprovalWorkflowRecord request, CancellationToken ct)
@@ -171,6 +179,73 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
             ExecutedUtc = model.ExecutedUtc,
             ExecutionError = model.ExecutionError
         };
+    }
+
+    private async Task<IReadOnlyList<ApprovalWorkflowRecord>> EnrichAsync(
+        IReadOnlyList<ApprovalWorkflowRecord> records,
+        CancellationToken ct)
+    {
+        if (records.Count == 0)
+        {
+            return records;
+        }
+
+        var bookingIds = records
+            .Select(record => record.BookingId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var holds = await _db.Holds
+            .AsNoTracking()
+            .Where(hold => bookingIds.Contains(hold.Id) || bookingIds.Contains(hold.Reference!))
+            .ToListAsync(ct);
+
+        var slotIds = holds
+            .Select(hold => hold.SlotId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var slots = await _db.BookingSlots
+            .AsNoTracking()
+            .Where(slot => slotIds.Contains(slot.Id))
+            .ToDictionaryAsync(slot => slot.Id, StringComparer.OrdinalIgnoreCase, ct);
+
+        var transactionIds = slots.Values
+            .Select(slot => slot.TransactionId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var transactions = await _db.BookingTransactions
+            .AsNoTracking()
+            .Where(tx => transactionIds.Contains(tx.Id))
+            .ToDictionaryAsync(tx => tx.Id, StringComparer.OrdinalIgnoreCase, ct);
+
+        var holdsByLookup = holds
+            .SelectMany(hold => new[] { hold.Id, hold.Reference }
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => new { Key = value!, Hold = hold }))
+            .GroupBy(item => item.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.First().Hold, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var record in records)
+        {
+            if (!holdsByLookup.TryGetValue(record.BookingId, out var hold) ||
+                !slots.TryGetValue(hold.SlotId, out var slot) ||
+                !transactions.TryGetValue(slot.TransactionId, out var tx))
+            {
+                continue;
+            }
+
+            record.BookingReference ??= tx.BookingReference ?? hold.Reference;
+            record.ClientName ??= tx.ClientName;
+            record.AdviserName ??= slot.AdviserName;
+            record.MeetingType ??= tx.MeetingType;
+        }
+
+        return records;
     }
 
     private static ApprovalRequestModel ToModel(ApprovalWorkflowRecord record)

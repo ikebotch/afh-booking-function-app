@@ -6,6 +6,8 @@ using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
 
@@ -14,13 +16,19 @@ public sealed class GetBookingLifecycleFunction
 {
     private readonly IBookingDetailsService _details;
     private readonly ILifecycleEventRepository _lifecycleEvents;
+    private readonly IConfiguration _configuration;
+    private readonly IHostEnvironment _hostEnvironment;
 
     public GetBookingLifecycleFunction(
         IBookingDetailsService details,
-        ILifecycleEventRepository lifecycleEvents)
+        ILifecycleEventRepository lifecycleEvents,
+        IConfiguration configuration,
+        IHostEnvironment hostEnvironment)
     {
         _details = details;
         _lifecycleEvents = lifecycleEvents;
+        _configuration = configuration;
+        _hostEnvironment = hostEnvironment;
     }
 
     [Function("Bookings_GetBookingLifecycle")]
@@ -37,6 +45,17 @@ public sealed class GetBookingLifecycleFunction
         var authResult = await BookingFunctionActorContext.BuildAuthenticatedAsync(req, context, ct);
         if (!authResult.IsSuccess)
             return authResult.Response!;
+
+        if (LocalAiLifecycleStub.IsEnabled(_hostEnvironment, _configuration))
+        {
+            return await req.OkJsonAsync(
+                LocalAiLifecycleStub.CreateResponse(
+                    bookingId,
+                    authResult.User!,
+                    BookingChangeRequestContext.GetCorrelationId(req),
+                    DateTime.UtcNow),
+                ct);
+        }
 
         var details = await _details.HandleAsync(new GetBookingDetailsQuery { BookingId = bookingId }, ct);
         if (!details.IsSuccess)
@@ -95,4 +114,5 @@ public sealed class GetBookingLifecycleFunction
             ErrorDetails = step.ErrorDetails,
             CorrelationId = step.CorrelationId
         };
+
 }

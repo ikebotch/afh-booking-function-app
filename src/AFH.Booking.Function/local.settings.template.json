@@ -7,6 +7,8 @@
     "ApplicationLogging:Provider": "Both",
     "ApplicationLogging:MaxPayloadLength": "2048",
     "ApplicationLogging:LogPayloads": "true",
+    "Booking:AiTools:EnableLocalLifecycleStub": "false",
+    "Booking__AllowMockTokens": "false",
     "BookingDb:ConnectionString": "Server=localhost;Database=AFH.Booking;Trusted_Connection=True;TrustServerCertificate=True",
     "Calendar:DefaultTimezone": "Europe/London",
     "AzureAd:TenantId": "<entra-tenant-id>",

@@ -5,6 +5,10 @@ public sealed class ApprovalRequestResponse
     public string RequestId { get; init; } = default!;
     public string BookingId { get; init; } = default!;
     public string TransactionId { get; init; } = default!;
+    public string? ClientName { get; init; }
+    public string? AdviserName { get; init; }
+    public string? MeetingType { get; init; }
+    public IReadOnlyList<string> Skills { get; init; } = Array.Empty<string>();
     public string ChangeType { get; init; } = default!;
     public string RequestedBy { get; init; } = default!;
     public string? RequesterId { get; init; }

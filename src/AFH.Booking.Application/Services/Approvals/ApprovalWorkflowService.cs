@@ -76,6 +76,9 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             BookingId = booking.Hold.Id,
             BookingReference = booking.Transaction.BookingReference ?? booking.Hold.Reference,
             TransactionId = booking.Transaction.Id,
+            ClientName = booking.Transaction.ClientName,
+            AdviserName = booking.Slot.AdviserName,
+            MeetingType = booking.Transaction.MeetingType,
             ChangeType = request.ChangeType.Trim(),
             RequestedBy = requestedBy,
             RequesterId = requesterId,
@@ -477,6 +480,10 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             BookingId = model.BookingId,
             BookingReference = model.BookingReference,
             TransactionId = model.TransactionId,
+            ClientName = model.ClientName,
+            AdviserName = model.AdviserName,
+            MeetingType = model.MeetingType,
+            Skills = model.Skills.Count > 0 ? model.Skills : ExtractSkills(payload),
             ChangeType = model.ChangeType,
             RequestedBy = model.RequestedBy,
             RequesterId = model.RequesterId,
@@ -522,7 +529,19 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
     private sealed class ApprovalPayload
     {
         public string? NewSlotId { get; init; }
+        public IReadOnlyList<string>? Skills { get; init; }
+        public IReadOnlyList<string>? RequiredSkills { get; init; }
+        public IReadOnlyList<string>? MeetingSkills { get; init; }
         public IReadOnlyList<ApprovalRequestNoteResponse>? Notes { get; init; }
         public IReadOnlyList<ApprovalProposedAlternativeTime>? ProposedAlternativeTimes { get; init; }
+    }
+
+    private static IReadOnlyList<string> ExtractSkills(ApprovalPayload? payload)
+    {
+        return (payload?.Skills ?? payload?.RequiredSkills ?? payload?.MeetingSkills ?? [])
+            .Where(skill => !string.IsNullOrWhiteSpace(skill))
+            .Select(skill => skill.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }

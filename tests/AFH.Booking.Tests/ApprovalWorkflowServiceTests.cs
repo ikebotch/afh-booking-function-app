@@ -55,6 +55,9 @@ public sealed class ApprovalWorkflowServiceTests
         Assert.Equal("adviser-1", capturedRequest.RequesterId);
         Assert.Equal("adviser-1", capturedHistory!.ActorId);
         Assert.Equal("adviser-1", response.RequesterId);
+        Assert.Equal("Alice Client", response.ClientName);
+        Assert.Equal("Adviser One", response.AdviserName);
+        Assert.Equal("Review", response.MeetingType);
         var note = Assert.Single(response.Notes);
         Assert.Equal("Adviser", note.ActorType);
         Assert.Equal("adviser-1", note.ActorId);
@@ -208,6 +211,14 @@ public sealed class ApprovalWorkflowServiceTests
         var tx = BookingTransaction.Rehydrate(
             "tx-1",
             "transaction-ref-1",
+            "BK-REF-1",
+            "Alice Client",
+            "alice@example.com",
+            "1 Client Street",
+            null,
+            "Client Town",
+            null,
+            "AB1 2CD",
             FixedNow,
             TimeSpan.FromHours(1),
             "Europe/London",

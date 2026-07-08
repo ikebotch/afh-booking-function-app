@@ -30,6 +30,10 @@ public sealed class ApprovalWorkflowRecord
     public DateTime? ReviewedUtc { get; set; }
     public DateTime? ExecutedUtc { get; set; }
     public string? ExecutionError { get; set; }
+    public string? ClientName { get; set; }
+    public string? AdviserName { get; set; }
+    public string? MeetingType { get; set; }
+    public IReadOnlyList<string> Skills { get; set; } = [];
 }
 
 public sealed class ApprovalHistoryRecord

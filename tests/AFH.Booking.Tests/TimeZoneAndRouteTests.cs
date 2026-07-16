@@ -61,7 +61,6 @@ public class TimeZoneAndRouteTests
     }
 
     [Theory]
-    [InlineData("Approvals_ListPending", BookingPermissionNames.ApprovalsRead)]
     [InlineData("Approvals_Review", BookingPermissionNames.ApprovalsReview)]
     [InlineData("Approvals_ListAdviserRequests", BookingPermissionNames.ApprovalRequestsReadOwn)]
     [InlineData("Bookings_CreateApprovalRequest", BookingPermissionNames.ApprovalRequestsCreate)]
@@ -88,6 +87,20 @@ public class TimeZoneAndRouteTests
         Assert.Null(requirement.RequiredPermission);
         Assert.Equal(
             [BookingPermissionNames.AdminRead, BookingPermissionNames.OwnRead],
+            requirement.RequiredPermissions);
+    }
+
+    [Theory]
+    [InlineData("Approvals_List")]
+    [InlineData("Approvals_ListPending")]
+    public void EndpointAccessPolicies_ApprovalListsAllowAdminOrOwnRead(string functionName)
+    {
+        var requirement = EndpointAccessPolicies.GetRequirement(functionName);
+
+        Assert.Equal(EndpointAccessPolicy.UserAuthenticated, requirement.Policy);
+        Assert.Null(requirement.RequiredPermission);
+        Assert.Equal(
+            [BookingPermissionNames.ApprovalsRead, BookingPermissionNames.ApprovalRequestsReadOwn],
             requirement.RequiredPermissions);
     }
 

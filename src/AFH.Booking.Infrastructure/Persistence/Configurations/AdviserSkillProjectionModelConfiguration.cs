@@ -25,3 +25,5 @@ public sealed class AdviserSkillProjectionModelConfiguration : IEntityTypeConfig
         b.HasIndex(x => x.LastSyncedUtc);
     }
 }
+
+

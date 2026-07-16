@@ -121,8 +121,6 @@ public sealed class GetAvailabilityFunctionV2
             return await req.ProblemAsync(result.StatusCode, result.ErrorMessage ?? "Request failed.", ct, result.ErrorCode);
 
         var response = result.Value!.ToV2Contract();
-
-        var paging = HttpResponseExtensions.SinglePage(response.Items.Count);
-        return await req.OkJsonAsync(response, ct, paging);
+        return await req.OkJsonAsync(response, ct);
     }
 }

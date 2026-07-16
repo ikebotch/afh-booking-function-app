@@ -25,6 +25,7 @@ public sealed class GetMeetingTypesFunction
         CancellationToken ct)
     {
         var meetingTypes = (await _types.ListActiveAsync(ct))
+            .Where(x => !string.IsNullOrWhiteSpace(x.Code))
             .Select(x => new MeetingTypeDto
             {
                 Code = x.Code.Trim(),

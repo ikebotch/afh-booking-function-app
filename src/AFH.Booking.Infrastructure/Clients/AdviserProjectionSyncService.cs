@@ -19,6 +19,7 @@ public sealed class AdviserProjectionSyncService : IAdviserProjectionSyncService
     private readonly AdviserDirectoryOptions _options;
     private readonly IInternalServiceAuthenticator _authenticator;
     private readonly IAdviserProfileProjectionRepository _profiles;
+    private readonly IMeetingTopicRepository _meetingTopics;
     private readonly IIntegrationSyncStateRepository _syncState;
     private readonly IClock _clock;
     private readonly IApplicationLogSink _logSink;
@@ -30,6 +31,7 @@ public sealed class AdviserProjectionSyncService : IAdviserProjectionSyncService
         IOptions<AdviserDirectoryOptions> options,
         IInternalServiceAuthenticator authenticator,
         IAdviserProfileProjectionRepository profiles,
+        IMeetingTopicRepository meetingTopics,
         IIntegrationSyncStateRepository syncState,
         IClock clock,
         IApplicationLogSink logSink,
@@ -40,6 +42,7 @@ public sealed class AdviserProjectionSyncService : IAdviserProjectionSyncService
         _options = options.Value;
         _authenticator = authenticator;
         _profiles = profiles;
+        _meetingTopics = meetingTopics;
         _syncState = syncState;
         _clock = clock;
         _logSink = logSink;
@@ -117,12 +120,14 @@ public sealed class AdviserProjectionSyncService : IAdviserProjectionSyncService
                 .ToList();
 
             await _profiles.UpsertRangeAsync(records, ct);
+            var discoveredMeetingTopicCount = await UpsertDiscoveredMeetingTopicsAsync(records, now, ct);
 
             await _syncState.UpsertValueAsync(SyncCursorKey, now.ToString("O"), now, ct);
             return new AdviserProjectionSyncResult
             {
                 SyncedAtUtc = now,
                 SyncedCount = records.Count,
+                DiscoveredMeetingTopicCount = discoveredMeetingTopicCount,
                 Source = url
             };
         }
@@ -138,6 +143,55 @@ public sealed class AdviserProjectionSyncService : IAdviserProjectionSyncService
             throw;
         }
     }
+
+    private async Task<int> UpsertDiscoveredMeetingTopicsAsync(
+        IReadOnlyList<AdviserProfileProjectionRecord> advisers,
+        DateTime changedUtc,
+        CancellationToken ct)
+    {
+        var existingTopics = (await _meetingTopics.ListActiveAsync(ct))
+            .Select(x => NormalizeTopic(x.Code))
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var discoveredTopics = advisers
+            .SelectMany(x => x.Skills ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .GroupBy(NormalizeTopic, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.First())
+            .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var sortOrder = existingTopics.Count;
+        var upsertedCount = 0;
+
+        foreach (var topic in discoveredTopics)
+        {
+            var normalized = NormalizeTopic(topic);
+            if (!existingTopics.Add(normalized))
+                continue;
+
+            await _meetingTopics.UpsertAsync(new MeetingTopicUpsert
+            {
+                Code = topic,
+                Label = topic,
+                IsActive = true,
+                IsDefault = false,
+                SortOrder = ++sortOrder,
+                ChangedUtc = changedUtc
+            }, ct);
+
+            upsertedCount++;
+        }
+
+        return upsertedCount;
+    }
+
+    private static string NormalizeTopic(string value)
+        => string.Join(" ", value
+            .Trim()
+            .Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
     private static async Task<IReadOnlyList<CoverageAdviserItem>> ReadCoverageAsync(HttpResponseMessage response, CancellationToken ct)
     {

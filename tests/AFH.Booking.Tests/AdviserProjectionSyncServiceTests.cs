@@ -37,7 +37,7 @@ public sealed class AdviserProjectionSyncServiceTests
                             "region": "North",
                             "postcode": "AB1 2CD",
                             "isActive": false,
-                            "skills": ["Equity Release", "Protection"],
+                            "skills": ["Equity Release", "Protection", " protection "],
                             "rating": 4.7,
                             "maxTravelTimeMinutes": 45,
                             "radiusMiles": 12.5
@@ -52,6 +52,7 @@ public sealed class AdviserProjectionSyncServiceTests
         });
 
         var profiles = new RecordingProfiles();
+        var meetingTopics = new RecordingMeetingTopics();
         var syncState = new RecordingSyncState();
         var sut = new AdviserProjectionSyncService(
             new HttpClient(handler),
@@ -65,6 +66,7 @@ public sealed class AdviserProjectionSyncServiceTests
             }),
             new InternalBearerServiceAuthenticator(),
             profiles,
+            meetingTopics,
             syncState,
             new StubClock(now),
             new RecordingLogSink(),
@@ -79,6 +81,7 @@ public sealed class AdviserProjectionSyncServiceTests
         Assert.Equal("location-function-key", Assert.Single(functionKeyValues));
         Assert.Equal("location-token", captured.Headers.Authorization?.Parameter);
         Assert.Equal(1, result.SyncedCount);
+        Assert.Equal(2, result.DiscoveredMeetingTopicCount);
 
         var stored = Assert.Single(profiles.Upserts);
         Assert.Equal("adv-1", stored.AdviserId);
@@ -92,6 +95,25 @@ public sealed class AdviserProjectionSyncServiceTests
         Assert.Equal(45, stored.MaxTravelTimeMinutes);
         Assert.Equal(12.5, stored.CoverageRadiusMiles);
         Assert.Equal(now, stored.LastSyncedUtc);
+
+        Assert.Collection(
+            meetingTopics.Upserts,
+            topic =>
+            {
+                Assert.Equal("Equity Release", topic.Code);
+                Assert.Equal("Equity Release", topic.Label);
+                Assert.False(topic.IsDefault);
+                Assert.True(topic.IsActive);
+                Assert.Equal(now, topic.ChangedUtc);
+            },
+            topic =>
+            {
+                Assert.Equal("Protection", topic.Code);
+                Assert.Equal("Protection", topic.Label);
+                Assert.False(topic.IsDefault);
+                Assert.True(topic.IsActive);
+                Assert.Equal(now, topic.ChangedUtc);
+            });
 
         Assert.Equal("adviser_directory_last_sync_utc", syncState.LastKey);
         Assert.Equal(now.ToString("O"), syncState.LastValue);
@@ -115,6 +137,7 @@ public sealed class AdviserProjectionSyncServiceTests
             }),
             new InternalBearerServiceAuthenticator(),
             new RecordingProfiles(),
+            new RecordingMeetingTopics(),
             new RecordingSyncState(),
             new StubClock(now),
             logSink,
@@ -135,6 +158,66 @@ public sealed class AdviserProjectionSyncServiceTests
         Assert.Contains("/api/v1/admin/adviser-coverage", entry.PayloadJson);
         Assert.DoesNotContain("location-token", entry.PayloadJson ?? string.Empty, StringComparison.Ordinal);
         Assert.DoesNotContain("location-function-key", entry.PayloadJson ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SyncAsync_DoesNotDuplicateAlreadyConfiguredMeetingTopics()
+    {
+        var now = new DateTime(2026, 04, 02, 13, 0, 0, DateTimeKind.Utc);
+        var handler = new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    """
+                    {
+                      "data": {
+                        "advisers": [
+                          {
+                            "id": "adv-1",
+                            "name": "Adviser One",
+                            "skills": ["Protection", "Equity Release"]
+                          }
+                        ]
+                      }
+                    }
+                    """,
+                    Encoding.UTF8,
+                    "application/json")
+            });
+
+        var meetingTopics = new RecordingMeetingTopics(
+        [
+            new MeetingTopicRecord
+            {
+                Code = "Protection",
+                Label = "Protection",
+                IsDefault = true,
+                SortOrder = 1
+            }
+        ]);
+
+        var sut = new AdviserProjectionSyncService(
+            new HttpClient(handler),
+            Options.Create(new AdviserDirectoryOptions
+            {
+                Enabled = true,
+                BaseUrl = "https://location.example",
+                CoverageEndpointPath = "/api/v1/admin/adviser-coverage"
+            }),
+            new InternalBearerServiceAuthenticator(),
+            new RecordingProfiles(),
+            meetingTopics,
+            new RecordingSyncState(),
+            new StubClock(now),
+            new RecordingLogSink(),
+            Options.Create(new ApplicationLoggingOptions()),
+            NullLogger<AdviserProjectionSyncService>.Instance);
+
+        var result = await sut.SyncAsync(CancellationToken.None);
+
+        Assert.Equal(1, result.DiscoveredMeetingTopicCount);
+        var topic = Assert.Single(meetingTopics.Upserts);
+        Assert.Equal("Equity Release", topic.Code);
     }
 
     private sealed class RecordingProfiles : IAdviserProfileProjectionRepository
@@ -172,6 +255,29 @@ public sealed class AdviserProjectionSyncServiceTests
             LastUpdatedUtc = updatedUtc;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class RecordingMeetingTopics(IReadOnlyList<MeetingTopicRecord>? existingTopics = null) : IMeetingTopicRepository
+    {
+        public List<MeetingTopicUpsert> Upserts { get; } = [];
+
+        public Task<IReadOnlyList<MeetingTopicRecord>> ListActiveAsync(CancellationToken ct)
+            => Task.FromResult(existingTopics ?? []);
+
+        public Task<MeetingTopicRecord> UpsertAsync(MeetingTopicUpsert change, CancellationToken ct)
+        {
+            Upserts.Add(change);
+            return Task.FromResult(new MeetingTopicRecord
+            {
+                Code = change.Code,
+                Label = change.Label,
+                IsDefault = change.IsDefault,
+                SortOrder = change.SortOrder
+            });
+        }
+
+        public Task<bool> DeactivateAsync(string code, DateTime changedUtc, CancellationToken ct)
+            => Task.FromResult(false);
     }
 
     private sealed class RecordingLogSink : IApplicationLogSink

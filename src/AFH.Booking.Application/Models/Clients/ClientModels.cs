@@ -49,6 +49,7 @@ public sealed class DownstreamUpdateReconciliationItemResponse
 public sealed class AdviserProjectionSyncResult
 {
     public int SyncedCount { get; init; }
+    public int DiscoveredMeetingTopicCount { get; init; }
     public DateTime SyncedAtUtc { get; init; }
     public string Source { get; init; } = string.Empty;
 }

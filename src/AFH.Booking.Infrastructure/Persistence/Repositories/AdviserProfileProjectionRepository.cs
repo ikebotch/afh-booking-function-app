@@ -24,6 +24,14 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
             .Where(x => ids.Contains(x.AdviserId))
             .ToDictionaryAsync(x => x.AdviserId, StringComparer.OrdinalIgnoreCase, ct);
 
+        var existingSkills = await _db.AdviserSkillProjections
+            .Where(x => ids.Contains(x.AdviserId))
+            .ToListAsync(ct);
+
+        var skillsByAdviser = existingSkills
+            .GroupBy(x => x.AdviserId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(x => x.Key, x => x.ToDictionary(y => y.SkillCode, StringComparer.OrdinalIgnoreCase), StringComparer.OrdinalIgnoreCase);
+
         foreach (var adviser in advisers)
         {
             if (!existing.TryGetValue(adviser.AdviserId, out var row))
@@ -46,6 +54,8 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
             row.MaxTravelTimeMinutes = adviser.MaxTravelTimeMinutes;
             row.LastSyncedUtc = adviser.LastSyncedUtc;
             row.SourceVersion = adviser.SourceVersion;
+
+            UpsertAdviserSkills(adviser, skillsByAdviser);
         }
     }
 
@@ -114,4 +124,58 @@ public sealed class AdviserProfileProjectionRepository : IAdviserProfileProjecti
             return [];
         }
     }
+
+    private void UpsertAdviserSkills(
+        AdviserProfileProjectionRecord adviser,
+        Dictionary<string, Dictionary<string, AdviserSkillProjectionModel>> skillsByAdviser)
+    {
+        var currentSkills = adviser.Skills
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => NormalizeSkill(x))
+            .GroupBy(x => x, StringComparer.OrdinalIgnoreCase)
+            .Select(x => x.First())
+            .ToArray();
+
+        if (!skillsByAdviser.TryGetValue(adviser.AdviserId, out var existingSkills))
+        {
+            existingSkills = new Dictionary<string, AdviserSkillProjectionModel>(StringComparer.OrdinalIgnoreCase);
+            skillsByAdviser[adviser.AdviserId] = existingSkills;
+        }
+
+        var currentSkillSet = currentSkills.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var skill in currentSkills)
+        {
+            if (!existingSkills.TryGetValue(skill, out var row))
+            {
+                row = new AdviserSkillProjectionModel
+                {
+                    AdviserId = adviser.AdviserId,
+                    SkillCode = skill,
+                    CreatedUtc = adviser.LastSyncedUtc
+                };
+                existingSkills[skill] = row;
+                _db.AdviserSkillProjections.Add(row);
+            }
+
+            row.SkillLabel = skill;
+            row.IsActive = adviser.IsActive;
+            row.LastSyncedUtc = adviser.LastSyncedUtc;
+            row.UpdatedUtc = adviser.LastSyncedUtc;
+            row.SourceVersion = adviser.SourceVersion;
+        }
+
+        foreach (var staleSkill in existingSkills.Values.Where(x => x.IsActive && !currentSkillSet.Contains(x.SkillCode)))
+        {
+            staleSkill.IsActive = false;
+            staleSkill.LastSyncedUtc = adviser.LastSyncedUtc;
+            staleSkill.UpdatedUtc = adviser.LastSyncedUtc;
+            staleSkill.SourceVersion = adviser.SourceVersion;
+        }
+    }
+
+    private static string NormalizeSkill(string value)
+        => string.Join(" ", value
+            .Trim()
+            .Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 }

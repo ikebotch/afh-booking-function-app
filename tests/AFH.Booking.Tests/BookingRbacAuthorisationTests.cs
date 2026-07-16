@@ -223,6 +223,25 @@ public sealed class BookingRbacAuthorisationTests
     }
 
     [Fact]
+    public async Task DomainUserAccessAuthorizer_ValidTokenWithAnyAcceptedPermissionAllowsEndpoint()
+    {
+        var request = TestHttpRequestData.Create();
+        request.Headers.Add("Authorization", "Bearer good-token");
+
+        var result = await DomainUserAccessAuthorizer.AuthorizeAsync(
+            request,
+            new EndpointAccessRequirement(
+                EndpointAccessPolicy.UserAuthenticated,
+                [BookingPermissionNames.AdminRead, BookingPermissionNames.OwnRead]),
+            new SpecificPermissionClient([BookingPermissionNames.OwnRead]),
+            CancellationToken.None);
+
+        Assert.True(result.IsAllowed);
+        Assert.Equal("alex@afh.co.uk", result.User?.Email);
+        Assert.Equal($"{BookingPermissionNames.AdminRead} OR {BookingPermissionNames.OwnRead}", result.RequiredPermission);
+    }
+
+    [Fact]
     public async Task DomainUserAccessAuthorizer_AuthorisedRequestLoadsAdviserUserContextOnce()
     {
         var request = TestHttpRequestData.Create();
@@ -327,6 +346,31 @@ public sealed class BookingRbacAuthorisationTests
             };
 
             return Task.FromResult(allow
+                ? CurrentUserPermissionResult.Authorised(user)
+                : CurrentUserPermissionResult.Forbidden(user, requiredPermission));
+        }
+    }
+
+    private sealed class SpecificPermissionClient(IReadOnlyList<string> grantedPermissions) : ICurrentUserPermissionClient
+    {
+        public Task<CurrentUserPermissionResult> GetCurrentUserAsync(string bearerToken, CancellationToken ct)
+            => Task.FromResult(CurrentUserPermissionResult.Authorised(new AdviserUserContext
+            {
+                UserId = "user-1",
+                Email = "alex@afh.co.uk",
+                Permissions = grantedPermissions.ToArray()
+            }));
+
+        public Task<CurrentUserPermissionResult> AuthorizeAsync(string bearerToken, string requiredPermission, CancellationToken ct)
+        {
+            var user = new AdviserUserContext
+            {
+                UserId = "user-1",
+                Email = "alex@afh.co.uk",
+                Permissions = grantedPermissions.ToArray()
+            };
+
+            return Task.FromResult(grantedPermissions.Contains(requiredPermission, StringComparer.OrdinalIgnoreCase)
                 ? CurrentUserPermissionResult.Authorised(user)
                 : CurrentUserPermissionResult.Forbidden(user, requiredPermission));
         }

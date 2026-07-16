@@ -70,7 +70,6 @@ public class TimeZoneAndRouteTests
     [InlineData("Bookings_PartnerRearrangementOptions", BookingPermissionNames.RearrangementOptionsRead)]
     [InlineData("Bookings_CancelBooking", BookingPermissionNames.CancelDirect)]
     [InlineData("Bookings_GetRearrangementOptions", BookingPermissionNames.RearrangementOptionsRead)]
-    [InlineData("Bookings_AdminSearch", BookingPermissionNames.AdminRead)]
     [InlineData("Bookings_Rearrange", BookingPermissionNames.RearrangeDirect)]
     public void EndpointAccessPolicies_SelectedAdminFunctionsRequireBookingPermissions(string functionName, string expectedPermission)
     {
@@ -78,6 +77,18 @@ public class TimeZoneAndRouteTests
 
         Assert.Equal(EndpointAccessPolicy.UserAuthenticated, requirement.Policy);
         Assert.Equal(expectedPermission, requirement.RequiredPermission);
+    }
+
+    [Fact]
+    public void EndpointAccessPolicies_BookingSearchAllowsAdminOrOwnRead()
+    {
+        var requirement = EndpointAccessPolicies.GetRequirement("Bookings_AdminSearch");
+
+        Assert.Equal(EndpointAccessPolicy.UserAuthenticated, requirement.Policy);
+        Assert.Null(requirement.RequiredPermission);
+        Assert.Equal(
+            [BookingPermissionNames.AdminRead, BookingPermissionNames.OwnRead],
+            requirement.RequiredPermissions);
     }
 
     [Theory]

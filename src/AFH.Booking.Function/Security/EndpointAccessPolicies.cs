@@ -53,7 +53,7 @@ public static class EndpointAccessPolicies
             ["Identity_AssignUserPermission"] = InternalOnly(),
             ["Identity_DeleteUserPermissionMapping"] = InternalOnly(),
             ["Bookings_CancelBooking"] = UserPermission(BookingPermissionNames.CancelDirect),
-            ["Bookings_AdminSearch"] = UserPermission(BookingPermissionNames.AdminRead),
+            ["Bookings_AdminSearch"] = UserPermissionAny(BookingPermissionNames.AdminRead, BookingPermissionNames.OwnRead),
             ["Bookings_ConfirmHold"] = Public(),
             ["Bookings_CreateApprovalRequest"] = UserPermission(BookingPermissionNames.ApprovalRequestsCreate),
             ["Config_DeleteMeetingType"] = InternalOnly(),
@@ -142,4 +142,5 @@ public static class EndpointAccessPolicies
     private static EndpointAccessRequirement InternalOnly() => new(EndpointAccessPolicy.InternalOnly);
     private static EndpointAccessRequirement UserAuthenticated() => new(EndpointAccessPolicy.UserAuthenticated);
     private static EndpointAccessRequirement UserPermission(string permission) => new(EndpointAccessPolicy.UserAuthenticated, permission);
+    private static EndpointAccessRequirement UserPermissionAny(params string[] permissions) => new(EndpointAccessPolicy.UserAuthenticated, permissions);
 }

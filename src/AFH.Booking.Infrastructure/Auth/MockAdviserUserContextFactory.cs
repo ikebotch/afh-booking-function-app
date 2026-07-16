@@ -52,7 +52,13 @@ internal static class MockAdviserUserContextFactory
                 "Adviser",
                 "ADV-001",
                 ["Adviser"],
-                ["Dashboard.Read", "Calendar.Read"],
+                [
+                    "Dashboard.Read",
+                    "Bookings.Own.Read",
+                    "Bookings.ApprovalRequests.Create",
+                    "Bookings.ApprovalRequests.ReadOwn",
+                    "Calendar.Read"
+                ],
                 [
                     Scope("Bookings", "AdviserSelf", "ADV-001", "Own bookings"),
                     Scope("Calendar", "AdviserSelf", "ADV-001", "Own calendar"),

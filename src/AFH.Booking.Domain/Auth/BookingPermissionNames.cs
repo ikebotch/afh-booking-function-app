@@ -12,6 +12,7 @@ public static class BookingPermissionNames
     public const string RearrangeDirect = "Bookings.Rearrange.Direct";
     public const string RearrangementOptionsRead = "Bookings.RearrangementOptions.Read";
     public const string AdminRead = "Bookings.Admin.Read";
+    public const string OwnRead = "Bookings.Own.Read";
     public const string NotificationsRead = "Notifications.Admin.Read";
     public const string NotificationsManage = "Notifications.Admin.Manage";
     public const string ReportsRead = "Bookings.Reports.Read";

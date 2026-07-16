@@ -25,7 +25,7 @@ public static class DomainUserAccessAuthorizer
                 "Missing Authorization header.",
                 ct,
                 Errors.Unauthorized),
-                requiredPermission: requirement.RequiredPermission,
+                requiredPermission: requirement.RequiredPermissionDisplay,
                 authorised: false);
         }
 
@@ -37,13 +37,13 @@ public static class DomainUserAccessAuthorizer
                 "Authorization header must use Bearer.",
                 ct,
                 Errors.Unauthorized),
-                requiredPermission: requirement.RequiredPermission,
+                requiredPermission: requirement.RequiredPermissionDisplay,
                 authorised: false);
         }
 
         var token = authHeader["Bearer ".Length..].Trim();
 
-        if (string.IsNullOrWhiteSpace(requirement.RequiredPermission))
+        if (requirement.RequiredPermissions.Count == 0)
         {
             var currentUser = await permissions.GetCurrentUserAsync(token, ct);
             if (!currentUser.IsAuthorised)
@@ -56,29 +56,70 @@ public static class DomainUserAccessAuthorizer
                         Errors.Unauthorized),
                     null,
                     currentUser.User,
-                    requirement.RequiredPermission,
+                    requirement.RequiredPermissionDisplay,
                     authorised: false);
             }
 
             return DomainUserAccessResult.Allowed(null, currentUser.User);
         }
 
-        var authorisation = await permissions.AuthorizeAsync(token, requirement.RequiredPermission, ct);
+        if (requirement.RequiredPermissions.Count > 1)
+        {
+            var currentUser = await permissions.GetCurrentUserAsync(token, ct);
+            if (!currentUser.IsAuthorised || currentUser.User is null)
+            {
+                return DomainUserAccessResult.Denied(
+                    await request.ProblemAsync(
+                        HttpStatusCode.Unauthorized,
+                        currentUser.FailureMessage ?? "Unable to resolve current user.",
+                        ct,
+                        Errors.Unauthorized),
+                    null,
+                    currentUser.User,
+                    requirement.RequiredPermissionDisplay,
+                    authorised: false);
+            }
+
+            if (!HasAnyPermission(currentUser.User, requirement.RequiredPermissions))
+            {
+                return DomainUserAccessResult.Denied(
+                    await request.ProblemAsync(
+                        HttpStatusCode.Forbidden,
+                        $"One of these permissions is required: {requirement.RequiredPermissionDisplay}.",
+                        ct,
+                        Errors.Forbidden),
+                    null,
+                    currentUser.User,
+                    requirement.RequiredPermissionDisplay,
+                    authorised: false);
+            }
+
+            return DomainUserAccessResult.Allowed(null, currentUser.User, requirement.RequiredPermissionDisplay);
+        }
+
+        var requiredPermission = requirement.RequiredPermissions[0];
+        var authorisation = await permissions.AuthorizeAsync(token, requiredPermission, ct);
         if (!authorisation.IsAuthorised)
         {
             return DomainUserAccessResult.Denied(
                 await request.ProblemAsync(
                     HttpStatusCode.Forbidden,
-                    authorisation.FailureMessage ?? $"Permission '{requirement.RequiredPermission}' is required.",
+                    authorisation.FailureMessage ?? $"Permission '{requiredPermission}' is required.",
                     ct,
                     Errors.Forbidden),
                 null,
                 authorisation.User,
-                requirement.RequiredPermission,
+                requiredPermission,
                 authorised: false);
         }
 
-        return DomainUserAccessResult.Allowed(null, authorisation.User, requirement.RequiredPermission);
+        return DomainUserAccessResult.Allowed(null, authorisation.User, requiredPermission);
+    }
+
+    private static bool HasAnyPermission(AdviserUserContext user, IReadOnlyList<string> requiredPermissions)
+    {
+        return user.Permissions.Contains("*", StringComparer.OrdinalIgnoreCase)
+            || requiredPermissions.Any(permission => user.Permissions.Contains(permission, StringComparer.OrdinalIgnoreCase));
     }
 }
 

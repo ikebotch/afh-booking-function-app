@@ -67,6 +67,7 @@ public sealed class BookingDbContext : DbContext
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);
         modelBuilder.ApplyConfiguration(new AdviserProfileProjectionModelConfiguration());
+        modelBuilder.ApplyConfiguration(new AdviserSkillProjectionModelConfiguration());
         modelBuilder.AddErrorRecordEntity();
 
         modelBuilder.Entity<ApplicationLogModel>(entity =>

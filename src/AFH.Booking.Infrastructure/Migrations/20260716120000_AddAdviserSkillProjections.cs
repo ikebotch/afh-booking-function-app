@@ -1,4 +1,6 @@
 using System;
+using AFH.Booking.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -6,6 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AFH.Booking.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(BookingDbContext))]
     [Migration("20260716120000_AddAdviserSkillProjections")]
     public partial class AddAdviserSkillProjections : Migration
     {

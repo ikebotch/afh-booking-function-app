@@ -114,6 +114,10 @@ public sealed class CreateApprovalRequestFunction
         {
             return await req.ProblemAsync(HttpStatusCode.BadRequest, ex.Message, ct, "Validation");
         }
+        catch (ApprovalRequestConflictException ex)
+        {
+            return await req.ProblemAsync(HttpStatusCode.Conflict, ex.Message, ct, "Conflict");
+        }
         catch (UnauthorizedAccessException ex)
         {
             return await req.ProblemAsync(HttpStatusCode.Forbidden, ex.Message, ct, "Forbidden");

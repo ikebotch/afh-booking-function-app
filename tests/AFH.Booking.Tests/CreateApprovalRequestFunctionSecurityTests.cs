@@ -101,6 +101,22 @@ public sealed class CreateApprovalRequestFunctionSecurityTests
     }
 
     [Fact]
+    public async Task Run_ApprovalServiceRejectsDuplicatePendingRequest_ReturnsConflict()
+    {
+        var approvals = new Mock<IApprovalWorkflowService>();
+        approvals.Setup(x => x.CreateAsync(It.IsAny<CreateApprovalWorkflowRequest>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new ApprovalRequestConflictException("A pending Cancel approval request already exists for booking 'BK-REF-1'."));
+
+        var sut = new CreateApprovalRequestFunction(approvals.Object);
+        var request = CreateJsonRequest("""{"changeType":"Cancel","reasonCode":"CLIENT_REQUEST"}""");
+        SetDomainUser(request, userId: "user-auth", adviserId: "adviser-auth", displayName: "Ada Adviser");
+
+        var response = await sut.Run(request, request.FunctionContext, "booking-1", CancellationToken.None);
+
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+    }
+
+    [Fact]
     public void FunctionNameAndRoute_RemainUnchanged()
     {
         var method = typeof(CreateApprovalRequestFunction).GetMethod(nameof(CreateApprovalRequestFunction.Run));

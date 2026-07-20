@@ -56,6 +56,7 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         var requestedUtc = DateTime.UtcNow;
         var booking = await _store.LoadBookingAsync(request.BookingId, ct);
         EnsureAdviserOwnsBooking(requestedBy, requesterId, booking);
+        await EnsureNoPendingDuplicateRequestAsync(request, requestedBy, requesterId, booking, ct);
         var lifecycleState = ResolveLifecycleState(booking.Hold.Status) ?? LifecycleStates.Booked;
         var routeTarget = await _routing.ResolveAsync(ct);
         var notes = BuildCreateNotes(request, actor, booking.Hold.Id, requestedUtc, correlationId);
@@ -167,6 +168,30 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         {
             throw new UnauthorizedAccessException("Signed-in adviser can only request approval for their own bookings.");
         }
+    }
+
+    private async Task EnsureNoPendingDuplicateRequestAsync(
+        CreateApprovalWorkflowRequest request,
+        string requestedBy,
+        string? requesterId,
+        ApprovalBookingSnapshot booking,
+        CancellationToken ct)
+    {
+        var bookingReference = booking.Transaction.BookingReference ?? booking.Hold.Reference;
+        var hasDuplicate = await _store.HasPendingRequestAsync(
+            booking.Hold.Id,
+            bookingReference,
+            request.ChangeType.Trim(),
+            requestedBy,
+            requesterId,
+            ct);
+
+        if (!hasDuplicate)
+            return;
+
+        var bookingDisplay = bookingReference ?? booking.Hold.Id;
+        throw new ApprovalRequestConflictException(
+            $"A pending {request.ChangeType.Trim()} approval request already exists for booking '{bookingDisplay}'.");
     }
 
     public async Task<IReadOnlyList<ApprovalRequestResponse>> ListPendingAsync(CancellationToken ct)

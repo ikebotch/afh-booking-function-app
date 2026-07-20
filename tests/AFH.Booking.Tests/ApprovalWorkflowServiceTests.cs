@@ -145,11 +145,52 @@ public sealed class ApprovalWorkflowServiceTests
             It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    [Fact]
+    public async Task CreateAsync_RejectsDuplicatePendingRequestForSameBookingChangeAndAdviser()
+    {
+        var store = CreateStore();
+        store.Setup(x => x.HasPendingRequestAsync(
+                "booking-1",
+                "BK-REF-1",
+                "Cancel",
+                "Adviser",
+                "adviser-1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+        var sut = CreateSut(store.Object);
+
+        var ex = await Assert.ThrowsAsync<ApprovalRequestConflictException>(() => sut.CreateAsync(new CreateApprovalWorkflowRequest(
+            BookingId: "booking-1",
+            ChangeType: "Cancel",
+            RequestedBy: "Adviser",
+            RequesterId: "adviser-1",
+            ReasonCode: "CLIENT_REQUEST",
+            ReasonDetail: "Client asked to cancel",
+            NewSlotId: null,
+            CorrelationId: "corr-1",
+            ActorContext: BookingActorContext.AdviserPortal("adviser-1", "Ada Adviser", "corr-1"),
+            AdviserNote: "Client asked to cancel"), CancellationToken.None));
+
+        Assert.Contains("pending Cancel approval request already exists", ex.Message);
+        store.Verify(x => x.AddRequestAsync(
+            It.IsAny<ApprovalWorkflowRecord>(),
+            It.IsAny<ApprovalHistoryRecord>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static Mock<IApprovalWorkflowStore> CreateStore()
     {
         var store = new Mock<IApprovalWorkflowStore>();
         store.Setup(x => x.LoadBookingAsync("booking-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(ApprovalBooking());
+        store.Setup(x => x.HasPendingRequestAsync(
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
         return store;
     }
 

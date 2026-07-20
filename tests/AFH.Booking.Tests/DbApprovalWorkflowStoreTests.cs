@@ -115,6 +115,50 @@ public sealed class DbApprovalWorkflowStoreTests
         Assert.Equal("Casey Client", transaction.ClientName);
     }
 
+    [Fact]
+    public async Task HasPendingRequestAsync_MatchesPendingRequestByBookingReferenceChangeTypeAndRequester()
+    {
+        await using var db = CreateDbContext();
+        var cancelForRequester = Request("request-1", "booking-1", "Cancel", "adv-1", "Pending", new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc));
+        cancelForRequester.BookingReference = "booking-ref-1";
+        var rearrangeForRequester = Request("request-2", "booking-1", "Rearrange", "adv-1", "Pending", new DateTime(2026, 7, 15, 10, 0, 0, DateTimeKind.Utc));
+        rearrangeForRequester.BookingReference = "booking-ref-1";
+        var cancelForOtherRequester = Request("request-3", "booking-1", "Cancel", "adv-2", "Pending", new DateTime(2026, 7, 15, 11, 0, 0, DateTimeKind.Utc));
+        cancelForOtherRequester.BookingReference = "booking-ref-1";
+        await db.ApprovalRequests.AddRangeAsync(
+            cancelForRequester,
+            rearrangeForRequester,
+            cancelForOtherRequester);
+        await db.SaveChangesAsync();
+        var store = new DbApprovalWorkflowStore(db);
+
+        var sameRequest = await store.HasPendingRequestAsync(
+            "booking-id-from-route",
+            "booking-ref-1",
+            "Cancel",
+            "Adviser",
+            "adv-1",
+            CancellationToken.None);
+        var differentChangeType = await store.HasPendingRequestAsync(
+            "booking-id-from-route",
+            "booking-ref-1",
+            "NoShow",
+            "Adviser",
+            "adv-1",
+            CancellationToken.None);
+        var differentRequester = await store.HasPendingRequestAsync(
+            "booking-id-from-route",
+            "booking-ref-1",
+            "Cancel",
+            "Adviser",
+            "adv-3",
+            CancellationToken.None);
+
+        Assert.True(sameRequest);
+        Assert.False(differentChangeType);
+        Assert.False(differentRequester);
+    }
+
     private static BookingDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<BookingDbContext>()

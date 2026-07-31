@@ -219,6 +219,7 @@ public class BookingOpenApiDocumentFactoryTests
 
         var createSchemaProperties = schemas["CreateApprovalRequest"]!["properties"]!.AsObject();
         Assert.True(createSchemaProperties.ContainsKey("adviserNote"));
+        Assert.True(createSchemaProperties.ContainsKey("overridePendingRequest"));
         Assert.True(createSchemaProperties.ContainsKey("proposedAlternativeTimes"));
 
         var approvalResponseProperties = schemas["ApprovalRequestResponse"]!["properties"]!.AsObject();

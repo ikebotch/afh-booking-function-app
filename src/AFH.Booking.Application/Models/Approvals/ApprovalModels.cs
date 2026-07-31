@@ -13,7 +13,8 @@ public sealed record CreateApprovalWorkflowRequest(
     string? CorrelationId,
     BookingActorContext? ActorContext = null,
     string? AdviserNote = null,
-    IReadOnlyList<ApprovalProposedAlternativeTime>? ProposedAlternativeTimes = null);
+    IReadOnlyList<ApprovalProposedAlternativeTime>? ProposedAlternativeTimes = null,
+    bool OverridePendingRequest = false);
 
 public sealed record ReviewApprovalWorkflowRequest(
     string RequestId,

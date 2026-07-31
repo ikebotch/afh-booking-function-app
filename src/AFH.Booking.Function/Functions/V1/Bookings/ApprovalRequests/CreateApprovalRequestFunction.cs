@@ -38,6 +38,7 @@ public sealed class CreateApprovalRequestFunction
           "reasonDetail": "Adviser cannot attend the current slot.",
           "newSlotId": "slot-123",
           "adviserNote": "Preferred afternoon slot.",
+          "overridePendingRequest": false,
           "proposedAlternativeTimes": [
             {
               "slotId": "slot-456",
@@ -108,7 +109,8 @@ public sealed class CreateApprovalRequestFunction
                 CorrelationId: actor.CorrelationId,
                 ActorContext: actor,
                 AdviserNote: body?.AdviserNote,
-                ProposedAlternativeTimes: body?.ProposedAlternativeTimes.Select(ToApplication).ToList()), ct);
+                ProposedAlternativeTimes: body?.ProposedAlternativeTimes.Select(ToApplication).ToList(),
+                OverridePendingRequest: body?.OverridePendingRequest == true), ct);
         }
         catch (InvalidOperationException ex)
         {

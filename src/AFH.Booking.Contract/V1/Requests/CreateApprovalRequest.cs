@@ -9,6 +9,7 @@ public sealed class CreateApprovalRequest
     public string? ReasonDetail { get; init; }
     public string? NewSlotId { get; init; }
     public string? AdviserNote { get; init; }
+    public bool OverridePendingRequest { get; init; }
     public IReadOnlyList<ApprovalProposedAlternativeTimeRequest> ProposedAlternativeTimes { get; init; } = [];
 }
 

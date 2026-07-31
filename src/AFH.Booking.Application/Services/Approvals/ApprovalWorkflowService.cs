@@ -78,6 +78,13 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
 
         if (existingPending is not null)
         {
+            if (!request.OverridePendingRequest)
+            {
+                var bookingDisplay = bookingReference ?? booking.Hold.Id;
+                throw new ApprovalRequestConflictException(
+                    $"A pending {request.ChangeType.Trim()} approval request already exists for booking '{bookingDisplay}'. Submit with overridePendingRequest=true to replace it.");
+            }
+
             await ReleaseSupersededPendingRearrangementHoldAsync(
                 existingPending,
                 request,

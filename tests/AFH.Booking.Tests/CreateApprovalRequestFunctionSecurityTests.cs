@@ -50,7 +50,7 @@ public sealed class CreateApprovalRequestFunctionSecurityTests
         CreateApprovalWorkflowRequest? captured = null;
         var approvals = CreateApprovals(request => captured = request);
         var sut = new CreateApprovalRequestFunction(approvals.Object);
-        var request = CreateJsonRequest("""{"changeType":"Cancel","reasonCode":"CLIENT_REQUEST","reasonDetail":"Client asked"}""");
+        var request = CreateJsonRequest("""{"changeType":"Cancel","reasonCode":"CLIENT_REQUEST","reasonDetail":"Client asked","overridePendingRequest":true}""");
         request.Headers.Add("x-correlation-id", "corr-1");
         SetDomainUser(request, userId: "user-auth", adviserId: "adviser-auth", displayName: "Ada Adviser");
 
@@ -63,6 +63,7 @@ public sealed class CreateApprovalRequestFunctionSecurityTests
         Assert.Equal(BookingActorContext.ActorAdviser, captured.ActorContext?.ActorType);
         Assert.Equal(BookingActorContext.SourceAdviserPortal, captured.ActorContext?.SourceApplication);
         Assert.Equal("corr-1", captured.ActorContext?.CorrelationId);
+        Assert.True(captured.OverridePendingRequest);
     }
 
     [Fact]

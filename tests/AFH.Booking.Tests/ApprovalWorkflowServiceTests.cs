@@ -146,7 +146,52 @@ public sealed class ApprovalWorkflowServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_OverridesDuplicatePendingRequestForSameBookingChangeAndAdviser()
+    public async Task CreateAsync_RejectsDuplicatePendingRequestWhenOverrideIsNotRequested()
+    {
+        var store = CreateStore();
+        store.Setup(x => x.GetPendingRequestAsync(
+                "booking-1",
+                "BK-REF-1",
+                "Rearrange",
+                "Adviser",
+                "adviser-1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApprovalWorkflowRecord
+            {
+                Id = "request-existing",
+                Reference = "REQ-EXISTING",
+                BookingId = "booking-1",
+                BookingReference = "BK-REF-1",
+                TransactionId = "tx-1",
+                ChangeType = "Rearrange",
+                RequestedBy = "Adviser",
+                RequesterId = "adviser-1",
+                Status = "Pending",
+                RequestedUtc = FixedNow.AddHours(-1),
+                ApproverTargetDisplayName = "Booking Approvers"
+            });
+        var releaseHolds = new Mock<IReleaseHoldService>();
+        var sut = CreateSut(store.Object, releaseHolds: releaseHolds.Object);
+
+        var ex = await Assert.ThrowsAsync<ApprovalRequestConflictException>(() => sut.CreateAsync(new CreateApprovalWorkflowRequest(
+            BookingId: "booking-1",
+            ChangeType: "Rearrange",
+            RequestedBy: "Adviser",
+            RequesterId: "adviser-1",
+            ReasonCode: "CLIENT_REQUEST",
+            ReasonDetail: "Client wants the later slot",
+            NewSlotId: "slot-new",
+            CorrelationId: "corr-1",
+            ActorContext: BookingActorContext.AdviserPortal("adviser-1", "Ada Adviser", "corr-1"),
+            AdviserNote: "Use the latest slot"), CancellationToken.None));
+
+        Assert.Contains("overridePendingRequest=true", ex.Message);
+        store.Verify(x => x.UpdateAsync(It.IsAny<ApprovalWorkflowRecord>(), It.IsAny<CancellationToken>()), Times.Never);
+        releaseHolds.Verify(x => x.HandleAsync(It.IsAny<ReleaseHoldCommand>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task CreateAsync_OverridesDuplicatePendingRequestForSameBookingChangeAndAdviserWhenRequested()
     {
         ApprovalWorkflowRecord? updatedRequest = null;
         ApprovalHistoryRecord? capturedHistory = null;
@@ -213,7 +258,8 @@ public sealed class ApprovalWorkflowServiceTests
             NewSlotId: "slot-new",
             CorrelationId: "corr-1",
             ActorContext: BookingActorContext.AdviserPortal("adviser-1", "Ada Adviser", "corr-1"),
-            AdviserNote: "Use the latest slot"), CancellationToken.None);
+            AdviserNote: "Use the latest slot",
+            OverridePendingRequest: true), CancellationToken.None);
 
         Assert.Equal("request-existing", response.RequestId);
         Assert.Equal("REQ-EXISTING", response.RequestReference);

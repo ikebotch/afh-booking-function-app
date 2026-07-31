@@ -222,6 +222,10 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
                 .ToArray();
             rows = rows.Where(x => statuses.Contains(x.Status));
         }
+        else
+        {
+            rows = rows.Where(x => x.Status != HoldStatus.Expired);
+        }
 
         if (query.AdviserIds.Count > 0)
         {

@@ -32,6 +32,42 @@ public sealed class AdminBookingSearchRepositoryTests
     }
 
     [Fact]
+    public async Task SearchAsync_ExcludesExpiredBookingsByDefault()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+        var repository = new AdminBookingSearchRepository(db);
+
+        var result = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            Page = 1,
+            PageSize = 25
+        }, CancellationToken.None);
+
+        Assert.DoesNotContain(result.Items, item => item.Status == "Expired");
+        Assert.DoesNotContain(result.Items, item => item.BookingId == "booking-4");
+    }
+
+    [Fact]
+    public async Task SearchAsync_ReturnsExpiredBookingsWhenExplicitlyFiltered()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+        var repository = new AdminBookingSearchRepository(db);
+
+        var result = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            Statuses = ["Expired"],
+            Page = 1,
+            PageSize = 25
+        }, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("booking-4", item.BookingId);
+        Assert.Equal("Expired", item.Status);
+    }
+
+    [Fact]
     public async Task SearchAsync_FiltersByAdviserStatusDateAndClientRef()
     {
         await using var db = CreateDbContext();
@@ -122,17 +158,20 @@ public sealed class AdminBookingSearchRepositoryTests
         var tx1 = Transaction("tx-1", "TRX-1", new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc), "Review", "branch-1");
         var tx2 = Transaction("tx-2", "TRX-2", new DateTime(2026, 7, 14, 9, 0, 0, DateTimeKind.Utc), "Planning", "branch-2");
         var tx3 = Transaction("tx-3", "TRX-3", new DateTime(2026, 7, 16, 9, 0, 0, DateTimeKind.Utc), "Review", "branch-1");
+        var tx4 = Transaction("tx-4", "TRX-4", new DateTime(2026, 7, 17, 9, 0, 0, DateTimeKind.Utc), "Review", "branch-1");
 
         var slot1 = Slot("slot-1", tx1.Id, "adv-1", "Ada Adviser", tx1.ProposedStartUtc, "branch-1");
         var slot2 = Slot("slot-2", tx2.Id, "adv-2", "Ben Adviser", tx2.ProposedStartUtc, "branch-2");
         var slot3 = Slot("slot-3", tx3.Id, "adv-1", "Ada Adviser", tx3.ProposedStartUtc, "branch-1");
+        var slot4 = Slot("slot-4", tx4.Id, "adv-1", "Ada Adviser", tx4.ProposedStartUtc, "branch-1");
 
-        await db.BookingTransactions.AddRangeAsync(tx1, tx2, tx3);
-        await db.BookingSlots.AddRangeAsync(slot1, slot2, slot3);
+        await db.BookingTransactions.AddRangeAsync(tx1, tx2, tx3, tx4);
+        await db.BookingSlots.AddRangeAsync(slot1, slot2, slot3, slot4);
         await db.Holds.AddRangeAsync(
             Hold("booking-1", "client-1", slot1.Id, HoldStatus.Confirmed, tx1.ProposedStartUtc.AddDays(-1), tx1.ProposedStartUtc.AddMinutes(-30), null),
             Hold("booking-2", "client-2", slot2.Id, HoldStatus.Active, tx2.ProposedStartUtc.AddDays(-1), null, null),
-            Hold("booking-3", "client-1", slot3.Id, HoldStatus.Cancelled, tx3.ProposedStartUtc.AddDays(-1), null, tx3.ProposedStartUtc.AddHours(-2)));
+            Hold("booking-3", "client-1", slot3.Id, HoldStatus.Cancelled, tx3.ProposedStartUtc.AddDays(-1), null, tx3.ProposedStartUtc.AddHours(-2)),
+            Hold("booking-4", "client-1", slot4.Id, HoldStatus.Expired, tx4.ProposedStartUtc.AddDays(-1), null, null));
         await db.SaveChangesAsync();
     }
 

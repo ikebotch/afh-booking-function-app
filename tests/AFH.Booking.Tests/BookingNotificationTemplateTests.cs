@@ -292,6 +292,29 @@ public sealed class BookingNotificationTemplateTests
     }
 
     [Fact]
+    public async Task RenderAsync_ModeSpecificTemplateFallsBackToBaseDbTemplateWhenModeTemplateIsMissing()
+    {
+        var renderer = new NotificationTemplateRenderer(
+            [new BookingNotificationTemplatePolicy()],
+            new StubTemplateStore(new NotificationTemplateDefinition(
+                "booking-confirmed",
+                "v1",
+                NotificationChannel.Email,
+                "DB confirmed",
+                null,
+                "DB subject {{bookingId}}",
+                "DB body {{bookingId}}",
+                "text/plain",
+                true)));
+
+        var rendered = await renderer.RenderAsync(CreateExplicitTemplateRequest("booking-confirmed-online", "v1"), CancellationToken.None);
+
+        var content = Assert.Single(rendered.ChannelContent);
+        Assert.Equal("DB subject booking-1", content.Subject);
+        Assert.Equal("DB body booking-1", content.TextBody);
+    }
+
+    [Fact]
     public async Task RenderAsync_UsesFileFallbackOnlyWhenDbTemplateIsMissing()
     {
         var renderer = new NotificationTemplateRenderer(

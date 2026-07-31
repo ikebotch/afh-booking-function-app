@@ -48,6 +48,7 @@ public sealed class BookingNotificationRequestServiceTests
         Assert.Equal("Review", notificationStep.Request.Data["meetingType"]);
         Assert.Equal("Review", notificationStep.Request.Data["meetingTopic"]);
         Assert.Equal("Online", notificationStep.Request.Data["meetingMethod"]);
+        Assert.Equal("online", notificationStep.Request.Data["meetingMode"]);
         Assert.Equal("60 minutes", notificationStep.Request.Data["meetingDuration"]);
         Assert.Equal(expectedMeetingStatus, notificationStep.Request.Data["meetingStatus"]);
         Assert.True(notificationStep.Request.Data.ContainsKey("meetingDateDay"));
@@ -73,6 +74,7 @@ public sealed class BookingNotificationRequestServiceTests
         Assert.Contains("meetingDateDay", variables);
         Assert.Contains("meetingDateTime", variables);
         Assert.Contains("meetingMethod", variables);
+        Assert.Contains("meetingMode", variables);
         Assert.Contains("meetingDuration", variables);
         Assert.Contains("meetingStatus", variables);
         Assert.Contains("adviserName", variables);

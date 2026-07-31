@@ -194,7 +194,8 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
 
         foreach (var channel in policy.Channels.Where(x => x.Enabled))
         {
-            enriched[$"TemplateKey:{channel.Channel}"] = ResolveRecipientTemplateKey(channel.TemplateKey, notificationType, recipientType);
+            var recipientTemplateKey = ResolveRecipientTemplateKey(channel.TemplateKey, notificationType, recipientType);
+            enriched[$"TemplateKey:{channel.Channel}"] = ResolveModeTemplateKey(recipientTemplateKey, data);
             enriched[$"TemplateVersion:{channel.Channel}"] = channel.TemplateVersion;
         }
 
@@ -213,6 +214,17 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
         return string.IsNullOrWhiteSpace(suffix)
             ? templateKey
             : $"{templateKey}-{suffix}";
+    }
+
+    private static string ResolveModeTemplateKey(
+        string templateKey,
+        IReadOnlyDictionary<string, string> data)
+    {
+        if (!data.TryGetValue("meetingMode", out var meetingMode) || string.IsNullOrWhiteSpace(meetingMode))
+            return templateKey;
+
+        var suffix = NormalizeMeetingMode(meetingMode);
+        return string.IsNullOrWhiteSpace(suffix) ? templateKey : $"{templateKey}-{suffix}";
     }
 
     private static bool IsClientRecipient(string recipientType)
@@ -236,6 +248,21 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
             "reportingmanager" => "reporting-manager",
             "orgadmin" => "admin",
             _ => normalized
+        };
+    }
+
+    private static string NormalizeMeetingMode(string meetingMode)
+    {
+        var normalized = new string(meetingMode
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+
+        return normalized switch
+        {
+            "online" or "remote" => "online",
+            "facetoface" or "inperson" or "inpersonmeeting" => "face-to-face",
+            _ => string.Empty
         };
     }
 }

@@ -22,6 +22,7 @@ internal static class BookingNotificationPayloadFields
         data["meetingType"] = meetingTopic;
         data["meetingTopic"] = meetingTopic;
         data["meetingMethod"] = meetingMethod;
+        data["meetingMode"] = transaction.IsRemote ? "online" : "face-to-face";
         data["meetingDate"] = dayPart;
         data["meetingDateDay"] = dayPart;
         data["meetingDateTime"] = timePart;

@@ -73,6 +73,29 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
         string sourceApplication,
         CancellationToken ct)
     {
+        var exact = await TryResolveTemplateByKeyAsync(explicitTemplate, sourceApplication, ct);
+        if (exact is not null)
+            return exact;
+
+        foreach (var fallbackKey in GetModeFallbackTemplateKeys(explicitTemplate.TemplateKey))
+        {
+            var fallback = await TryResolveTemplateByKeyAsync(
+                explicitTemplate with { TemplateKey = fallbackKey },
+                sourceApplication,
+                ct);
+
+            if (fallback is not null)
+                return fallback;
+        }
+
+        return null;
+    }
+
+    private async Task<TemplateParts?> TryResolveTemplateByKeyAsync(
+        ExplicitTemplate explicitTemplate,
+        string sourceApplication,
+        CancellationToken ct)
+    {
         if (_templateStore is not null)
         {
             var dbTemplate = await _templateStore.GetAsync(
@@ -82,18 +105,27 @@ public sealed partial class NotificationTemplateRenderer : INotificationTemplate
                 ct);
 
             if (dbTemplate is not null)
-            {
                 return new TemplateParts(
                     dbTemplate.SubjectTemplate ?? string.Empty,
                     dbTemplate.Channel,
                     dbTemplate.BodyTemplate,
                     dbTemplate.ContentType);
-            }
         }
 
         var templateName = $"{sourceApplication}.{explicitTemplate.TemplateKey}.{explicitTemplate.TemplateVersion}.txt";
         var embedded = await TryLoadTemplateAsync(templateName, ct);
         return embedded is null ? null : ParseTemplate(embedded);
+    }
+
+    private static IReadOnlyList<string> GetModeFallbackTemplateKeys(string templateKey)
+    {
+        var fallback = templateKey
+            .Replace("-face-to-face", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("-online", string.Empty, StringComparison.OrdinalIgnoreCase);
+
+        return string.Equals(fallback, templateKey, StringComparison.OrdinalIgnoreCase)
+            ? []
+            : [fallback];
     }
 
     private static IReadOnlyList<ExplicitTemplate> GetExplicitTemplates(

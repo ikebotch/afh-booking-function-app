@@ -134,6 +134,45 @@ public sealed class BookingNotificationPolicyTests
         Assert.Equal("booking-confirmed-contact-centre", contactCentreRequest.Data["TemplateKey:Email"]);
     }
 
+    [Theory]
+    [InlineData("online", "booking-confirmed-online", "booking-confirmed-adviser-online", "booking-confirmed-contact-centre-online")]
+    [InlineData("face-to-face", "booking-confirmed-face-to-face", "booking-confirmed-adviser-face-to-face", "booking-confirmed-contact-centre-face-to-face")]
+    public async Task Step_PublishesModeSpecificTemplateKeys_WhenMeetingModeIsAvailable(
+        string meetingMode,
+        string expectedClientTemplate,
+        string expectedAdviserTemplate,
+        string expectedContactCentreTemplate)
+    {
+        var publisher = new CapturingPublisher();
+        var step = new BookingNotificationStep(
+            publisher,
+            new StubPolicyProvider(DefaultPolicy(BookingNotificationTypes.BookingConfirmed)),
+            CreateRecipientResolver(adviserEmail: "adviser@example.com"),
+            NullLogger<BookingNotificationStep>.Instance);
+
+        var result = await step.ExecuteAsync(
+            LifecycleEventTypes.Booked,
+            "booking-1",
+            LifecycleActors.Client,
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+            new Dictionary<string, string>
+            {
+                ["bookingId"] = "booking-1",
+                ["adviserId"] = "adv-1",
+                ["adviserName"] = "Ada Adviser",
+                ["meetingMode"] = meetingMode
+            },
+            CancellationToken.None);
+
+        Assert.Equal(LifecycleStepStatuses.Succeeded, result.Status);
+        var clientRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Client);
+        var adviserRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Adviser);
+        var contactCentreRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.ContactCentre);
+        Assert.Equal(expectedClientTemplate, clientRequest.Data["TemplateKey:Email"]);
+        Assert.Equal(expectedAdviserTemplate, adviserRequest.Data["TemplateKey:Email"]);
+        Assert.Equal(expectedContactCentreTemplate, contactCentreRequest.Data["TemplateKey:Email"]);
+    }
+
     [Fact]
     public async Task Step_Skips_WhenChannelIsDisabled()
     {

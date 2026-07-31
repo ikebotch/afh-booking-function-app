@@ -159,6 +159,32 @@ public sealed class DbApprovalWorkflowStoreTests
         Assert.False(differentRequester);
     }
 
+    [Fact]
+    public async Task GetPendingRequestAsync_ReturnsPendingRequestByBookingReferenceChangeTypeAndRequester()
+    {
+        await using var db = CreateDbContext();
+        var olderRequest = Request("request-older", "booking-1", "Rearrange", "adv-1", "Pending", new DateTime(2026, 7, 15, 9, 0, 0, DateTimeKind.Utc));
+        olderRequest.BookingReference = "booking-ref-1";
+        var latestRequest = Request("request-latest", "booking-1", "Rearrange", "adv-1", "Pending", new DateTime(2026, 7, 15, 10, 0, 0, DateTimeKind.Utc));
+        latestRequest.BookingReference = "booking-ref-1";
+        var cancelRequest = Request("request-cancel", "booking-1", "Cancel", "adv-1", "Pending", new DateTime(2026, 7, 15, 11, 0, 0, DateTimeKind.Utc));
+        cancelRequest.BookingReference = "booking-ref-1";
+        await db.ApprovalRequests.AddRangeAsync(olderRequest, latestRequest, cancelRequest);
+        await db.SaveChangesAsync();
+        var store = new DbApprovalWorkflowStore(db);
+
+        var result = await store.GetPendingRequestAsync(
+            "booking-id-from-route",
+            "booking-ref-1",
+            "Rearrange",
+            "Adviser",
+            "adv-1",
+            CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal("request-latest", result!.Id);
+    }
+
     private static BookingDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<BookingDbContext>()

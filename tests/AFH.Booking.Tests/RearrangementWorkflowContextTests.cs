@@ -302,6 +302,8 @@ public sealed class RearrangementWorkflowContextTests
             .ReturnsAsync(1);
         var sut = new ApprovalWorkflowService(
             store.Object,
+            Mock.Of<IBookingHoldRepository>(),
+            Mock.Of<IReleaseHoldService>(),
             Mock.Of<IApprovalRoutingService>(),
             Mock.Of<ICancellationOrchestrator>(),
             rearrangement.Object,

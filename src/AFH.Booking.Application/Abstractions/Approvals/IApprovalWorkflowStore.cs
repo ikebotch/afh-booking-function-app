@@ -25,6 +25,14 @@ public interface IApprovalWorkflowStore
         string? requesterId,
         CancellationToken ct);
 
+    Task<ApprovalWorkflowRecord?> GetPendingRequestAsync(
+        string bookingId,
+        string? bookingReference,
+        string changeType,
+        string requestedBy,
+        string? requesterId,
+        CancellationToken ct);
+
     Task<ApprovalWorkflowRecord?> GetAsync(string requestId, CancellationToken ct);
 
     Task<ApprovalWorkflowRecord?> GetForUpdateAsync(string requestId, CancellationToken ct);

@@ -146,36 +146,93 @@ public sealed class ApprovalWorkflowServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_RejectsDuplicatePendingRequestForSameBookingChangeAndAdviser()
+    public async Task CreateAsync_OverridesDuplicatePendingRequestForSameBookingChangeAndAdviser()
     {
+        ApprovalWorkflowRecord? updatedRequest = null;
+        ApprovalHistoryRecord? capturedHistory = null;
         var store = CreateStore();
-        store.Setup(x => x.HasPendingRequestAsync(
+        var holds = new Mock<IBookingHoldRepository>();
+        holds.Setup(x => x.GetActiveBySlotIdAsync("slot-old", It.IsAny<DateTime>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(BookingHold.Rehydrate(
+                "hold-old",
+                "slot-old",
+                "user-1",
+                BookingHoldStatus.Active,
+                FixedNow.AddMinutes(-2),
+                FixedNow.AddMinutes(3),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null));
+        var releaseHolds = new Mock<IReleaseHoldService>();
+        releaseHolds.Setup(x => x.HandleAsync(It.IsAny<ReleaseHoldCommand>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Result<ReleaseHoldResponse>.Ok(new ReleaseHoldResponse { BookingId = "hold-old" }));
+        store.Setup(x => x.GetPendingRequestAsync(
                 "booking-1",
                 "BK-REF-1",
-                "Cancel",
+                "Rearrange",
                 "Adviser",
                 "adviser-1",
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(true);
-        var sut = CreateSut(store.Object);
+            .ReturnsAsync(new ApprovalWorkflowRecord
+            {
+                Id = "request-existing",
+                Reference = "REQ-EXISTING",
+                BookingId = "booking-1",
+                BookingReference = "BK-REF-1",
+                TransactionId = "tx-1",
+                ChangeType = "Rearrange",
+                RequestedBy = "Adviser",
+                RequesterId = "adviser-1",
+                Status = "Pending",
+                RequestedUtc = FixedNow.AddHours(-1),
+                ReasonCode = "OLD_REASON",
+                ReasonDetail = "Old detail",
+                RequestedPayloadJson = JsonSerializer.Serialize(new { NewSlotId = "slot-old" }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                ApproverTargetType = "Role",
+                ApproverTargetValue = "booking-approvers",
+                ApproverTargetDisplayName = "Booking Approvers"
+            });
+        store.Setup(x => x.UpdateAsync(It.IsAny<ApprovalWorkflowRecord>(), It.IsAny<CancellationToken>()))
+            .Callback<ApprovalWorkflowRecord, CancellationToken>((request, _) => updatedRequest = request)
+            .Returns(Task.CompletedTask);
+        store.Setup(x => x.AddHistoryAsync(It.IsAny<ApprovalHistoryRecord>(), It.IsAny<CancellationToken>()))
+            .Callback<ApprovalHistoryRecord, CancellationToken>((history, _) => capturedHistory = history)
+            .Returns(Task.CompletedTask);
+        var sut = CreateSut(store.Object, holds.Object, releaseHolds.Object);
 
-        var ex = await Assert.ThrowsAsync<ApprovalRequestConflictException>(() => sut.CreateAsync(new CreateApprovalWorkflowRequest(
+        var response = await sut.CreateAsync(new CreateApprovalWorkflowRequest(
             BookingId: "booking-1",
-            ChangeType: "Cancel",
+            ChangeType: "Rearrange",
             RequestedBy: "Adviser",
             RequesterId: "adviser-1",
             ReasonCode: "CLIENT_REQUEST",
-            ReasonDetail: "Client asked to cancel",
-            NewSlotId: null,
+            ReasonDetail: "Client wants the later slot",
+            NewSlotId: "slot-new",
             CorrelationId: "corr-1",
             ActorContext: BookingActorContext.AdviserPortal("adviser-1", "Ada Adviser", "corr-1"),
-            AdviserNote: "Client asked to cancel"), CancellationToken.None));
+            AdviserNote: "Use the latest slot"), CancellationToken.None);
 
-        Assert.Contains("pending Cancel approval request already exists", ex.Message);
+        Assert.Equal("request-existing", response.RequestId);
+        Assert.Equal("REQ-EXISTING", response.RequestReference);
+        Assert.Equal("slot-new", response.NewSlotId);
+        Assert.Equal("CLIENT_REQUEST", updatedRequest?.ReasonCode);
+        Assert.Equal("Client wants the later slot", updatedRequest?.ReasonDetail);
+        Assert.Contains("slot-new", updatedRequest?.RequestedPayloadJson);
+        Assert.Equal("Overridden", capturedHistory?.EventType);
+        Assert.Equal("request-existing", capturedHistory?.ApprovalRequestId);
+        releaseHolds.Verify(x => x.HandleAsync(
+            It.Is<ReleaseHoldCommand>(cmd =>
+                cmd.HoldId == "hold-old" &&
+                cmd.ReasonCode == "ApprovalRequestOverridden"),
+            It.IsAny<CancellationToken>()), Times.Once);
         store.Verify(x => x.AddRequestAsync(
             It.IsAny<ApprovalWorkflowRecord>(),
             It.IsAny<ApprovalHistoryRecord>(),
             It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(x => x.UpdateAsync(It.IsAny<ApprovalWorkflowRecord>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     private static Mock<IApprovalWorkflowStore> CreateStore()
@@ -183,18 +240,21 @@ public sealed class ApprovalWorkflowServiceTests
         var store = new Mock<IApprovalWorkflowStore>();
         store.Setup(x => x.LoadBookingAsync("booking-1", It.IsAny<CancellationToken>()))
             .ReturnsAsync(ApprovalBooking());
-        store.Setup(x => x.HasPendingRequestAsync(
+        store.Setup(x => x.GetPendingRequestAsync(
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(false);
+            .ReturnsAsync((ApprovalWorkflowRecord?)null);
         return store;
     }
 
-    private static ApprovalWorkflowService CreateSut(IApprovalWorkflowStore store)
+    private static ApprovalWorkflowService CreateSut(
+        IApprovalWorkflowStore store,
+        IBookingHoldRepository? holds = null,
+        IReleaseHoldService? releaseHolds = null)
     {
         var routing = new Mock<IApprovalRoutingService>();
         routing.Setup(x => x.ResolveAsync(It.IsAny<CancellationToken>()))
@@ -210,6 +270,8 @@ public sealed class ApprovalWorkflowServiceTests
 
         return new ApprovalWorkflowService(
             store,
+            holds ?? Mock.Of<IBookingHoldRepository>(),
+            releaseHolds ?? Mock.Of<IReleaseHoldService>(),
             routing.Object,
             Mock.Of<ICancellationOrchestrator>(),
             Mock.Of<IRearrangementOrchestrator>(),

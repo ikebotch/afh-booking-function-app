@@ -140,6 +140,46 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
         return await rows.AnyAsync(ct);
     }
 
+    public async Task<ApprovalWorkflowRecord?> GetPendingRequestAsync(
+        string bookingId,
+        string? bookingReference,
+        string changeType,
+        string requestedBy,
+        string? requesterId,
+        CancellationToken ct)
+    {
+        var bookingLookups = Normalize([bookingId, bookingReference ?? string.Empty]);
+        if (bookingLookups.Length == 0)
+            return null;
+
+        var normalizedChangeType = changeType.Trim();
+        var normalizedRequestedBy = requestedBy.Trim();
+        var normalizedRequesterId = requesterId?.Trim();
+
+        var rows = _db.ApprovalRequests
+            .AsNoTracking()
+            .Where(x =>
+                x.Status == "Pending" &&
+                (bookingLookups.Contains(x.BookingId) || bookingLookups.Contains(x.BookingReference!)) &&
+                x.ChangeType == normalizedChangeType &&
+                x.RequestedBy == normalizedRequestedBy);
+
+        if (!string.IsNullOrWhiteSpace(normalizedRequesterId))
+        {
+            rows = rows.Where(x => x.RequesterId == normalizedRequesterId);
+        }
+
+        var row = await rows
+            .OrderByDescending(x => x.RequestedUtc)
+            .FirstOrDefaultAsync(ct);
+
+        if (row is null)
+            return null;
+
+        var enriched = await EnrichAsync([ToRecord(row)], ct);
+        return enriched.FirstOrDefault();
+    }
+
     private static string[] Normalize(IReadOnlyList<string> values)
         => values
             .Where(value => !string.IsNullOrWhiteSpace(value))

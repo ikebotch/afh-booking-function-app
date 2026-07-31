@@ -12,6 +12,8 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
 {
     private static readonly JsonSerializerOptions PayloadJsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IApprovalWorkflowStore _store;
+    private readonly IBookingHoldRepository _holds;
+    private readonly IReleaseHoldService _releaseHolds;
     private readonly IApprovalRoutingService _routing;
     private readonly ICancellationOrchestrator _cancellation;
     private readonly IRearrangementOrchestrator _rearrangement;
@@ -23,6 +25,8 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
 
     public ApprovalWorkflowService(
         IApprovalWorkflowStore store,
+        IBookingHoldRepository holds,
+        IReleaseHoldService releaseHolds,
         IApprovalRoutingService routing,
         ICancellationOrchestrator cancellation,
         IRearrangementOrchestrator rearrangement,
@@ -33,6 +37,8 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         IBookingReferenceGenerator? references = null)
     {
         _store = store;
+        _holds = holds;
+        _releaseHolds = releaseHolds;
         _routing = routing;
         _cancellation = cancellation;
         _rearrangement = rearrangement;
@@ -56,26 +62,107 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         var requestedUtc = DateTime.UtcNow;
         var booking = await _store.LoadBookingAsync(request.BookingId, ct);
         EnsureAdviserOwnsBooking(requestedBy, requesterId, booking);
-        await EnsureNoPendingDuplicateRequestAsync(request, requestedBy, requesterId, booking, ct);
         var lifecycleState = ResolveLifecycleState(booking.Hold.Status) ?? LifecycleStates.Booked;
         var routeTarget = await _routing.ResolveAsync(ct);
         var notes = BuildCreateNotes(request, actor, booking.Hold.Id, requestedUtc, correlationId);
-        var payloadJson = JsonSerializer.Serialize(new
+        var payloadJson = BuildPayloadJson(request, requesterId, notes);
+        var bookingReference = booking.Transaction.BookingReference ?? booking.Hold.Reference;
+
+        var existingPending = await _store.GetPendingRequestAsync(
+            booking.Hold.Id,
+            bookingReference,
+            request.ChangeType.Trim(),
+            requestedBy,
+            requesterId,
+            ct);
+
+        if (existingPending is not null)
         {
-            request.ChangeType,
-            request.NewSlotId,
-            request.ReasonCode,
-            request.ReasonDetail,
-            RequesterId = requesterId,
-            Notes = notes,
-            ProposedAlternativeTimes = request.ProposedAlternativeTimes ?? []
-        }, _jsonOptions);
+            await ReleaseSupersededPendingRearrangementHoldAsync(
+                existingPending,
+                request,
+                booking,
+                requestedUtc,
+                actor,
+                requestedBy,
+                requesterId,
+                ct);
+
+            existingPending.BookingReference = bookingReference;
+            existingPending.TransactionId = booking.Transaction.Id;
+            existingPending.ClientName = booking.Transaction.ClientName;
+            existingPending.AdviserName = booking.Slot.AdviserName;
+            existingPending.BookingDateTime = booking.Slot.StartUtc;
+            existingPending.MeetingType = booking.Transaction.MeetingType;
+            existingPending.RequestedUtc = requestedUtc;
+            existingPending.ReasonCode = request.ReasonCode?.Trim();
+            existingPending.ReasonDetail = request.ReasonDetail?.Trim();
+            existingPending.RequestedPayloadJson = payloadJson;
+            existingPending.ApproverTargetType = routeTarget.TargetType;
+            existingPending.ApproverTargetValue = routeTarget.TargetValue;
+            existingPending.ApproverTargetDisplayName = routeTarget.DisplayName;
+
+            await _store.UpdateAsync(existingPending, ct);
+            await _store.AddHistoryAsync(new ApprovalHistoryRecord
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                ApprovalRequestId = existingPending.Id,
+                EventType = "Overridden",
+                ActorType = requestedBy,
+                ActorId = requesterId,
+                Outcome = "Pending",
+                Comments = request.AdviserNote ?? request.ReasonDetail,
+                OccurredUtc = requestedUtc
+            }, ct);
+
+            await _audit.RecordEventAsync(new LifecycleAuditEntry(
+                BookingId: existingPending.BookingId,
+                TransactionId: existingPending.TransactionId,
+                EventType: "ApprovalRequestOverridden",
+                ActorType: requestedBy,
+                ActorId: requesterId,
+                ReasonCode: request.ReasonCode,
+                ReasonNotes: request.AdviserNote ?? request.ReasonDetail,
+                Before: new
+                {
+                    approvalStatus = "Pending",
+                    changeType = existingPending.ChangeType
+                },
+                After: new
+                {
+                    approvalStatus = "Pending",
+                    changeType = existingPending.ChangeType,
+                    approverTarget = routeTarget.DisplayName
+                },
+                OccurredUtc: requestedUtc,
+                CorrelationId: correlationId,
+                SourceSystem: actor?.SourceApplication ?? "BookingService",
+                RelatedBookingId: null,
+                PreviousState: lifecycleState,
+                NewState: lifecycleState,
+                TriggerReason: "AdviserApprovalRequestOverridden"), ct);
+
+            await _uow.SaveChangesAsync(ct);
+
+            await _notifications.RecordRequestSubmittedAsync(
+                routeTarget,
+                booking.Hold.Id,
+                booking.Transaction.Id,
+                booking.Transaction.TransactionRef,
+                requesterId ?? requestedBy,
+                existingPending.ChangeType,
+                request.ReasonCode!,
+                request.ReasonDetail,
+                ct);
+
+            return ToResponse(existingPending);
+        }
 
         var model = new ApprovalWorkflowRecord
         {
             Id = Guid.NewGuid().ToString("N"),
             BookingId = booking.Hold.Id,
-            BookingReference = booking.Transaction.BookingReference ?? booking.Hold.Reference,
+            BookingReference = bookingReference,
             TransactionId = booking.Transaction.Id,
             ClientName = booking.Transaction.ClientName,
             AdviserName = booking.Slot.AdviserName,
@@ -168,30 +255,6 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         {
             throw new UnauthorizedAccessException("Signed-in adviser can only request approval for their own bookings.");
         }
-    }
-
-    private async Task EnsureNoPendingDuplicateRequestAsync(
-        CreateApprovalWorkflowRequest request,
-        string requestedBy,
-        string? requesterId,
-        ApprovalBookingSnapshot booking,
-        CancellationToken ct)
-    {
-        var bookingReference = booking.Transaction.BookingReference ?? booking.Hold.Reference;
-        var hasDuplicate = await _store.HasPendingRequestAsync(
-            booking.Hold.Id,
-            bookingReference,
-            request.ChangeType.Trim(),
-            requestedBy,
-            requesterId,
-            ct);
-
-        if (!hasDuplicate)
-            return;
-
-        var bookingDisplay = bookingReference ?? booking.Hold.Id;
-        throw new ApprovalRequestConflictException(
-            $"A pending {request.ChangeType.Trim()} approval request already exists for booking '{bookingDisplay}'.");
     }
 
     public async Task<IReadOnlyList<ApprovalRequestResponse>> ListPendingAsync(CancellationToken ct)
@@ -300,6 +363,57 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         CancellationToken ct)
     {
         return await _store.IsApprovedAsync(requestId, bookingId, changeType, requestedBy, ct);
+    }
+
+    private async Task ReleaseSupersededPendingRearrangementHoldAsync(
+        ApprovalWorkflowRecord existingPending,
+        CreateApprovalWorkflowRequest request,
+        ApprovalBookingSnapshot booking,
+        DateTime requestedUtc,
+        BookingActorContext? actor,
+        string requestedBy,
+        string? requesterId,
+        CancellationToken ct)
+    {
+        if (!string.Equals(existingPending.ChangeType, "Rearrange", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(request.ChangeType, "Rearrange", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var previousPayload = DeserializePayload(existingPending.RequestedPayloadJson);
+        var previousSlotId = previousPayload?.NewSlotId?.Trim();
+        var replacementSlotId = request.NewSlotId?.Trim();
+
+        if (string.IsNullOrWhiteSpace(previousSlotId) ||
+            string.Equals(previousSlotId, replacementSlotId, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(previousSlotId, booking.Slot.Id, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var previousReplacementHold = await _holds.GetActiveBySlotIdAsync(previousSlotId, requestedUtc, ct);
+        if (previousReplacementHold is null)
+            return;
+
+        var release = await _releaseHolds.HandleAsync(new ReleaseHoldCommand
+        {
+            HoldId = previousReplacementHold.Id,
+            ReasonCode = "ApprovalRequestOverridden",
+            ReasonDetail = $"Released because approval request '{existingPending.Id}' was overridden with a different rearrangement slot.",
+            ReleaseKind = ReleaseHoldKind.ManualRelease,
+            ActorContext = actor ?? BookingActorContext.ApprovalWorkflow(
+                requesterId ?? requestedBy,
+                displayName: requesterId ?? requestedBy,
+                correlationId: request.CorrelationId,
+                actorType: requestedBy)
+        }, ct);
+
+        if (!release.IsSuccess)
+        {
+            throw new InvalidOperationException(
+                release.ErrorMessage ?? $"Unable to release superseded hold '{previousReplacementHold.Id}'.");
+        }
     }
 
     private async Task ExecuteApprovedWorkflowAsync(
@@ -473,6 +587,28 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             }
         ];
     }
+
+    private string BuildPayloadJson(
+        CreateApprovalWorkflowRequest request,
+        string? requesterId,
+        IReadOnlyList<ApprovalRequestNoteResponse> notes)
+    {
+        return JsonSerializer.Serialize(new
+        {
+            request.ChangeType,
+            request.NewSlotId,
+            request.ReasonCode,
+            request.ReasonDetail,
+            RequesterId = requesterId,
+            Notes = notes,
+            ProposedAlternativeTimes = request.ProposedAlternativeTimes ?? []
+        }, _jsonOptions);
+    }
+
+    private ApprovalPayload? DeserializePayload(string? payloadJson)
+        => string.IsNullOrWhiteSpace(payloadJson)
+            ? null
+            : JsonSerializer.Deserialize<ApprovalPayload>(payloadJson, _jsonOptions);
 
     private static string? ResolveLifecycleState(BookingHoldStatus status)
     {

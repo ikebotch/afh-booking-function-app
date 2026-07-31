@@ -286,6 +286,8 @@ public sealed class CancellationWorkflowContextTests
             .ReturnsAsync(1);
         var sut = new ApprovalWorkflowService(
             store.Object,
+            Mock.Of<IBookingHoldRepository>(),
+            Mock.Of<IReleaseHoldService>(),
             Mock.Of<IApprovalRoutingService>(),
             cancellation.Object,
             Mock.Of<IRearrangementOrchestrator>(),

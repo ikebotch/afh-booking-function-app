@@ -144,6 +144,48 @@ public sealed class AdminBookingSearchRepositoryTests
         Assert.Equal(["booking-3", "booking-2"], result.Items.Select(x => x.BookingId).ToArray());
     }
 
+    [Fact]
+    public async Task SearchAsync_TagsActiveReplacementHoldAsPendingReschedule()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+        await db.ApprovalRequests.AddAsync(PendingRearrangeRequest("slot-2"));
+        await db.SaveChangesAsync();
+        var repository = new AdminBookingSearchRepository(db);
+
+        var result = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            BookingIds = ["booking-2"],
+            Page = 1,
+            PageSize = 25
+        }, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("booking-2", item.BookingId);
+        Assert.Equal("PendingReschedule", item.Status);
+    }
+
+    [Fact]
+    public async Task SearchAsync_FiltersByPendingRescheduleVirtualStatus()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+        await db.ApprovalRequests.AddAsync(PendingRearrangeRequest("slot-2"));
+        await db.SaveChangesAsync();
+        var repository = new AdminBookingSearchRepository(db);
+
+        var result = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            Statuses = ["PendingReschedule"],
+            Page = 1,
+            PageSize = 25
+        }, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("booking-2", item.BookingId);
+        Assert.Equal("PendingReschedule", item.Status);
+    }
+
     private static BookingDbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<BookingDbContext>()
@@ -226,6 +268,25 @@ public sealed class AdminBookingSearchRepositoryTests
             CancelledUtc = cancelledUtc,
             CancelReason = cancelledUtc.HasValue ? "Client request" : null,
             RowVersion = []
+        };
+
+    private static ApprovalRequestModel PendingRearrangeRequest(string newSlotId)
+        => new()
+        {
+            Id = "request-pending-rearrange",
+            Reference = "REQ-PENDING",
+            BookingId = "booking-1",
+            BookingReference = "BK-REF-1",
+            TransactionId = "tx-1",
+            ChangeType = "Rearrange",
+            RequestedBy = "Adviser",
+            RequesterId = "adv-2",
+            Status = "Pending",
+            RequestedUtc = new DateTime(2026, 7, 13, 12, 0, 0, DateTimeKind.Utc),
+            RequestedPayloadJson = $$"""{"newSlotId":"{{newSlotId}}"}""",
+            ApproverTargetType = "Role",
+            ApproverTargetValue = "booking-approvers",
+            ApproverTargetDisplayName = "Booking Approvers"
         };
 
     private sealed class StubClientDirectory : IClientDirectory

@@ -61,11 +61,6 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         var correlationId = actor?.CorrelationId ?? request.CorrelationId;
         var requestedUtc = DateTime.UtcNow;
         var booking = await _store.LoadBookingAsync(request.BookingId, ct);
-        EnsureAdviserOwnsBooking(requestedBy, requesterId, booking);
-        var lifecycleState = ResolveLifecycleState(booking.Hold.Status) ?? LifecycleStates.Booked;
-        var routeTarget = await _routing.ResolveAsync(ct);
-        var notes = BuildCreateNotes(request, actor, booking.Hold.Id, requestedUtc, correlationId);
-        var payloadJson = BuildPayloadJson(request, requesterId, notes);
         var bookingReference = booking.Transaction.BookingReference ?? booking.Hold.Reference;
 
         var existingPending = await _store.GetPendingRequestAsync(
@@ -75,6 +70,29 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
             requestedBy,
             requesterId,
             ct);
+
+        if (existingPending is null &&
+            string.Equals(request.ChangeType, "Rearrange", StringComparison.OrdinalIgnoreCase))
+        {
+            existingPending = await _store.GetPendingRearrangeRequestForNewSlotAsync(
+                booking.Hold.SlotId,
+                requestedBy,
+                requesterId,
+                ct);
+
+            if (existingPending is not null &&
+                !string.Equals(existingPending.BookingId, booking.Hold.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                booking = await _store.LoadBookingAsync(existingPending.BookingId, ct);
+                bookingReference = booking.Transaction.BookingReference ?? booking.Hold.Reference;
+            }
+        }
+
+        EnsureAdviserOwnsBooking(requestedBy, requesterId, booking);
+        var lifecycleState = ResolveLifecycleState(booking.Hold.Status) ?? LifecycleStates.Booked;
+        var routeTarget = await _routing.ResolveAsync(ct);
+        var notes = BuildCreateNotes(request, actor, booking.Hold.Id, requestedUtc, correlationId);
+        var payloadJson = BuildPayloadJson(request, requesterId, notes);
 
         if (existingPending is not null)
         {

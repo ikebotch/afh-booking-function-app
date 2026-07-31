@@ -281,6 +281,67 @@ public sealed class ApprovalWorkflowServiceTests
         store.Verify(x => x.UpdateAsync(It.IsAny<ApprovalWorkflowRecord>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task CreateAsync_RejectsDuplicatePendingRearrangeWhenReplacementHoldIsSubmittedAgain()
+    {
+        var store = CreateStore();
+        store.Setup(x => x.LoadBookingAsync("booking-replacement", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(ApprovalBooking(
+                bookingId: "booking-replacement",
+                slotId: "slot-new",
+                holdStatus: BookingHoldStatus.Active));
+        store.Setup(x => x.GetPendingRequestAsync(
+                "booking-replacement",
+                "BK-REF-1",
+                "Rearrange",
+                "Adviser",
+                "adviser-1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ApprovalWorkflowRecord?)null);
+        store.Setup(x => x.GetPendingRearrangeRequestForNewSlotAsync(
+                "slot-new",
+                "Adviser",
+                "adviser-1",
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ApprovalWorkflowRecord
+            {
+                Id = "request-existing",
+                Reference = "REQ-EXISTING",
+                BookingId = "booking-1",
+                BookingReference = "BK-REF-1",
+                TransactionId = "tx-1",
+                ChangeType = "Rearrange",
+                RequestedBy = "Adviser",
+                RequesterId = "adviser-1",
+                Status = "Pending",
+                RequestedUtc = FixedNow.AddHours(-1),
+                RequestedPayloadJson = JsonSerializer.Serialize(new { NewSlotId = "slot-new" }, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                ApproverTargetDisplayName = "Booking Approvers"
+            });
+        var releaseHolds = new Mock<IReleaseHoldService>();
+        var sut = CreateSut(store.Object, releaseHolds: releaseHolds.Object);
+
+        var ex = await Assert.ThrowsAsync<ApprovalRequestConflictException>(() => sut.CreateAsync(new CreateApprovalWorkflowRequest(
+            BookingId: "booking-replacement",
+            ChangeType: "Rearrange",
+            RequestedBy: "Adviser",
+            RequesterId: "adviser-1",
+            ReasonCode: "CLIENT_REQUEST",
+            ReasonDetail: "Client wants to move it again",
+            NewSlotId: "slot-newer",
+            CorrelationId: "corr-1",
+            ActorContext: BookingActorContext.AdviserPortal("adviser-1", "Ada Adviser", "corr-1"),
+            AdviserNote: "Please move from the pending slot"), CancellationToken.None));
+
+        Assert.Contains("overridePendingRequest=true", ex.Message);
+        store.Verify(x => x.AddRequestAsync(
+            It.IsAny<ApprovalWorkflowRecord>(),
+            It.IsAny<ApprovalHistoryRecord>(),
+            It.IsAny<CancellationToken>()), Times.Never);
+        store.Verify(x => x.UpdateAsync(It.IsAny<ApprovalWorkflowRecord>(), It.IsAny<CancellationToken>()), Times.Never);
+        releaseHolds.Verify(x => x.HandleAsync(It.IsAny<ReleaseHoldCommand>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static Mock<IApprovalWorkflowStore> CreateStore()
     {
         var store = new Mock<IApprovalWorkflowStore>();
@@ -289,6 +350,12 @@ public sealed class ApprovalWorkflowServiceTests
         store.Setup(x => x.GetPendingRequestAsync(
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
+                It.IsAny<string>(),
+                It.IsAny<string>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync((ApprovalWorkflowRecord?)null);
+        store.Setup(x => x.GetPendingRearrangeRequestForNewSlotAsync(
                 It.IsAny<string>(),
                 It.IsAny<string>(),
                 It.IsAny<string?>(),
@@ -327,23 +394,26 @@ public sealed class ApprovalWorkflowServiceTests
             new JsonSerializerOptions(JsonSerializerDefaults.Web));
     }
 
-    private static ApprovalBookingSnapshot ApprovalBooking()
+    private static ApprovalBookingSnapshot ApprovalBooking(
+        string bookingId = "booking-1",
+        string slotId = "slot-1",
+        BookingHoldStatus holdStatus = BookingHoldStatus.Confirmed)
     {
         var hold = BookingHold.Rehydrate(
-            "booking-1",
-            "slot-1",
+            bookingId,
+            slotId,
             "user-1",
-            BookingHoldStatus.Confirmed,
+            holdStatus,
             FixedNow.AddHours(-2),
             FixedNow.AddHours(1),
-            FixedNow.AddHours(-1),
+            holdStatus == BookingHoldStatus.Confirmed ? FixedNow.AddHours(-1) : null,
             null,
             null,
             null,
             null,
             null);
         var slot = BookingSlot.Rehydrate(
-            "slot-1",
+            slotId,
             "tx-1",
             "adviser-1",
             "Adviser One",

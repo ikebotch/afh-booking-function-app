@@ -5,6 +5,7 @@ namespace AFH.Booking.Application.Services.Bookings.Core;
 public sealed class AdminBookingSearchService : IAdminBookingSearchService
 {
     private const int MaxPageSize = 100;
+    private const string PendingRescheduleStatus = "PendingReschedule";
     private readonly IAdminBookingSearchRepository _repository;
 
     public AdminBookingSearchService(IAdminBookingSearchRepository repository)
@@ -24,6 +25,7 @@ public sealed class AdminBookingSearchService : IAdminBookingSearchService
             return Result<AdminBookingSearchResponse>.Fail(HttpStatusCode.BadRequest, "from must be before to.", Errors.Validation);
 
         var invalidStatus = query.Statuses.FirstOrDefault(status =>
+            !string.Equals(status.Trim(), PendingRescheduleStatus, StringComparison.OrdinalIgnoreCase) &&
             !Enum.TryParse<BookingHoldStatus>(status.Trim(), true, out _));
         if (!string.IsNullOrWhiteSpace(invalidStatus))
         {

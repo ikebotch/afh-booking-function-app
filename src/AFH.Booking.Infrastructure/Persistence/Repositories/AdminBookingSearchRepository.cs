@@ -12,6 +12,10 @@ namespace AFH.Booking.Infrastructure.Persistence.Repositories;
 
 public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
 {
+    private const string PendingApprovalStatus = "Pending";
+    private const string RearrangeChangeType = "Rearrange";
+    private const string PendingRescheduleStatus = "PendingReschedule";
+
     private readonly BookingDbContext _db;
     private readonly IClientDirectory _clients;
     private readonly ILogger<AdminBookingSearchRepository> _logger;
@@ -67,7 +71,14 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
                 IsRemote = x.Slot.Transaction.IsRemote,
                 MeetingType = x.Slot.Transaction.MeetingType,
                 LocationRef = x.Slot.LocationRef ?? x.Slot.Transaction.LocationRef,
-                Status = x.Status.ToString(),
+                Status = x.Status == HoldStatus.Active && _db.ApprovalRequests.Any(a =>
+                    a.Status == PendingApprovalStatus &&
+                    a.ChangeType == RearrangeChangeType &&
+                    a.RequestedPayloadJson != null &&
+                    (EF.Functions.Like(a.RequestedPayloadJson, "%\"newSlotId\":\"" + x.SlotId + "\"%") ||
+                     EF.Functions.Like(a.RequestedPayloadJson, "%\"slotId\":\"" + x.SlotId + "\"%")))
+                        ? PendingRescheduleStatus
+                        : x.Status.ToString(),
                 CreatedUtc = x.CreatedUtc,
                 ConfirmedUtc = x.ConfirmedUtc,
                 CancelledUtc = x.CancelledUtc,
@@ -216,11 +227,28 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
 
         if (query.Statuses.Count > 0)
         {
-            var statuses = query.Statuses
-                .Select(status => Enum.Parse<HoldStatus>(status.Trim(), ignoreCase: true))
+            var requestedStatuses = query.Statuses
+                .Where(status => !string.IsNullOrWhiteSpace(status))
+                .Select(status => status.Trim())
                 .Distinct()
                 .ToArray();
-            rows = rows.Where(x => statuses.Contains(x.Status));
+            var includePendingReschedule = requestedStatuses.Contains(PendingRescheduleStatus, StringComparer.OrdinalIgnoreCase);
+            var statuses = requestedStatuses
+                .Where(status => !string.Equals(status, PendingRescheduleStatus, StringComparison.OrdinalIgnoreCase))
+                .Select(status => Enum.Parse<HoldStatus>(status, ignoreCase: true))
+                .Distinct()
+                .ToArray();
+
+            rows = rows.Where(x =>
+                statuses.Contains(x.Status) ||
+                (includePendingReschedule &&
+                 x.Status == HoldStatus.Active &&
+                 _db.ApprovalRequests.Any(a =>
+                     a.Status == PendingApprovalStatus &&
+                     a.ChangeType == RearrangeChangeType &&
+                     a.RequestedPayloadJson != null &&
+                     (EF.Functions.Like(a.RequestedPayloadJson, "%\"newSlotId\":\"" + x.SlotId + "\"%") ||
+                      EF.Functions.Like(a.RequestedPayloadJson, "%\"slotId\":\"" + x.SlotId + "\"%")))));
         }
         else
         {

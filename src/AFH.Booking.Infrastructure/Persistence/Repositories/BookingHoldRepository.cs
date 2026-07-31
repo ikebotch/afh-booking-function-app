@@ -8,6 +8,8 @@ namespace AFH.Booking.Infrastructure.Persistence.Repositories;
 
 public sealed class BookingHoldRepository : IBookingHoldRepository
 {
+    private const string PendingApprovalStatus = "Pending";
+
     private readonly BookingDbContext _db;
 
     public BookingHoldRepository(BookingDbContext db)
@@ -69,6 +71,9 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
             .AsNoTracking()
             .Where(x => x.Status == HoldStatus.Active)
             .Where(x => x.HoldExpiresUtc <= utcNow)
+            .Where(x => !_db.ApprovalRequests.Any(a =>
+                a.BookingId == x.Id &&
+                a.Status == PendingApprovalStatus))
             .OrderBy(x => x.HoldExpiresUtc)
             .Take(take)
             .ToListAsync(ct);
@@ -97,7 +102,11 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
             .Where(x => x.Slot.StartUtc < toUtc && x.Slot.EndUtc > fromUtc)
             .Where(x =>
                 x.Status == HoldStatus.Confirmed ||
-                (x.Status == HoldStatus.Active && x.HoldExpiresUtc > utcNow))
+                (x.Status == HoldStatus.Active &&
+                    (x.HoldExpiresUtc > utcNow ||
+                     _db.ApprovalRequests.Any(a =>
+                         a.BookingId == x.Id &&
+                         a.Status == PendingApprovalStatus))))
             .CountAsync(ct);
     }
 
@@ -134,8 +143,11 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
             .AsNoTracking()
             .Include(x => x.Slot) // required for BookingId
             .Where(x => x.Slot.TransactionId == transactionId)
-            .Where(x => x.HoldExpiresUtc > utcNow)
             .Where(x => x.Status == HoldStatus.Active)
+            .Where(x => x.HoldExpiresUtc > utcNow ||
+                        _db.ApprovalRequests.Any(a =>
+                            a.BookingId == x.Id &&
+                            a.Status == PendingApprovalStatus))
             .OrderByDescending(x => x.CreatedUtc)
             .ToListAsync(ct);
 
@@ -179,8 +191,11 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         var m = await _db.Holds
             .AsNoTracking()
             .Where(x => x.SlotId == slotId)
-            .Where(x => x.HoldExpiresUtc > utcNow)
-            .Where(x => x.Status == (int)BookingHoldStatus.Active)
+            .Where(x => x.Status == HoldStatus.Active)
+            .Where(x => x.HoldExpiresUtc > utcNow ||
+                        _db.ApprovalRequests.Any(a =>
+                            a.BookingId == x.Id &&
+                            a.Status == PendingApprovalStatus))
             .FirstOrDefaultAsync(ct);
 
         return m is null ? null : m.ToDomain();
@@ -197,8 +212,11 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
             .AsNoTracking()
             .Include(x => x.Slot)
             .Where(x => x.Slot.TransactionId == transactionId)
-            .Where(x => x.HoldExpiresUtc > utcNow)
             .Where(x => x.Status == HoldStatus.Active)
+            .Where(x => x.HoldExpiresUtc > utcNow ||
+                        _db.ApprovalRequests.Any(a =>
+                            a.BookingId == x.Id &&
+                            a.Status == PendingApprovalStatus))
             .OrderByDescending(x => x.CreatedUtc)
             .FirstOrDefaultAsync(ct);
 
@@ -222,8 +240,11 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         var models = await _db.Holds
             .AsNoTracking()
             .Include(x => x.Slot)
-            .Where(x => x.HoldExpiresUtc > utcNow)
             .Where(x => x.Status == HoldStatus.Active)
+            .Where(x => x.HoldExpiresUtc > utcNow ||
+                        _db.ApprovalRequests.Any(a =>
+                            a.BookingId == x.Id &&
+                            a.Status == PendingApprovalStatus))
             .Where(x => x.Slot.TransactionId == transactionId || x.SlotId == slotId)
             .OrderByDescending(x => x.CreatedUtc)
             .ToListAsync(ct);
@@ -253,4 +274,5 @@ public sealed class BookingHoldRepository : IBookingHoldRepository
         // map domain -> existing tracked model
         hold.ApplyToModel(existing);
     }
+
 }

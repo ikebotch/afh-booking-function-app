@@ -1,5 +1,6 @@
 using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Contracts.V1.Requests;
+using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -17,6 +18,35 @@ public sealed class SendBookingNotificationFunction
     }
 
     [Function("Bookings_SendNotification")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Send booking notification",
+        Description = "Queues a booking lifecycle notification for an existing booking. Supported eventType values are Booked, BookingConfirmed, Rearranged, BookingRescheduled, Cancelled, BookingCancelled, HoldCreated and BookingHoldCreated. The notification payload is rebuilt from persisted booking, slot, transaction and client data, including the standard booking notification variables shown on the generic notification request endpoint.",
+        RequestBodyType = typeof(BookingNotificationRequest),
+        ResponseType = typeof(NotificationDispatchResponse),
+        RequestExampleJson = """
+        {
+          "eventType": "BookingConfirmed",
+          "sendSms": false,
+          "sendEmail": true,
+          "messageOverride": null
+        }
+        """,
+        ResponseExampleJson = """
+        {
+          "data": {
+            "dispatchId": "manual-booking-123-11111111111111111111111111111111",
+            "bookingId": "booking-123",
+            "eventType": "BookingConfirmed",
+            "smsRequested": false,
+            "emailRequested": true,
+            "smsStatus": "Skipped",
+            "emailStatus": "Queued",
+            "providerMessageId": null,
+            "createdUtc": "2026-07-01T09:00:00Z"
+          }
+        }
+        """)]
     public async Task<HttpResponseData> Run(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/bookings/{bookingId}/notifications/send")]
         HttpRequestData req,

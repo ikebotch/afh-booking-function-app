@@ -6,6 +6,7 @@ using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Application.Services.Notifications;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Client;
+using AFH.Notification.Application.Models;
 using Moq;
 using System.Net;
 
@@ -14,15 +15,18 @@ namespace AFH.Booking.Tests;
 public sealed class BookingNotificationRequestServiceTests
 {
     [Theory]
-    [InlineData("Booked", "BookingConfirmed")]
-    [InlineData("BookingConfirmed", "BookingConfirmed")]
-    [InlineData("Rearranged", "BookingRescheduled")]
-    [InlineData("BookingRescheduled", "BookingRescheduled")]
-    [InlineData("Cancelled", "BookingCancelled")]
-    [InlineData("BookingCancelled", "BookingCancelled")]
-    [InlineData("HoldCreated", "BookingHoldCreated")]
-    [InlineData("BookingHoldCreated", "BookingHoldCreated")]
-    public async Task SendAsync_PublishesManualNotificationToOutboxPublisher(string eventType, string expectedNotificationType)
+    [InlineData("Booked", "BookingConfirmed", "Confirmed")]
+    [InlineData("BookingConfirmed", "BookingConfirmed", "Confirmed")]
+    [InlineData("Rearranged", "BookingRescheduled", "Rescheduled")]
+    [InlineData("BookingRescheduled", "BookingRescheduled", "Rescheduled")]
+    [InlineData("Cancelled", "BookingCancelled", "Cancelled")]
+    [InlineData("BookingCancelled", "BookingCancelled", "Cancelled")]
+    [InlineData("HoldCreated", "BookingHoldCreated", "Held")]
+    [InlineData("BookingHoldCreated", "BookingHoldCreated", "Held")]
+    public async Task SendAsync_PublishesManualNotificationToOutboxPublisher(
+        string eventType,
+        string expectedNotificationType,
+        string expectedMeetingStatus)
     {
         var notificationStep = new CapturingBookingNotificationStep();
         var sut = CreateSut(notificationStep);
@@ -40,6 +44,38 @@ public sealed class BookingNotificationRequestServiceTests
         Assert.Equal(BookingNotificationRecipientTypes.Client, recipient.RecipientType);
         Assert.Equal(BookingNotificationChannel.Email, Assert.Single(recipient.PreferredChannels ?? []));
         Assert.Equal("jane.client@example.test", recipient.Email);
+        Assert.Equal("Jane Client", notificationStep.Request.Data["clientName"]);
+        Assert.Equal("Review", notificationStep.Request.Data["meetingType"]);
+        Assert.Equal("Review", notificationStep.Request.Data["meetingTopic"]);
+        Assert.Equal("Online", notificationStep.Request.Data["meetingMethod"]);
+        Assert.Equal("60 minutes", notificationStep.Request.Data["meetingDuration"]);
+        Assert.Equal(expectedMeetingStatus, notificationStep.Request.Data["meetingStatus"]);
+        Assert.True(notificationStep.Request.Data.ContainsKey("meetingDateDay"));
+        Assert.True(notificationStep.Request.Data.ContainsKey("meetingDateTime"));
+        Assert.Equal(notificationStep.Request.Data["meetingDateDay"], notificationStep.Request.Data["date"]);
+        Assert.Equal(notificationStep.Request.Data["meetingDateTime"], notificationStep.Request.Data["time"]);
+        Assert.Equal(string.Empty, notificationStep.Request.Data["joinMeetingLink"]);
+        Assert.Equal(string.Empty, notificationStep.Request.Data["manageBookingLink"]);
+    }
+
+    [Theory]
+    [InlineData("booking-confirmed")]
+    [InlineData("booking-hold")]
+    [InlineData("booking-cancelled")]
+    [InlineData("booking-rescheduled")]
+    public void VariableCatalog_ExposesStandardBookingPayloadVariables(string lifecycleEvent)
+    {
+        var variables = NotificationTemplateVariableCatalog.ForLifecycleEvent(lifecycleEvent);
+
+        Assert.Contains("clientName", variables);
+        Assert.Contains("meetingType", variables);
+        Assert.Contains("meetingTopic", variables);
+        Assert.Contains("meetingDateDay", variables);
+        Assert.Contains("meetingDateTime", variables);
+        Assert.Contains("meetingMethod", variables);
+        Assert.Contains("meetingDuration", variables);
+        Assert.Contains("meetingStatus", variables);
+        Assert.Contains("adviserName", variables);
     }
 
     [Fact]

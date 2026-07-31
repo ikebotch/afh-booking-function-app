@@ -18,12 +18,21 @@ public sealed class NotificationSettingsFunction
     }
 
     [Function("Notifications_Settings_List")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "List notification settings",
+        ResponseType = typeof(IReadOnlyList<NotificationSettingItem>))]
+    [BookingOpenApiQueryParameter("category", "string", Description = "Optional settings category filter.", Example = "Email")]
     public async Task<HttpResponseData> ListAsync(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/notifications/settings")] HttpRequestData req,
         CancellationToken ct)
         => await req.OkJsonAsync(await _settings.ListAsync(req.Query("category"), ct), ct);
 
     [Function("Notifications_Settings_Get")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Get notification setting",
+        ResponseType = typeof(NotificationSettingItem))]
     public async Task<HttpResponseData> GetAsync(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/notifications/settings/{key}")] HttpRequestData req,
         string key,
@@ -36,6 +45,19 @@ public sealed class NotificationSettingsFunction
     }
 
     [Function("Notifications_Settings_Upsert")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Create or update notification setting",
+        RequestBodyType = typeof(SettingUpsertRequest),
+        ResponseType = typeof(NotificationSettingItem),
+        RequestExampleJson = """
+        {
+          "category": "Email",
+          "value": "0800 000 0000",
+          "isSecret": false,
+          "description": "Contact centre number rendered as {{contactNumber}}."
+        }
+        """)]
     public async Task<HttpResponseData> UpsertAsync(
         [HttpTrigger(AuthorizationLevel.Function, "put", Route = "v1/notifications/settings/{key}")] HttpRequestData req,
         string key,
@@ -66,6 +88,7 @@ public sealed class NotificationSettingsFunction
     }
 
     [Function("Notifications_Settings_Delete")]
+    [BookingOpenApiOperation("Notifications", "Delete notification setting", ResponseType = typeof(object))]
     public async Task<HttpResponseData> DeleteAsync(
         [HttpTrigger(AuthorizationLevel.Function, "delete", Route = "v1/notifications/settings/{key}")] HttpRequestData req,
         string key,
@@ -78,12 +101,21 @@ public sealed class NotificationSettingsFunction
     }
 
     [Function("Notifications_ChannelSettings_List")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "List notification channel settings",
+        ResponseType = typeof(IReadOnlyList<NotificationChannelSettingItem>))]
     public async Task<HttpResponseData> ListChannelSettingsAsync(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/notifications/channel-settings")] HttpRequestData req,
         CancellationToken ct)
         => await req.OkJsonAsync(await _settings.ListChannelSettingsAsync(ct), ct);
 
     [Function("Notifications_ChannelSettings_Create")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Create notification channel setting",
+        RequestBodyType = typeof(ChannelSettingUpsertRequest),
+        ResponseType = typeof(NotificationChannelSettingItem))]
     public async Task<HttpResponseData> CreateChannelSettingAsync(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/notifications/channel-settings")] HttpRequestData req,
         CancellationToken ct)
@@ -103,6 +135,11 @@ public sealed class NotificationSettingsFunction
     }
 
     [Function("Notifications_ChannelSettings_Update")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Update notification channel setting",
+        RequestBodyType = typeof(ChannelSettingUpsertRequest),
+        ResponseType = typeof(NotificationChannelSettingItem))]
     public async Task<HttpResponseData> UpdateChannelSettingAsync(
         [HttpTrigger(AuthorizationLevel.Function, "put", Route = "v1/notifications/channel-settings/{id}")] HttpRequestData req,
         string id,
@@ -123,18 +160,58 @@ public sealed class NotificationSettingsFunction
     }
 
     [Function("Notifications_LifecycleEvents_List")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "List notification lifecycle events and variables",
+        Description = "Returns notification lifecycle events and their supported template variables. Booking events include the standard booking payload variables such as clientName, meetingTopic, meetingDateDay, meetingDateTime, meetingMethod, meetingDuration, meetingStatus, adviserName, manageBookingLink and joinMeetingLink.",
+        ResponseType = typeof(IReadOnlyList<NotificationLifecycleEventItem>),
+        ResponseExampleJson = """
+        {
+          "data": [
+            {
+              "id": "booking-confirmed",
+              "event": "booking-confirmed",
+              "owner": "Booking",
+              "description": "Booking confirmation notification.",
+              "status": "Active",
+              "variables": [
+                "clientName",
+                "meetingType",
+                "meetingTopic",
+                "meetingDateDay",
+                "meetingDateTime",
+                "meetingMethod",
+                "meetingDuration",
+                "meetingStatus",
+                "adviserName",
+                "manageBookingLink",
+                "joinMeetingLink"
+              ]
+            }
+          ]
+        }
+        """)]
     public async Task<HttpResponseData> ListLifecycleEventsAsync(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/notifications/lifecycle-events")] HttpRequestData req,
         CancellationToken ct)
         => await req.OkJsonAsync(await _settings.ListLifecycleEventsAsync(ct), ct);
 
     [Function("Notifications_RetryPolicies_List")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "List notification retry policies",
+        ResponseType = typeof(IReadOnlyList<NotificationRetryPolicyItem>))]
     public async Task<HttpResponseData> ListRetryPoliciesAsync(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/notifications/retry-policies")] HttpRequestData req,
         CancellationToken ct)
         => await req.OkJsonAsync(await _settings.ListRetryPoliciesAsync(ct), ct);
 
     [Function("Notifications_RetryPolicies_Create")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Create notification retry policy",
+        RequestBodyType = typeof(RetryPolicyUpsertRequest),
+        ResponseType = typeof(NotificationRetryPolicyItem))]
     public async Task<HttpResponseData> CreateRetryPolicyAsync(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/notifications/retry-policies")] HttpRequestData req,
         CancellationToken ct)
@@ -154,6 +231,11 @@ public sealed class NotificationSettingsFunction
     }
 
     [Function("Notifications_RetryPolicies_Update")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Update notification retry policy",
+        RequestBodyType = typeof(RetryPolicyUpsertRequest),
+        ResponseType = typeof(NotificationRetryPolicyItem))]
     public async Task<HttpResponseData> UpdateRetryPolicyAsync(
         [HttpTrigger(AuthorizationLevel.Function, "put", Route = "v1/notifications/retry-policies/{id}")] HttpRequestData req,
         string id,

@@ -19,6 +19,7 @@ internal static class NotificationRecipientDataSafety
         "cancelBookingUrl",
         "rescheduleBookingUrl",
         "rearrangeBookingUrl",
+        "manageBookingLink",
         "manageBookingLinks"
     ];
 

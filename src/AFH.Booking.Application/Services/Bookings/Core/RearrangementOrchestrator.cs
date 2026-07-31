@@ -4,6 +4,7 @@ using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Application.Models.Lifecycle;
+using AFH.Booking.Application.Services.Notifications;
 using AFH.Booking.Domain.Bookings.Commands;
 using System.Text.Json;
 
@@ -418,6 +419,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
         var data = new Dictionary<string, string>
         {
             ["eventId"] = eventId,
+            ["bookingId"] = newBooking.Hold.Id,
             ["previousBookingId"] = existingBooking.Hold.Id,
             ["newBookingId"] = newBooking.Hold.Id,
             ["previousSlotId"] = existingBooking.Slot.Id,
@@ -432,6 +434,12 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             ["note"] = note,
             ["manageBookingLinks"] = string.Empty
         };
+
+        BookingNotificationPayloadFields.AddStandardBookingFields(
+            data,
+            existingBooking.Transaction,
+            newBooking.Slot,
+            "Rescheduled");
 
         AddClientAndMeetingLocation(data, existingBooking.Transaction, client);
         return data;

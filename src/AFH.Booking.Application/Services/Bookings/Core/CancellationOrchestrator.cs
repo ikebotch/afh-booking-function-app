@@ -5,6 +5,7 @@ using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Application.Services.AdviserProjection;
+using AFH.Booking.Application.Services.Notifications;
 using AFH.Booking.Domain.Bookings.Commands;
 using System.Text.Json;
 
@@ -486,6 +487,12 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             ["reasonCode"] = cmd.ReasonCode ?? string.Empty,
             ["reasonDetail"] = cmd.ReasonDetail ?? cmd.Reason ?? string.Empty
         };
+
+        BookingNotificationPayloadFields.AddStandardBookingFields(
+            data,
+            context.Transaction,
+            context.Slot,
+            "Cancelled");
 
         AddClientAndMeetingLocation(data, context.Transaction, client);
         return data;

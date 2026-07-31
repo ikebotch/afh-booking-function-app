@@ -9,6 +9,7 @@ using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Application.Bookings;
 using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Application.Services.AdviserProjection;
+using AFH.Booking.Application.Services.Notifications;
 using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Options;
@@ -543,6 +544,14 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             data["cancelBookingUrl"] = links.CancelBookingUrl;
             data["rescheduleBookingUrl"] = links.RescheduleBookingUrl;
         }
+
+        BookingNotificationPayloadFields.AddStandardBookingFields(
+            data,
+            context.Transaction,
+            context.Slot,
+            "Confirmed",
+            joinUrl,
+            links?.ViewBookingUrl);
 
         AddClientAndMeetingLocation(data, context.Transaction, client);
         return data;

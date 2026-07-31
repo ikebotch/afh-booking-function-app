@@ -23,6 +23,7 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
         "cancelBookingUrl",
         "rescheduleBookingUrl",
         "rearrangeBookingUrl",
+        "manageBookingLink",
         "manageBookingLinks"
     ];
 

@@ -18,6 +18,13 @@ public sealed class NotificationTemplatesFunction
     }
 
     [Function("Notifications_Templates_List")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "List notification templates",
+        ResponseType = typeof(IReadOnlyList<NotificationTemplateSummary>))]
+    [BookingOpenApiQueryParameter("templateKey", "string", Description = "Optional template key filter.", Example = "booking-confirmed")]
+    [BookingOpenApiQueryParameter("channel", "string", Description = "Optional channel filter: Email, Sms or Push.", Example = "Email")]
+    [BookingOpenApiQueryParameter("isActive", "boolean", Description = "Optional active state filter.", Example = "true")]
     public async Task<HttpResponseData> ListAsync(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/notifications/templates")] HttpRequestData req,
         CancellationToken ct)
@@ -31,6 +38,10 @@ public sealed class NotificationTemplatesFunction
     }
 
     [Function("Notifications_Templates_Get")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Get notification template",
+        ResponseType = typeof(NotificationTemplateAdminItem))]
     public async Task<HttpResponseData> GetAsync(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/notifications/templates/{id:guid}")] HttpRequestData req,
         Guid id,
@@ -43,6 +54,10 @@ public sealed class NotificationTemplatesFunction
     }
 
     [Function("Notifications_Templates_GetByKey")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Get notification template by key",
+        ResponseType = typeof(NotificationTemplateAdminItem))]
     public async Task<HttpResponseData> GetByKeyAsync(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "v1/notifications/templates/by-key/{templateKey}/versions/{templateVersion}/channels/{channel}")] HttpRequestData req,
         string templateKey,
@@ -60,6 +75,25 @@ public sealed class NotificationTemplatesFunction
     }
 
     [Function("Notifications_Templates_Create")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Create notification template",
+        RequestBodyType = typeof(TemplateUpsertRequest),
+        ResponseType = typeof(NotificationTemplateAdminItem),
+        SuccessStatusCode = HttpStatusCode.Created,
+        RequestExampleJson = """
+        {
+          "templateKey": "booking-confirmed",
+          "templateVersion": "v1",
+          "channel": "Email",
+          "name": "Booking confirmed email",
+          "description": "Client booking confirmation email.",
+          "subjectTemplate": "Your {{meetingTopic}} meeting is confirmed",
+          "bodyTemplate": "<p>Hello {{clientName}}, your {{meetingMethod}} meeting is on {{meetingDateDay}} at {{meetingDateTime}} with {{adviserName}}.</p>",
+          "contentType": "text/html",
+          "isActive": true
+        }
+        """)]
     public async Task<HttpResponseData> CreateAsync(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "v1/notifications/templates")] HttpRequestData req,
         CancellationToken ct)
@@ -79,6 +113,24 @@ public sealed class NotificationTemplatesFunction
     }
 
     [Function("Notifications_Templates_Update")]
+    [BookingOpenApiOperation(
+        "Notifications",
+        "Update notification template",
+        RequestBodyType = typeof(TemplateUpsertRequest),
+        ResponseType = typeof(NotificationTemplateAdminItem),
+        RequestExampleJson = """
+        {
+          "templateKey": "booking-confirmed",
+          "templateVersion": "v1",
+          "channel": "Email",
+          "name": "Booking confirmed email",
+          "description": "Client booking confirmation email.",
+          "subjectTemplate": "Your {{meetingTopic}} meeting is confirmed",
+          "bodyTemplate": "<p>Hello {{clientName}}, your {{meetingMethod}} meeting is on {{meetingDateDay}} at {{meetingDateTime}} with {{adviserName}}.</p>",
+          "contentType": "text/html",
+          "isActive": true
+        }
+        """)]
     public async Task<HttpResponseData> UpdateAsync(
         [HttpTrigger(AuthorizationLevel.Function, "put", Route = "v1/notifications/templates/{id:guid}")] HttpRequestData req,
         Guid id,
@@ -99,6 +151,7 @@ public sealed class NotificationTemplatesFunction
     }
 
     [Function("Notifications_Templates_Activate")]
+    [BookingOpenApiOperation("Notifications", "Activate notification template", ResponseType = typeof(NotificationTemplateAdminItem))]
     public Task<HttpResponseData> ActivateAsync(
         [HttpTrigger(AuthorizationLevel.Function, "patch", Route = "v1/notifications/templates/{id:guid}/activate")] HttpRequestData req,
         Guid id,
@@ -106,6 +159,7 @@ public sealed class NotificationTemplatesFunction
         => SetActiveAsync(req, id, true, ct);
 
     [Function("Notifications_Templates_Deactivate")]
+    [BookingOpenApiOperation("Notifications", "Deactivate notification template", ResponseType = typeof(NotificationTemplateAdminItem))]
     public Task<HttpResponseData> DeactivateAsync(
         [HttpTrigger(AuthorizationLevel.Function, "patch", Route = "v1/notifications/templates/{id:guid}/deactivate")] HttpRequestData req,
         Guid id,

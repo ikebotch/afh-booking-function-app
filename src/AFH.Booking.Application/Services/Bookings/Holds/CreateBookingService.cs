@@ -7,6 +7,7 @@ using AFH.Booking.Application.Common.Clock;
 using AFH.Booking.Application.Models.Bookings;
 using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Application.Models.Lifecycle.Constants;
+using AFH.Booking.Application.Services.Notifications;
 using AFH.Booking.Domain.Bookings.Commands;
 using Microsoft.Extensions.Logging;
 
@@ -269,7 +270,9 @@ public sealed class CreateBookingService : ICreateBookingService
         var endFormatted = FormatLocal(context.Slot.EndUtc);
         var whenLine = $"{startFormatted} to {endFormatted}";
 
-        var meetingType = context.Transaction.IsRemote ? "Remote meeting" : "In-person meeting";
+        var meetingType = string.IsNullOrWhiteSpace(context.Transaction.MeetingType)
+            ? "N/A"
+            : context.Transaction.MeetingType.Trim();
 
         var travelLine = context.Transaction.IsRemote
             ? "Travel: N/A (remote meeting)"
@@ -283,6 +286,7 @@ public sealed class CreateBookingService : ICreateBookingService
         {
             ["transactionRef"] = context.Transaction.TransactionRef,
             ["holdId"] = hold.Id,
+            ["bookingId"] = hold.Id,
             ["IdempotencyKey"] = BookingWorkflowIdempotencyKeys.Notification("booking-hold-created", hold.Id),
             ["adviserName"] = context.Slot.AdviserName,
             ["meetingType"] = meetingType,
@@ -292,6 +296,12 @@ public sealed class CreateBookingService : ICreateBookingService
             ["companyLine"] = companyBuffer,
             ["manageBookingLinks"] = string.Empty
         };
+
+        BookingNotificationPayloadFields.AddStandardBookingFields(
+            data,
+            context.Transaction,
+            context.Slot,
+            "Held");
 
         AddClientAndMeetingLocation(data, context.Transaction, client);
         return data;

@@ -397,6 +397,7 @@ public sealed class BookingNotificationPolicyTests
                 ["cancelBookingUrl"] = "https://client.example/bookings/booking-1/cancel?token=secret",
                 ["rescheduleBookingUrl"] = "https://client.example/bookings/booking-1/reschedule?token=secret",
                 ["bookingChangeToken"] = "secret",
+                ["manageBookingLink"] = "https://client.example/bookings/booking-1?token=secret",
                 ["manageBookingLinks"] = "View booking: https://client.example/bookings/booking-1?token=secret"
             },
             CancellationToken.None);
@@ -412,6 +413,7 @@ public sealed class BookingNotificationPolicyTests
             Assert.DoesNotContain("viewBookingUrl", request.Data.Keys);
             Assert.DoesNotContain("cancelBookingUrl", request.Data.Keys);
             Assert.DoesNotContain("rescheduleBookingUrl", request.Data.Keys);
+            Assert.DoesNotContain("manageBookingLink", request.Data.Keys);
             Assert.DoesNotContain("manageBookingLinks", request.Data.Keys);
             Assert.DoesNotContain("token=secret", string.Join('\n', request.Data.Values), StringComparison.OrdinalIgnoreCase);
         }

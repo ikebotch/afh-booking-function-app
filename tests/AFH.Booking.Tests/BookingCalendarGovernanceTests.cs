@@ -163,7 +163,7 @@ public sealed class BookingCalendarGovernanceTests
     }
 
     [Fact]
-    public async Task ProviderNotification_WithUpdatedEventLookupMiss_FlagsOperationsAndDoesNotCreateDuplicate()
+    public async Task ProviderNotification_WithUpdatedEventLookupMiss_RestoresMissingEvent()
     {
         var hold = CreateHold(BookingHoldStatus.Confirmed, "evt-existing");
         var slot = CreateSlot();
@@ -187,11 +187,43 @@ public sealed class BookingCalendarGovernanceTests
             CancellationToken.None);
 
         Assert.True(result.IsSuccess);
-        Assert.Equal(1, result.Value!.FlaggedForOperations);
-        Assert.False(calendar.CreatedEvent);
+        Assert.Equal(1, result.Value!.Restored);
+        Assert.True(calendar.CreatedEvent);
         Assert.False(calendar.UpdatedEvent);
-        Assert.Equal("evt-existing", hold.CalendarProviderEventId);
-        Assert.Single(issues.Added, issue => issue.Code == OutlookIssueCodes.ControlledReconciliationRequired);
+        Assert.Equal("evt-new", hold.CalendarProviderEventId);
+        Assert.Contains(issues.Added, issue => issue.Code == OutlookIssueCodes.CalendarEventMissingRestored);
+        Assert.Contains(issues.Added, issue => issue.Code == OutlookIssueCodes.DeletionAttemptDetected);
+    }
+
+    [Fact]
+    public async Task ProviderNotification_WithDuplicateUpdatedLookupMiss_RestoresOnlyOnce()
+    {
+        var hold = CreateHold(BookingHoldStatus.Confirmed, "evt-existing");
+        var slot = CreateSlot();
+        var transaction = CreateTransaction();
+        var calendar = new StubCalendarGateway(existingEvent: null, createdEventId: "evt-new");
+        var issues = new StubOperationalIssueRepository();
+        var sut = CreateSut(new StubHoldRepository(hold), slot, transaction, calendar, issues);
+        var notification = new CalendarProviderNotificationItem
+        {
+            ChangeType = "updated",
+            ResourceData = new CalendarProviderResourceData { Id = "evt-existing" }
+        };
+
+        var first = await sut.HandleProviderNotificationsAsync(
+            new CalendarProviderNotificationEnvelope { Value = [notification] },
+            CancellationToken.None);
+        var second = await sut.HandleProviderNotificationsAsync(
+            new CalendarProviderNotificationEnvelope { Value = [notification] },
+            CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(1, first.Value!.Restored);
+        Assert.Equal(0, second.Value!.Restored);
+        Assert.Equal(1, second.Value.Ignored);
+        Assert.Equal(1, calendar.CreatedCount);
+        Assert.Equal("evt-new", hold.CalendarProviderEventId);
     }
 
     [Fact]

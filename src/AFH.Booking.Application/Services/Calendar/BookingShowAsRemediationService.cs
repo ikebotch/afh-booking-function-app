@@ -184,14 +184,7 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
             var existingEvent = await GetExistingCalendarEventOrNullAsync(slot.AdviserId, providerEventId, ct);
             if (existingEvent is null)
             {
-                return await FlagUnrecoverableAsync(
-                    item,
-                    providerEventId,
-                    hold,
-                    slot,
-                    transaction,
-                    "Calendar update notification could not read the provider event; automatic recreation is limited to delete notifications.",
-                    ct);
+                return await HandleDeletionNotificationAsync(item, hold, slot, transaction, providerEventId, changeType, ct);
             }
 
             var differences = GetDifferences(existingEvent, slot).ToArray();

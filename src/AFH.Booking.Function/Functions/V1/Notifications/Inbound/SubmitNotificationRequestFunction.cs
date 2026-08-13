@@ -90,7 +90,6 @@ public sealed class SubmitNotificationRequestFunction
             "rescheduleBookingUrl": "https://portal.example.test/bookings/booking-123/reschedule",
             "contactNumber": "0800 000 0000",
             "contactUsNumber": "0800 000 0000",
-            "RecipientType": "Client",
             "recipientType": "Client"
           }
         }

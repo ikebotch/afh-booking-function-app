@@ -93,6 +93,56 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
+    public async Task PublishAsync_WithRecipientTypeKeysDifferingOnlyByCase_DoesNotThrow()
+    {
+        var deliveryAudit = new StubNotificationDeliveryAuditStore();
+        var delivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
+        var service = new NotificationService(
+            new StubNotificationAuditStore(),
+            deliveryAudit,
+            CreateRecipientResolver(),
+            CreateTemplateRenderer(),
+            [delivery],
+            NullLogger<NotificationService>.Instance);
+
+        await service.PublishAsync(
+            new NotificationRequested(
+                new NotificationType("Booking", "BookingConfirmed"),
+                "booking-recipient-type-case",
+                new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
+                [
+                    new NotificationRecipient(
+                        BookingNotificationRecipientTypes.Client,
+                        "Jane Client",
+                        "jane@example.test",
+                        PreferredChannels: [NotificationChannel.Email])
+                ],
+                new Dictionary<string, string>
+                {
+                    ["transactionRef"] = "TRX-CASE",
+                    ["bookingId"] = "booking-recipient-type-case",
+                    ["adviserName"] = "Alex Adviser",
+                    ["meetingType"] = "Review",
+                    ["when"] = "2026-03-26 12:00 (Europe/London) -> 2026-03-26 13:00 (Europe/London)",
+                    ["whereLine"] = "Join link: https://meeting.example/join",
+                    ["travelLine"] = "Travel: N/A (remote meeting)",
+                    ["RecipientType"] = "Client",
+                    ["recipientType"] = "Client",
+                    ["TemplateKey"] = "booking-confirmed",
+                    ["TemplateVersion"] = "v1"
+                }),
+            CancellationToken.None);
+
+        Assert.Single(delivery.Requests);
+        var dispatch = Assert.Single(deliveryAudit.Records);
+        Assert.Equal(BookingNotificationRecipientTypes.Client, dispatch.RecipientType);
+        var messageLog = Assert.Single(deliveryAudit.Records.Select(x => x.MessageLog));
+        Assert.NotNull(messageLog);
+        Assert.DoesNotContain("\"RecipientType\"", messageLog!.RenderDataJson);
+        Assert.Contains("\"recipientType\"", messageLog.RenderDataJson);
+    }
+
+    [Fact]
     public async Task PublishAsync_BookingConfirmed_MixedRecipientsDoesNotSendClientTokenLinksToAdviser()
     {
         var deliveryAudit = new StubNotificationDeliveryAuditStore();

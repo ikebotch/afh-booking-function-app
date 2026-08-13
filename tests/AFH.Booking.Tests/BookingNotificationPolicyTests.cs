@@ -132,6 +132,11 @@ public sealed class BookingNotificationPolicyTests
         Assert.Equal("booking-confirmed", clientRequest.Data["TemplateKey:Email"]);
         Assert.Equal("booking-confirmed-adviser", adviserRequest.Data["TemplateKey:Email"]);
         Assert.Equal("booking-confirmed-contact-centre", contactCentreRequest.Data["TemplateKey:Email"]);
+        Assert.All(publisher.Requests, request =>
+        {
+            Assert.DoesNotContain(request.Data.Keys, key => string.Equals(key, "RecipientType", StringComparison.Ordinal));
+            Assert.Contains(request.Data.Keys, key => string.Equals(key, "recipientType", StringComparison.Ordinal));
+        });
     }
 
     [Theory]

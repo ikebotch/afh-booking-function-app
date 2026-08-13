@@ -185,11 +185,14 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
         string recipientType)
     {
         var includeClientLinks = IsClientRecipient(recipientType);
-        var enriched = data
-            .Where(kvp => includeClientLinks || !IsClientOnlyDataKey(kvp.Key))
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        var enriched = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in data.Where(kvp => includeClientLinks || !IsClientOnlyDataKey(kvp.Key)))
+        {
+            enriched[kvp.Key] = kvp.Value;
+        }
 
-        enriched["RecipientType"] = recipientType;
+        enriched.Remove("RecipientType");
+        enriched.Remove("recipientType");
         enriched["recipientType"] = recipientType;
 
         foreach (var channel in policy.Channels.Where(x => x.Enabled))

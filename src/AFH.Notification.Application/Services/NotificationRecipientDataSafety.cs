@@ -54,11 +54,14 @@ internal static class NotificationRecipientDataSafety
         NotificationChannel channel)
     {
         var includeClientLinks = IsClientRecipient(recipient.RecipientType);
-        var data = notification.Data
-            .Where(kvp => includeClientLinks || !IsClientOnlyDataKey(kvp.Key))
-            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+        var data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var kvp in notification.Data.Where(kvp => includeClientLinks || !IsClientOnlyDataKey(kvp.Key)))
+        {
+            data[kvp.Key] = kvp.Value;
+        }
 
-        data["RecipientType"] = recipient.RecipientType;
+        data.Remove("RecipientType");
+        data.Remove("recipientType");
         data["recipientType"] = recipient.RecipientType;
 
         NormalizeChannelTemplateKey(data, channel, recipient.RecipientType);

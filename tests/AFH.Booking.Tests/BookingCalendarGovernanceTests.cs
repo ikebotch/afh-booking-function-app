@@ -132,6 +132,69 @@ public sealed class BookingCalendarGovernanceTests
     }
 
     [Fact]
+    public async Task ProviderNotification_WithDuplicateManualDeletion_RestoresOnlyOnce()
+    {
+        var hold = CreateHold(BookingHoldStatus.Confirmed, "evt-old");
+        var slot = CreateSlot();
+        var transaction = CreateTransaction();
+        var calendar = new StubCalendarGateway(existingEvent: null, createdEventId: "evt-new");
+        var issues = new StubOperationalIssueRepository();
+        var sut = CreateSut(new StubHoldRepository(hold), slot, transaction, calendar, issues);
+        var notification = new CalendarProviderNotificationItem
+        {
+            ChangeType = "deleted",
+            ResourceData = new CalendarProviderResourceData { Id = "evt-old" }
+        };
+
+        var first = await sut.HandleProviderNotificationsAsync(
+            new CalendarProviderNotificationEnvelope { Value = [notification] },
+            CancellationToken.None);
+        var second = await sut.HandleProviderNotificationsAsync(
+            new CalendarProviderNotificationEnvelope { Value = [notification] },
+            CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(second.IsSuccess);
+        Assert.Equal(1, first.Value!.Restored);
+        Assert.Equal(0, second.Value!.Restored);
+        Assert.Equal(1, second.Value.Ignored);
+        Assert.Equal(1, calendar.CreatedCount);
+        Assert.Equal("evt-new", hold.CalendarProviderEventId);
+    }
+
+    [Fact]
+    public async Task ProviderNotification_WithUpdatedEventLookupMiss_FlagsOperationsAndDoesNotCreateDuplicate()
+    {
+        var hold = CreateHold(BookingHoldStatus.Confirmed, "evt-existing");
+        var slot = CreateSlot();
+        var transaction = CreateTransaction();
+        var calendar = new StubCalendarGateway(existingEvent: null, createdEventId: "evt-new");
+        var issues = new StubOperationalIssueRepository();
+        var sut = CreateSut(new StubHoldRepository(hold), slot, transaction, calendar, issues);
+
+        var result = await sut.HandleProviderNotificationsAsync(
+            new CalendarProviderNotificationEnvelope
+            {
+                Value =
+                [
+                    new CalendarProviderNotificationItem
+                    {
+                        ChangeType = "updated",
+                        ResourceData = new CalendarProviderResourceData { Id = "evt-existing" }
+                    }
+                ]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value!.FlaggedForOperations);
+        Assert.False(calendar.CreatedEvent);
+        Assert.False(calendar.UpdatedEvent);
+        Assert.Equal("evt-existing", hold.CalendarProviderEventId);
+        Assert.Single(issues.Added, issue => issue.Code == OutlookIssueCodes.ControlledReconciliationRequired);
+    }
+
+    [Fact]
     public async Task CancelledBooking_WithDeletedOutlookEvent_IsNotRestored()
     {
         var hold = CreateHold(BookingHoldStatus.Cancelled, "evt-old");
@@ -269,12 +332,14 @@ public sealed class BookingCalendarGovernanceTests
     {
         public bool CreatedEvent { get; private set; }
         public bool UpdatedEvent { get; private set; }
+        public int CreatedCount { get; private set; }
         public BookingCalendarEvent? LastCreatedEvent { get; private set; }
         public BookingCalendarEvent? LastUpdatedEvent { get; private set; }
 
         public Task<string?> CreateBookingEventAsync(BookingCalendarEvent ev, CancellationToken ct)
         {
             CreatedEvent = true;
+            CreatedCount++;
             LastCreatedEvent = ev;
             return Task.FromResult(createdEventId);
         }

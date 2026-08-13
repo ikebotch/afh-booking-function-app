@@ -70,6 +70,7 @@ public static class BookingNotificationDefaults
         [
             new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Client, enabled),
             new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Adviser, enabled),
+            new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Manager, enabled),
             new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.ContactCentre, enabled)
         ];
     }

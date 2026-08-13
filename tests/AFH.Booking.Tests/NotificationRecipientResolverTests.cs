@@ -8,7 +8,7 @@ namespace AFH.Booking.Tests;
 public sealed class NotificationRecipientResolverTests
 {
     [Fact]
-    public async Task ResolveAsync_ClientAction_RoutesClientAdviserAndContactCentreRecipients()
+    public async Task ResolveAsync_ClientAction_RoutesClientAdviserManagerAndContactCentreRecipients()
     {
         var resolver = CreateResolver();
 
@@ -18,13 +18,14 @@ public sealed class NotificationRecipientResolverTests
                 [
                     ClientRecipient(),
                     AdviserRecipient(),
+                    ManagerRecipient(),
                     ContactCentreRecipient(),
                     InternalRecipient()
                 ]),
             CancellationToken.None);
 
         Assert.Equal(
-            [BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.ContactCentre],
+            [BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Manager, BookingNotificationRecipientTypes.ContactCentre],
             route.Recipients.Select(x => x.RecipientType).ToArray());
         Assert.True(route.CopyContactCentre);
     }
@@ -40,13 +41,14 @@ public sealed class NotificationRecipientResolverTests
                 [
                     ClientRecipient(),
                     AdviserRecipient(),
+                    ManagerRecipient(),
                     ContactCentreRecipient(),
                     InternalRecipient()
                 ]),
             CancellationToken.None);
 
         Assert.Equal(
-            [BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.ContactCentre, BookingNotificationRecipientTypes.Internal],
+            [BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Manager, BookingNotificationRecipientTypes.ContactCentre, BookingNotificationRecipientTypes.Internal],
             route.Recipients.Select(x => x.RecipientType).ToArray());
         Assert.True(route.CopyContactCentre);
     }
@@ -128,6 +130,12 @@ public sealed class NotificationRecipientResolverTests
             BookingNotificationRecipientTypes.ContactCentre,
             "Contact Centre",
             "contact-centre@example.test");
+
+    private static NotificationRecipient ManagerRecipient()
+        => new(
+            BookingNotificationRecipientTypes.Manager,
+            "Mina Manager",
+            "manager@example.test");
 
     private static NotificationRecipient InternalRecipient()
         => new(

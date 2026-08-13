@@ -717,6 +717,15 @@ namespace AFH.Booking.Infrastructure.Migrations
                         },
                         new
                         {
+                            Id = new Guid("8f7c2b57-2d84-4d52-b9d0-00f1c9ccde01"),
+                            CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Enabled = true,
+                            RecipientType = "Manager",
+                            RuleId = new Guid("4a6f3c68-4eb7-4788-bd13-6908b33c7951"),
+                            UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Id = new Guid("982657c1-2041-4fed-9cb1-5a802e258704"),
                             CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
                             Enabled = true,
@@ -739,6 +748,15 @@ namespace AFH.Booking.Infrastructure.Migrations
                             CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
                             Enabled = true,
                             RecipientType = "ContactCentre",
+                            RuleId = new Guid("7f6c8f21-9d36-481e-b5ad-08454d0036a6"),
+                            UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("10f4906d-1d29-41de-8baa-aecf96c5de02"),
+                            CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Enabled = true,
+                            RecipientType = "Manager",
                             RuleId = new Guid("7f6c8f21-9d36-481e-b5ad-08454d0036a6"),
                             UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
                         },
@@ -771,6 +789,15 @@ namespace AFH.Booking.Infrastructure.Migrations
                         },
                         new
                         {
+                            Id = new Guid("9224f2f1-8408-423e-a318-cb3dd69fde03"),
+                            CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Enabled = true,
+                            RecipientType = "Manager",
+                            RuleId = new Guid("f6096d32-d3c7-49d4-8d16-9b7135e66274"),
+                            UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
                             Id = new Guid("9c987676-c344-476a-a57a-8a22e2d97922"),
                             CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
                             Enabled = false,
@@ -793,6 +820,15 @@ namespace AFH.Booking.Infrastructure.Migrations
                             CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
                             Enabled = false,
                             RecipientType = "ContactCentre",
+                            RuleId = new Guid("4e428654-c797-4f91-97fa-bd7b5086395a"),
+                            UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
+                        },
+                        new
+                        {
+                            Id = new Guid("d39f9f03-df6f-4a1e-b7cb-dc94b2ddde04"),
+                            CreatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Enabled = false,
+                            RecipientType = "Manager",
                             RuleId = new Guid("4e428654-c797-4f91-97fa-bd7b5086395a"),
                             UpdatedUtc = new DateTime(2026, 5, 28, 0, 0, 0, 0, DateTimeKind.Utc)
                         });

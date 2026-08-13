@@ -103,7 +103,7 @@ public sealed class BookingNotificationPolicyTests
     }
 
     [Fact]
-    public async Task Step_PublishesBookingConfirmedToClientAdviserAndContactCentre_WhenEnabled()
+    public async Task Step_PublishesBookingConfirmedToClientAdviserManagerAndContactCentre_WhenEnabled()
     {
         var publisher = new CapturingPublisher();
         var step = new BookingNotificationStep(
@@ -121,17 +121,19 @@ public sealed class BookingNotificationPolicyTests
             CancellationToken.None);
 
         Assert.Equal(LifecycleStepStatuses.Succeeded, result.Status);
-        Assert.Equal(3, publisher.Requests.Count);
+        Assert.Equal(4, publisher.Requests.Count);
         Assert.Equal(
-            [BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.ContactCentre],
+            [BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.ContactCentre, BookingNotificationRecipientTypes.Manager],
             publisher.Requests.SelectMany(x => x.Recipients).Select(x => x.RecipientType).OrderBy(x => x, StringComparer.Ordinal).ToArray());
 
         var clientRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Client);
         var adviserRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Adviser);
         var contactCentreRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.ContactCentre);
+        var managerRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Manager);
         Assert.Equal("booking-confirmed", clientRequest.Data["TemplateKey:Email"]);
         Assert.Equal("booking-confirmed-adviser", adviserRequest.Data["TemplateKey:Email"]);
         Assert.Equal("booking-confirmed-contact-centre", contactCentreRequest.Data["TemplateKey:Email"]);
+        Assert.Equal("booking-confirmed-manager", managerRequest.Data["TemplateKey:Email"]);
         Assert.All(publisher.Requests, request =>
         {
             Assert.DoesNotContain(request.Data.Keys, key => string.Equals(key, "RecipientType", StringComparison.Ordinal));
@@ -140,13 +142,14 @@ public sealed class BookingNotificationPolicyTests
     }
 
     [Theory]
-    [InlineData("online", "booking-confirmed-online", "booking-confirmed-adviser-online", "booking-confirmed-contact-centre-online")]
-    [InlineData("face-to-face", "booking-confirmed-face-to-face", "booking-confirmed-adviser-face-to-face", "booking-confirmed-contact-centre-face-to-face")]
+    [InlineData("online", "booking-confirmed-online", "booking-confirmed-adviser-online", "booking-confirmed-contact-centre-online", "booking-confirmed-manager-online")]
+    [InlineData("face-to-face", "booking-confirmed-face-to-face", "booking-confirmed-adviser-face-to-face", "booking-confirmed-contact-centre-face-to-face", "booking-confirmed-manager-face-to-face")]
     public async Task Step_PublishesModeSpecificTemplateKeys_WhenMeetingModeIsAvailable(
         string meetingMode,
         string expectedClientTemplate,
         string expectedAdviserTemplate,
-        string expectedContactCentreTemplate)
+        string expectedContactCentreTemplate,
+        string expectedManagerTemplate)
     {
         var publisher = new CapturingPublisher();
         var step = new BookingNotificationStep(
@@ -173,9 +176,11 @@ public sealed class BookingNotificationPolicyTests
         var clientRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Client);
         var adviserRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Adviser);
         var contactCentreRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.ContactCentre);
+        var managerRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Manager);
         Assert.Equal(expectedClientTemplate, clientRequest.Data["TemplateKey:Email"]);
         Assert.Equal(expectedAdviserTemplate, adviserRequest.Data["TemplateKey:Email"]);
         Assert.Equal(expectedContactCentreTemplate, contactCentreRequest.Data["TemplateKey:Email"]);
+        Assert.Equal(expectedManagerTemplate, managerRequest.Data["TemplateKey:Email"]);
     }
 
     [Fact]
@@ -239,6 +244,7 @@ public sealed class BookingNotificationPolicyTests
         Assert.DoesNotContain(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.Adviser);
         Assert.Contains(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.Client);
         Assert.Contains(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.ContactCentre);
+        Assert.Contains(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.Manager);
     }
 
     [Fact]
@@ -266,7 +272,9 @@ public sealed class BookingNotificationPolicyTests
             CancellationToken.None);
 
         Assert.NotNull(assignments.LastSearch);
-        Assert.Equal([BookingNotificationRecipientTypes.ContactCentre], assignments.LastSearch!.AssignmentTypes);
+        Assert.Equal(
+            [BookingNotificationRecipientTypes.ContactCentre, BookingNotificationRecipientTypes.Manager],
+            assignments.LastSearch!.AssignmentTypes.OrderBy(x => x, StringComparer.Ordinal).ToArray());
         Assert.Equal("adv-1", assignments.LastSearch.AdviserId);
         Assert.Equal("South", assignments.LastSearch.Region);
         Assert.Equal("org-1", assignments.LastSearch.OrganisationId);
@@ -316,6 +324,12 @@ public sealed class BookingNotificationPolicyTests
                         "Contact Centre",
                         "assignment@example.com",
                         null,
+                        [BookingNotificationChannel.Email]),
+                    new BookingOrganisationAssignment(
+                        BookingNotificationRecipientTypes.Manager,
+                        "Booking Manager",
+                        "manager@example.com",
+                        null,
                         [BookingNotificationChannel.Email])))
             .ResolveAsync(
                 DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
@@ -340,6 +354,12 @@ public sealed class BookingNotificationPolicyTests
                         "Contact Centre",
                         "assignment@example.com",
                         null,
+                        [BookingNotificationChannel.Email]),
+                    new BookingOrganisationAssignment(
+                        BookingNotificationRecipientTypes.Manager,
+                        "Booking Manager",
+                        "manager@example.com",
+                        null,
                         [BookingNotificationChannel.Email])))
             .ResolveAsync(
                 DefaultPolicy(BookingNotificationTypes.BookingConfirmed),
@@ -351,7 +371,7 @@ public sealed class BookingNotificationPolicyTests
                 CancellationToken.None);
 
         Assert.Equal(
-            [BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.ContactCentre],
+            [BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.ContactCentre, BookingNotificationRecipientTypes.Manager],
             recipients.Select(x => x.RecipientType).OrderBy(x => x, StringComparer.Ordinal).ToArray());
         var contactCentre = Assert.Single(ContactCentreRecipients(recipients));
         Assert.Equal("assignment@example.com", contactCentre.Email);
@@ -372,6 +392,7 @@ public sealed class BookingNotificationPolicyTests
         Assert.Contains(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.Client);
         Assert.Contains(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.Adviser);
         Assert.DoesNotContain(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.ContactCentre);
+        Assert.DoesNotContain(recipients, x => x.RecipientType == BookingNotificationRecipientTypes.Manager);
     }
 
     [Fact]
@@ -481,6 +502,7 @@ public sealed class BookingNotificationPolicyTests
             [
                 new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Client, true),
                 new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Adviser, true),
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Manager, true),
                 new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.ContactCentre, true)
             ]);
 
@@ -501,6 +523,12 @@ public sealed class BookingNotificationPolicyTests
                     BookingNotificationRecipientTypes.ContactCentre,
                     "Contact Centre",
                     "assignment@example.com",
+                    null,
+                    [BookingNotificationChannel.Email]),
+                new BookingOrganisationAssignment(
+                    BookingNotificationRecipientTypes.Manager,
+                    "Booking Manager",
+                    "manager@example.com",
                     null,
                     [BookingNotificationChannel.Email])),
             NullLogger<BookingNotificationRecipientResolver>.Instance);

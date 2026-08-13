@@ -32,18 +32,21 @@ public sealed class BookingNotificationRoutingPolicy : INotificationRoutingPolic
             [
                 "Client",
                 "Adviser",
+                "Manager",
                 "ContactCentre"
             ],
             var value when IsActor(value, "Adviser") =>
             [
                 "Client",
                 "Adviser",
+                "Manager",
                 "ContactCentre"
             ],
             var value when IsActor(value, "Admin") || IsActor(value, "System") =>
             [
                 "Client",
                 "Adviser",
+                "Manager",
                 "ContactCentre",
                 "Internal"
             ],
@@ -51,6 +54,7 @@ public sealed class BookingNotificationRoutingPolicy : INotificationRoutingPolic
             [
                 "Client",
                 "Adviser",
+                "Manager",
                 "ContactCentre",
                 "Internal"
             ]

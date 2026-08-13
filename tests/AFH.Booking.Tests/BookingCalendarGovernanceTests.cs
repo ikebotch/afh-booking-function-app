@@ -57,6 +57,81 @@ public sealed class BookingCalendarGovernanceTests
     }
 
     [Fact]
+    public async Task ProviderNotification_WithManualCalendarEdit_CorrectsEventAndRecordsGovernanceIssue()
+    {
+        var hold = CreateHold(BookingHoldStatus.Confirmed, "evt-existing");
+        var slot = CreateSlot();
+        var transaction = CreateTransaction();
+        var calendar = new StubCalendarGateway(
+            new CalendarEventDetails
+            {
+                CalendarId = "evt-existing",
+                StartUtc = slot.StartUtc.AddMinutes(15),
+                EndUtc = slot.EndUtc.AddMinutes(15),
+                ShowAs = "Free"
+            },
+            createdEventId: "evt-new");
+        var issues = new StubOperationalIssueRepository();
+        var sut = CreateSut(new StubHoldRepository(hold), slot, transaction, calendar, issues);
+
+        var result = await sut.HandleProviderNotificationsAsync(
+            new CalendarProviderNotificationEnvelope
+            {
+                Value =
+                [
+                    new CalendarProviderNotificationItem
+                    {
+                        ChangeType = "updated",
+                        Resource = "users/adviser.one@tenant.test/events/evt-existing",
+                        ResourceData = new CalendarProviderResourceData { Id = "evt-existing" }
+                    }
+                ]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value!.Corrected);
+        Assert.False(calendar.CreatedEvent);
+        Assert.True(calendar.UpdatedEvent);
+        Assert.Equal(slot.StartUtc, calendar.LastUpdatedEvent?.StartUtc);
+        Assert.Equal(slot.EndUtc, calendar.LastUpdatedEvent?.EndUtc);
+        Assert.Equal(BookingShowAs.Busy, calendar.LastUpdatedEvent?.ShowAs);
+        Assert.Single(issues.Added, issue => issue.Code == OutlookIssueCodes.EventTamperingDetected);
+    }
+
+    [Fact]
+    public async Task ProviderNotification_WithManualCalendarDeletion_RestoresEventAndRecordsDeletionAttempt()
+    {
+        var hold = CreateHold(BookingHoldStatus.Confirmed, "evt-old");
+        var slot = CreateSlot();
+        var transaction = CreateTransaction();
+        var calendar = new StubCalendarGateway(existingEvent: null, createdEventId: "evt-new");
+        var issues = new StubOperationalIssueRepository();
+        var sut = CreateSut(new StubHoldRepository(hold), slot, transaction, calendar, issues);
+
+        var result = await sut.HandleProviderNotificationsAsync(
+            new CalendarProviderNotificationEnvelope
+            {
+                Value =
+                [
+                    new CalendarProviderNotificationItem
+                    {
+                        ChangeType = "deleted",
+                        ResourceData = new CalendarProviderResourceData { Id = "evt-old" }
+                    }
+                ]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(1, result.Value!.Restored);
+        Assert.Equal("evt-new", hold.CalendarProviderEventId);
+        Assert.True(calendar.CreatedEvent);
+        Assert.Contains(issues.Added, issue => issue.Code == OutlookIssueCodes.DeletionAttemptDetected);
+        Assert.Contains(issues.Added, issue => issue.Code == OutlookIssueCodes.CalendarEventMissingRestored);
+    }
+
+    [Fact]
     public async Task CancelledBooking_WithDeletedOutlookEvent_IsNotRestored()
     {
         var hold = CreateHold(BookingHoldStatus.Cancelled, "evt-old");

@@ -23,19 +23,23 @@ public static class BookingNotificationDefaults
     {
         var emailKey = notificationType switch
         {
-            "BookingConfirmed" => "booking-confirmed",
-            "BookingRescheduled" => "booking-rescheduled",
-            "BookingCancelled" => "booking-cancelled",
-            "BookingHoldCreated" => "booking-hold",
+            BookingNotificationTypes.BookingConfirmedName => "booking-confirmed",
+            BookingNotificationTypes.BookingRescheduledName => "booking-rescheduled",
+            BookingNotificationTypes.BookingCancelledName => "booking-cancelled",
+            BookingNotificationTypes.BookingHoldCreatedName => "booking-hold",
+            BookingNotificationTypes.CalendarEventCorrectedName => "calendar-event-corrected",
+            BookingNotificationTypes.CalendarEventCorrectionFailedName => "calendar-event-correction-failed",
             _ => ToKebabCase(notificationType)
         };
 
         var smsKey = notificationType switch
         {
-            "BookingConfirmed" => "booking-confirmed-sms",
-            "BookingRescheduled" => "booking-rescheduled-sms",
-            "BookingCancelled" => "booking-cancelled-sms",
-            "BookingHoldCreated" => "booking-hold-sms",
+            BookingNotificationTypes.BookingConfirmedName => "booking-confirmed-sms",
+            BookingNotificationTypes.BookingRescheduledName => "booking-rescheduled-sms",
+            BookingNotificationTypes.BookingCancelledName => "booking-cancelled-sms",
+            BookingNotificationTypes.BookingHoldCreatedName => "booking-hold-sms",
+            BookingNotificationTypes.CalendarEventCorrectedName => "calendar-event-corrected-sms",
+            BookingNotificationTypes.CalendarEventCorrectionFailedName => "calendar-event-correction-failed-sms",
             _ => $"{ToKebabCase(notificationType)}-sms"
         };
 
@@ -51,6 +55,17 @@ public static class BookingNotificationDefaults
     public static IReadOnlyList<BookingNotificationRecipientPolicy> CreateRecipients(string notificationType)
     {
         var enabled = !string.Equals(notificationType, "BookingHoldCreated", StringComparison.Ordinal);
+        if (notificationType is BookingNotificationTypes.CalendarEventCorrectedName or BookingNotificationTypes.CalendarEventCorrectionFailedName)
+        {
+            return
+            [
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Client, false),
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Adviser, true),
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Manager, true),
+                new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.ContactCentre, notificationType == BookingNotificationTypes.CalendarEventCorrectionFailedName)
+            ];
+        }
+
         return
         [
             new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Client, enabled),

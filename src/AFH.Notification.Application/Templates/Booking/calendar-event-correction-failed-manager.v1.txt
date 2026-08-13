@@ -1,0 +1,15 @@
+subject=AFH Booking: Calendar Reconciliation Required
+channel=Email
+contentType=text/plain
+---
+A manual Outlook calendar change was detected but could not be corrected automatically.
+
+Booking ID: {{bookingId}}
+Transaction reference: {{transactionRef}}
+Adviser: {{adviserName}}
+When: {{when}}
+Meeting type: {{meetingType}}
+Provider event ID: {{providerEventId}}
+Reason: {{correctionReason}}
+
+Operations should review this booking and reconcile the Outlook event.

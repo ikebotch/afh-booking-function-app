@@ -21,11 +21,18 @@ public sealed class BookingCalendarEvent
 
 
     public static BookingCalendarEvent Update(
-    string userId,
-    BookingShowAs showAs,
-    string? providerEventId,
-    string? body,
-      IEnumerable<string>? categories
+        string userId,
+        BookingShowAs showAs,
+        string? providerEventId,
+        string? body,
+        IEnumerable<string>? categories,
+        string? subject = null,
+        DateTime? startUtc = null,
+        DateTime? endUtc = null,
+        string? timezone = null,
+        bool? isRemote = null,
+        CalendarLocation? location = null,
+        IEnumerable<CalendarAttendee>? attendees = null
     )
     {
         if (string.IsNullOrWhiteSpace(userId)) throw new DomainException("userId is required.");
@@ -39,9 +46,16 @@ public sealed class BookingCalendarEvent
         {
             UserId = userId,
             EventId = providerEventId,
+            Subject = subject ?? string.Empty,
+            StartUtc = startUtc.HasValue ? DateTime.SpecifyKind(startUtc.Value, DateTimeKind.Utc) : default,
+            EndUtc = endUtc.HasValue ? DateTime.SpecifyKind(endUtc.Value, DateTimeKind.Utc) : default,
+            Timezone = timezone ?? string.Empty,
+            IsRemote = isRemote ?? false,
             ShowAs = showAs,
             Body = body,
             Categories = cats,
+            Location = location,
+            Attendees = attendees?.ToArray() ?? Array.Empty<CalendarAttendee>(),
 
         };
     }

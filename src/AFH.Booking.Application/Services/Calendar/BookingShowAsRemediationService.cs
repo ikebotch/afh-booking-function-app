@@ -1,8 +1,12 @@
 using AFH.Booking.Application.Models.Calendar.Constants;
 using AFH.Booking.Application.EmailTemplates;
 using AFH.Booking.Application.Abstractions.Governance;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Holds;
 using AFH.Booking.Application.Models.Governance.Constants;
+using AFH.Booking.Application.Models.Lifecycle;
+using AFH.Booking.Application.Models.Lifecycle.Constants;
+using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Calendar;
 using System.Text.Json;
@@ -18,6 +22,7 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
     private readonly IHoldWindowFactory _holdWindowFactory;
     private readonly IOperationalIssueRepository _issues;
     private readonly IUnitOfWork _uow;
+    private readonly IBookingWorkflowNotificationAdapter? _notifications;
 
     public BookingShowAsRemediationService(
         IBookingHoldRepository holds,
@@ -26,7 +31,8 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
         ICalendarGateway calendar,
         IHoldWindowFactory holdWindowFactory,
         IOperationalIssueRepository issues,
-        IUnitOfWork uow)
+        IUnitOfWork uow,
+        IBookingWorkflowNotificationAdapter? notifications = null)
     {
         _holds = holds;
         _slots = slots;
@@ -35,6 +41,7 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
         _holdWindowFactory = holdWindowFactory;
         _issues = issues;
         _uow = uow;
+        _notifications = notifications;
     }
 
     public async Task<Result<CalendarShowAsRemediationResult>> HandleAsync(string bookingId, CancellationToken ct)
@@ -80,14 +87,12 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
         if (existingEvent is null)
             return await RestoreMissingConfirmedEventAsync(hold, slot, transaction, oldProviderEventId, ct);
 
-        var update = BookingCalendarEvent.Update(
-            userId: slot.AdviserId,
-            showAs: BookingShowAs.Busy,
-            providerEventId: hold.CalendarProviderEventId,
-            body: null,
-            categories: CalendarCategoryConstants.ShowAsRemediation);
-
-        await _calendar.UpdateBookingEventAsync(update, ct);
+        await RestoreConfirmedEventDetailsAsync(
+            hold,
+            slot,
+            transaction,
+            CalendarCategoryConstants.ShowAsRemediation,
+            ct);
 
         return Result<CalendarShowAsRemediationResult>.Ok(new CalendarShowAsRemediationResult
         {
@@ -96,6 +101,210 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
             ShowAs = "Busy",
             RemediatedUtc = DateTime.UtcNow
         });
+    }
+
+    public async Task<Result<CalendarProviderNotificationProcessingResult>> HandleProviderNotificationsAsync(
+        CalendarProviderNotificationEnvelope envelope,
+        CancellationToken ct)
+    {
+        var items = envelope.Value?.Where(x => x is not null).ToArray() ?? [];
+        var results = new List<CalendarProviderNotificationItemResult>(items.Length);
+        var corrected = 0;
+        var restored = 0;
+        var flagged = 0;
+        var ignored = 0;
+
+        foreach (var item in items)
+        {
+            var itemResult = await HandleProviderNotificationItemAsync(item, ct);
+            results.Add(itemResult);
+
+            switch (itemResult.Outcome)
+            {
+                case "Corrected":
+                    corrected++;
+                    break;
+                case "Restored":
+                    restored++;
+                    break;
+                case "FlaggedForOperations":
+                    flagged++;
+                    break;
+                default:
+                    ignored++;
+                    break;
+            }
+        }
+
+        return Result<CalendarProviderNotificationProcessingResult>.Ok(new CalendarProviderNotificationProcessingResult
+        {
+            Received = items.Length,
+            Ignored = ignored,
+            Corrected = corrected,
+            Restored = restored,
+            FlaggedForOperations = flagged,
+            Items = results
+        });
+    }
+
+    private async Task<CalendarProviderNotificationItemResult> HandleProviderNotificationItemAsync(
+        CalendarProviderNotificationItem item,
+        CancellationToken ct)
+    {
+        var changeType = item.ChangeType?.Trim() ?? string.Empty;
+        var providerEventId = TryGetProviderEventId(item);
+        if (string.IsNullOrWhiteSpace(providerEventId))
+            return Ignored(item, null, null, "Provider event id was not present in the notification.");
+
+        var hold = await _holds.GetByCalendarEventIdAsync(providerEventId, ct);
+        if (hold is null)
+            return Ignored(item, providerEventId, null, "Provider event is not managed by Booking.");
+
+        if (hold.Status != BookingHoldStatus.Confirmed)
+            return Ignored(item, providerEventId, hold.Id, "Booking is not confirmed.");
+
+        var slot = await _slots.GetAsync(hold.SlotId, ct);
+        if (slot is null)
+            return await FlagUnrecoverableAsync(item, providerEventId, hold, null, null, "Booking slot was not found.", ct);
+
+        var transaction = await _transactions.GetAsync(slot.TransactionId, ct);
+        if (transaction is null)
+            return await FlagUnrecoverableAsync(item, providerEventId, hold, slot, null, "Booking transaction was not found.", ct);
+
+        try
+        {
+            if (IsDeletion(changeType))
+            {
+                await RecordIssueAsync(
+                    OutlookIssueCodes.DeletionAttemptDetected,
+                    OperationalIssueStatuses.Open,
+                    hold,
+                    slot,
+                    transaction,
+                    providerEventId,
+                    null,
+                    "Manual deletion detected from calendar provider notification.",
+                    ct);
+
+                var restoredResult = await RestoreMissingConfirmedEventAsync(hold, slot, transaction, providerEventId, ct);
+                if (!restoredResult.IsSuccess)
+                {
+                    await NotifyCalendarCorrectionAsync(
+                        BookingNotificationTypes.CalendarEventCorrectionFailed.Name,
+                        hold,
+                        slot,
+                        transaction,
+                        providerEventId,
+                        "Manual deletion could not be restored.",
+                        ct);
+
+                    return new CalendarProviderNotificationItemResult
+                    {
+                        ProviderEventId = providerEventId,
+                        BookingId = hold.Id,
+                        ChangeType = changeType,
+                        Outcome = "FlaggedForOperations",
+                        Reason = restoredResult.ErrorMessage
+                    };
+                }
+
+                await NotifyCalendarCorrectionAsync(
+                    BookingNotificationTypes.CalendarEventCorrected.Name,
+                    hold,
+                    slot,
+                    transaction,
+                    restoredResult.Value!.EventId,
+                    "Manual deletion was detected and the booking event was recreated.",
+                    ct);
+
+                return new CalendarProviderNotificationItemResult
+                {
+                    ProviderEventId = providerEventId,
+                    BookingId = hold.Id,
+                    ChangeType = changeType,
+                    Outcome = "Restored",
+                    Reason = "Manual deletion was restored."
+                };
+            }
+
+            var existingEvent = await GetExistingCalendarEventOrNullAsync(slot.AdviserId, providerEventId, ct);
+            if (existingEvent is null)
+            {
+                var restoredResult = await RestoreMissingConfirmedEventAsync(hold, slot, transaction, providerEventId, ct);
+                await NotifyCalendarCorrectionAsync(
+                    restoredResult.IsSuccess
+                        ? BookingNotificationTypes.CalendarEventCorrected.Name
+                        : BookingNotificationTypes.CalendarEventCorrectionFailed.Name,
+                    hold,
+                    slot,
+                    transaction,
+                    restoredResult.IsSuccess ? restoredResult.Value!.EventId : providerEventId,
+                    restoredResult.IsSuccess
+                        ? "Calendar provider event was missing and was restored."
+                        : "Calendar provider event was missing and could not be restored.",
+                    ct);
+
+                return new CalendarProviderNotificationItemResult
+                {
+                    ProviderEventId = providerEventId,
+                    BookingId = hold.Id,
+                    ChangeType = changeType,
+                    Outcome = restoredResult.IsSuccess ? "Restored" : "FlaggedForOperations",
+                    Reason = restoredResult.IsSuccess
+                        ? "Calendar provider event was missing and was restored."
+                        : restoredResult.ErrorMessage
+                };
+            }
+
+            var differences = GetDifferences(existingEvent, slot).ToArray();
+            if (differences.Length == 0)
+                return Ignored(item, providerEventId, hold.Id, "Calendar event still matches Booking state.");
+
+            var issueCode = differences.Length == 1 && differences[0] == "ShowAs"
+                ? OutlookIssueCodes.IncorrectShowAs
+                : OutlookIssueCodes.EventTamperingDetected;
+
+            await RecordIssueAsync(
+                issueCode,
+                OperationalIssueStatuses.Open,
+                hold,
+                slot,
+                transaction,
+                providerEventId,
+                null,
+                $"Manual calendar edit detected: {string.Join(", ", differences)}.",
+                ct);
+
+            await RestoreConfirmedEventDetailsAsync(
+                hold,
+                slot,
+                transaction,
+                CalendarCategoryConstants.ShowAsRemediation,
+                ct);
+            await _uow.SaveChangesAsync(ct);
+
+            await NotifyCalendarCorrectionAsync(
+                BookingNotificationTypes.CalendarEventCorrected.Name,
+                hold,
+                slot,
+                transaction,
+                providerEventId,
+                $"Manual calendar edit was corrected: {string.Join(", ", differences)}.",
+                ct);
+
+            return new CalendarProviderNotificationItemResult
+            {
+                ProviderEventId = providerEventId,
+                BookingId = hold.Id,
+                ChangeType = changeType,
+                Outcome = "Corrected",
+                Reason = string.Join(", ", differences)
+            };
+        }
+        catch (Exception ex)
+        {
+            return await FlagUnrecoverableAsync(item, providerEventId, hold, slot, transaction, ex.Message, ct);
+        }
     }
 
     private async Task<CalendarEventDetails?> GetExistingCalendarEventOrNullAsync(
@@ -200,6 +409,85 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
         }
     }
 
+    private async Task RestoreConfirmedEventDetailsAsync(
+        BookingHold hold,
+        BookingSlot slot,
+        BookingTransaction transaction,
+        IEnumerable<string> categories,
+        CancellationToken ct)
+    {
+        var windows = _holdWindowFactory.Create(slot, transaction);
+        var calendarTemplate = ConfirmedBookingTemplate.BuildConfirmedTemplate(
+            slot,
+            transaction,
+            hold,
+            windows,
+            joinUrl: null,
+            location: null,
+            selfServiceLinks: null);
+
+        var subject = string.IsNullOrWhiteSpace(transaction.MeetingType)
+            ? "AFH Booking"
+            : $"AFH Booking - {transaction.MeetingType}";
+
+        var update = BookingCalendarEvent.Update(
+            userId: slot.AdviserId,
+            showAs: BookingShowAs.Busy,
+            providerEventId: hold.CalendarProviderEventId,
+            body: calendarTemplate.CalendarDescription,
+            categories: categories,
+            subject: subject,
+            startUtc: slot.StartUtc,
+            endUtc: slot.EndUtc,
+            timezone: transaction.Timezone,
+            isRemote: transaction.IsRemote);
+
+        await _calendar.UpdateBookingEventAsync(update, ct);
+    }
+
+    private async Task<CalendarProviderNotificationItemResult> FlagUnrecoverableAsync(
+        CalendarProviderNotificationItem item,
+        string providerEventId,
+        BookingHold hold,
+        BookingSlot? slot,
+        BookingTransaction? transaction,
+        string reason,
+        CancellationToken ct)
+    {
+        if (slot is not null && transaction is not null)
+        {
+            await RecordIssueAsync(
+                OutlookIssueCodes.ControlledReconciliationRequired,
+                OperationalIssueStatuses.ReconciliationRequired,
+                hold,
+                slot,
+                transaction,
+                providerEventId,
+                null,
+                reason,
+                ct);
+            await _uow.SaveChangesAsync(ct);
+
+            await NotifyCalendarCorrectionAsync(
+                BookingNotificationTypes.CalendarEventCorrectionFailed.Name,
+                hold,
+                slot,
+                transaction,
+                providerEventId,
+                reason,
+                ct);
+        }
+
+        return new CalendarProviderNotificationItemResult
+        {
+            ProviderEventId = providerEventId,
+            BookingId = hold.Id,
+            ChangeType = item.ChangeType?.Trim() ?? string.Empty,
+            Outcome = "FlaggedForOperations",
+            Reason = reason
+        };
+    }
+
     private async Task RecordIssueAsync(
         string code,
         string status,
@@ -213,7 +501,7 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
     {
         var metadata = JsonSerializer.Serialize(new
         {
-            TriggerReason = "CalendarEventMissingRestored",
+            TriggerReason = code,
             OldProviderEventId = oldProviderEventId,
             NewProviderEventId = newProviderEventId,
             ActorType = "System",
@@ -237,4 +525,105 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
             EscalationCount: 0,
             LastEscalatedUtc: null), ct);
     }
+
+    private async Task NotifyCalendarCorrectionAsync(
+        string notificationType,
+        BookingHold hold,
+        BookingSlot slot,
+        BookingTransaction transaction,
+        string providerEventId,
+        string reason,
+        CancellationToken ct)
+    {
+        if (_notifications is null)
+            return;
+
+        try
+        {
+            await _notifications.RequestAsync(
+                new BookingWorkflowNotificationRequest(
+                    notificationType,
+                    hold.Id,
+                    LifecycleActors.System,
+                    [
+                        new BookingNotificationRecipient(BookingNotificationRecipientTypes.Adviser, slot.AdviserName, null),
+                        new BookingNotificationRecipient(BookingNotificationRecipientTypes.Manager, null, null)
+                    ],
+                    new Dictionary<string, string>
+                    {
+                        ["bookingId"] = hold.Id,
+                        ["transactionId"] = transaction.Id,
+                        ["transactionRef"] = transaction.TransactionRef,
+                        ["providerEventId"] = providerEventId,
+                        ["adviserId"] = slot.AdviserId,
+                        ["adviserName"] = slot.AdviserName,
+                        ["meetingType"] = string.IsNullOrWhiteSpace(transaction.MeetingType) ? "N/A" : transaction.MeetingType,
+                        ["startUtc"] = slot.StartUtc.ToString("O"),
+                        ["endUtc"] = slot.EndUtc.ToString("O"),
+                        ["when"] = $"{slot.StartUtc:O} - {slot.EndUtc:O}",
+                        ["reason"] = reason,
+                        ["correctionReason"] = reason,
+                        ["IdempotencyKey"] = $"{notificationType}:{hold.Id}:{providerEventId}"
+                    }),
+                ct);
+        }
+        catch
+        {
+            // Calendar correction must not fail because notification dispatch failed.
+        }
+    }
+
+    private static IEnumerable<string> GetDifferences(CalendarEventDetails existingEvent, BookingSlot slot)
+    {
+        if (AsUtc(existingEvent.StartUtc) != AsUtc(slot.StartUtc))
+            yield return "StartUtc";
+
+        if (AsUtc(existingEvent.EndUtc) != AsUtc(slot.EndUtc))
+            yield return "EndUtc";
+
+        if (!string.Equals(existingEvent.ShowAs, "Busy", StringComparison.OrdinalIgnoreCase))
+            yield return "ShowAs";
+    }
+
+    private static string? TryGetProviderEventId(CalendarProviderNotificationItem item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.ResourceData?.Id))
+            return item.ResourceData.Id.Trim();
+
+        if (string.IsNullOrWhiteSpace(item.Resource))
+            return null;
+
+        var segments = item.Resource.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var eventsIndex = Array.FindIndex(segments, x => string.Equals(x, "events", StringComparison.OrdinalIgnoreCase));
+        if (eventsIndex >= 0 && eventsIndex + 1 < segments.Length)
+            return Uri.UnescapeDataString(segments[eventsIndex + 1]);
+
+        return segments.Length > 0 ? Uri.UnescapeDataString(segments[^1]) : null;
+    }
+
+    private static bool IsDeletion(string changeType)
+        => changeType.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Any(x => string.Equals(x, "deleted", StringComparison.OrdinalIgnoreCase));
+
+    private static CalendarProviderNotificationItemResult Ignored(
+        CalendarProviderNotificationItem item,
+        string? providerEventId,
+        string? bookingId,
+        string reason)
+        => new()
+        {
+            ProviderEventId = providerEventId,
+            BookingId = bookingId,
+            ChangeType = item.ChangeType?.Trim() ?? string.Empty,
+            Outcome = "Ignored",
+            Reason = reason
+        };
+
+    private static DateTime AsUtc(DateTime value)
+        => value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 }

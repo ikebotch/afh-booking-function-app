@@ -116,6 +116,48 @@ public sealed class NotificationTemplateModelConfiguration : IEntityTypeConfigur
                 {{manageBookingLinks}}
 
                 This is an automated AFH booking notification.
+                """),
+            Template(
+                "10000000-0000-0000-0000-000000000005",
+                "calendar-event-corrected",
+                "Calendar event corrected",
+                "AFH Booking: Calendar Event Corrected",
+                """
+                Hello,
+
+                A manual Outlook calendar change was detected and corrected.
+
+                Transaction reference: {{transactionRef}}
+                Booking ID: {{bookingId}}
+                Adviser: {{adviserName}}
+                Meeting type: {{meetingType}}
+                When: {{when}}
+                Provider event ID: {{providerEventId}}
+                Correction: {{correctionReason}}
+
+                This is an automated AFH booking notification.
+                """),
+            Template(
+                "10000000-0000-0000-0000-000000000006",
+                "calendar-event-correction-failed",
+                "Calendar event correction failed",
+                "AFH Booking: Calendar Reconciliation Required",
+                """
+                Hello,
+
+                A manual Outlook calendar change was detected but could not be corrected automatically.
+
+                Transaction reference: {{transactionRef}}
+                Booking ID: {{bookingId}}
+                Adviser: {{adviserName}}
+                Meeting type: {{meetingType}}
+                When: {{when}}
+                Provider event ID: {{providerEventId}}
+                Reason: {{correctionReason}}
+
+                Operations should review this booking and reconcile the Outlook event.
+
+                This is an automated AFH booking notification.
                 """));
     }
 

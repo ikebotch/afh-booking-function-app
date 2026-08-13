@@ -67,6 +67,24 @@ public sealed class BookingWorkflowNotificationAdapterTests
     }
 
     [Fact]
+    public async Task RequestAsync_WithCalendarGovernanceNotification_UsesRegisteredNotificationType()
+    {
+        var step = CreateStep((LifecycleStepStatuses.Succeeded, null, null));
+        var sut = new BookingWorkflowNotificationAdapter(step.Object);
+
+        var outcome = await sut.RequestAsync(Request(BookingNotificationTypes.CalendarEventCorrected.Name), CancellationToken.None);
+
+        Assert.Equal(BookingNotificationTypes.CalendarEventCorrected.Name, outcome.NotificationType);
+        step.Verify(x => x.ExecuteAsync(
+            BookingNotificationTypes.CalendarEventCorrected.Name,
+            "booking-1",
+            LifecycleActors.Client,
+            It.IsAny<IReadOnlyList<BookingNotificationRecipient>>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public void ToLifecycleStepDetails_DoesNotIncludeRecipientsOrNotificationData()
     {
         var request = Request(

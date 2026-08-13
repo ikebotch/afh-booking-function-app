@@ -175,7 +175,7 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
         LifecycleEventTypes.Cancelled => BookingNotificationTypes.BookingCancelled,
         LifecycleEventTypes.Rearranged => BookingNotificationTypes.BookingRescheduled,
         LifecycleEventTypes.HoldCreated => BookingNotificationTypes.BookingHoldCreated,
-        _ => null
+        _ => BookingNotificationTypes.TryGetByName(lifecycleEventType)
     };
 
     private static IReadOnlyDictionary<string, string> BuildPolicyData(

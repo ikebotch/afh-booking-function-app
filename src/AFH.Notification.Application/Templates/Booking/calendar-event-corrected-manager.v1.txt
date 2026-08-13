@@ -1,0 +1,15 @@
+subject=AFH Booking: Calendar Event Corrected
+channel=Email
+contentType=text/plain
+---
+A manual Outlook calendar change was detected and corrected.
+
+Booking ID: {{bookingId}}
+Transaction reference: {{transactionRef}}
+Adviser: {{adviserName}}
+When: {{when}}
+Meeting type: {{meetingType}}
+Provider event ID: {{providerEventId}}
+Correction: {{correctionReason}}
+
+No booking lifecycle event was created for this correction.

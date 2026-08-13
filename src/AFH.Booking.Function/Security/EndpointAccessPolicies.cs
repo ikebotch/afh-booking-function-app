@@ -53,6 +53,7 @@ public static class EndpointAccessPolicies
             ["Identity_AssignUserPermission"] = InternalOnly(),
             ["Identity_DeleteUserPermissionMapping"] = InternalOnly(),
             ["Bookings_CancelBooking"] = UserPermission(BookingPermissionNames.CancelDirect),
+            ["Bookings_CalendarNotifications"] = InternalOnly(),
             ["Bookings_AdminSearch"] = UserPermissionAny(BookingPermissionNames.AdminRead, BookingPermissionNames.OwnRead),
             ["Bookings_ConfirmHold"] = Public(),
             ["Bookings_CreateApprovalRequest"] = UserPermission(BookingPermissionNames.ApprovalRequestsCreate),

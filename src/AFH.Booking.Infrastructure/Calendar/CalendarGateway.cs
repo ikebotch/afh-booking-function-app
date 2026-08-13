@@ -98,9 +98,29 @@ public sealed class CalendarGateway : ICalendarGateway
         var payload = new
         {
             userId = ev.UserId,
+            subject = string.IsNullOrWhiteSpace(ev.Subject) ? null : ev.Subject,
+            startUtc = ev.StartUtc == default ? (DateTime?)null : ev.StartUtc,
+            endUtc = ev.EndUtc == default ? (DateTime?)null : ev.EndUtc,
+            timezone = string.IsNullOrWhiteSpace(ev.Timezone) ? null : ev.Timezone,
+            isRemote = ev.StartUtc == default && ev.EndUtc == default ? (bool?)null : ev.IsRemote,
             body = ev.Body,
             categories = ev.Categories,
-            showAs = ev.ShowAs.ToString()
+            showAs = ev.ShowAs.ToString(),
+            location = ev.Location is null
+                ? null
+                : new
+                {
+                    displayName = ev.Location.DisplayName,
+                    addressLine1 = ev.Location.AddressLine1,
+                    city = ev.Location.City,
+                    postcode = ev.Location.Postcode
+                },
+            attendees = ev.Attendees.Select(a => new
+            {
+                email = a.Email,
+                name = a.Name,
+                isRequired = a.IsRequired
+            })
         };
 
         var url = BuildUrl($"/api/v1/calendar/appointments/{Uri.EscapeDataString(ev.EventId)}");

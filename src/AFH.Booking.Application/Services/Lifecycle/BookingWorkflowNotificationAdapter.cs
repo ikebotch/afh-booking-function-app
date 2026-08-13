@@ -41,6 +41,6 @@ public sealed class BookingWorkflowNotificationAdapter : IBookingWorkflowNotific
         LifecycleEventTypes.Cancelled => BookingNotificationTypes.BookingCancelled.Name,
         LifecycleEventTypes.Rearranged => BookingNotificationTypes.BookingRescheduled.Name,
         LifecycleEventTypes.HoldCreated => BookingNotificationTypes.BookingHoldCreated.Name,
-        _ => lifecycleEventType
+        _ => BookingNotificationTypes.TryGetByName(lifecycleEventType)?.Name ?? lifecycleEventType
     };
 }

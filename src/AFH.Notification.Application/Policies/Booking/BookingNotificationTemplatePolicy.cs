@@ -5,17 +5,27 @@ namespace AFH.Notification.Application.Policies.Booking;
 
 public sealed class BookingNotificationTemplatePolicy : INotificationTemplatePolicy
 {
+    private const string BookingConfirmed = "BookingConfirmed";
+    private const string BookingRescheduled = "BookingRescheduled";
+    private const string BookingCancelled = "BookingCancelled";
+    private const string BookingHoldCreated = "BookingHoldCreated";
+    private const string AdviserRequestOutcome = "AdviserRequestOutcome";
+    private const string CalendarEventCorrected = "CalendarEventCorrected";
+    private const string CalendarEventCorrectionFailed = "CalendarEventCorrectionFailed";
+
     public bool CanHandle(NotificationType notificationType)
         => string.Equals(notificationType.SourceApplication, "Booking", StringComparison.OrdinalIgnoreCase);
 
     public string GetTemplateName(NotificationType notificationType)
         => notificationType.Name switch
         {
-            "BookingConfirmed" => "Booking.booking-confirmed.v1.txt",
-            "BookingRescheduled" => "Booking.booking-rescheduled.v1.txt",
-            "BookingCancelled" => "Booking.booking-cancelled.v1.txt",
-            "BookingHoldCreated" => "Booking.booking-hold.v1.txt",
-            "AdviserRequestOutcome" => "Booking.adviser-request-outcome.v1.txt",
+            BookingConfirmed => "Booking.booking-confirmed.v1.txt",
+            BookingRescheduled => "Booking.booking-rescheduled.v1.txt",
+            BookingCancelled => "Booking.booking-cancelled.v1.txt",
+            BookingHoldCreated => "Booking.booking-hold.v1.txt",
+            AdviserRequestOutcome => "Booking.adviser-request-outcome.v1.txt",
+            CalendarEventCorrected => "Booking.calendar-event-corrected.v1.txt",
+            CalendarEventCorrectionFailed => "Booking.calendar-event-correction-failed.v1.txt",
             _ => throw new NotSupportedException($"Booking notification template '{notificationType.Name}' is not supported yet.")
         };
 }

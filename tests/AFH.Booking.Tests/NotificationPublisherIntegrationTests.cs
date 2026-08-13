@@ -65,9 +65,9 @@ public sealed class NotificationPublisherIntegrationTests
     }
 
     [Theory]
-    [InlineData(null, "function-key", "internal-token", "Booking:Notifications:Http:BaseUrl")]
-    [InlineData("https://notification.example", null, "internal-token", "Booking:Notifications:Http:FunctionKey")]
-    [InlineData("https://notification.example", "function-key", null, "Booking:Notifications:Http:InternalToken")]
+    [InlineData(null, "function-key", "internal-token", "Notifications:Integration:Http:BaseUrl")]
+    [InlineData("https://notification.example", null, "internal-token", "Notifications:Integration:Http:FunctionKey")]
+    [InlineData("https://notification.example", "function-key", null, "Notifications:Integration:Http:InternalToken")]
     public async Task NotificationApiPublisher_MissingRequiredOptions_FailsClearly(
         string? baseUrl,
         string? functionKey,
@@ -94,9 +94,9 @@ public sealed class NotificationPublisherIntegrationTests
     public void AddBookingInfrastructure_RegistersBookingNotificationPublisher()
     {
         var config = CreateConfig(
-            ("Booking:Notifications:Http:BaseUrl", "https://notification.example"),
-            ("Booking:Notifications:Http:FunctionKey", "function-key"),
-            ("Booking:Notifications:Http:InternalToken", "internal-token"));
+            ("Notifications:Integration:Http:BaseUrl", "https://notification.example"),
+            ("Notifications:Integration:Http:FunctionKey", "function-key"),
+            ("Notifications:Integration:Http:InternalToken", "internal-token"));
         var services = new ServiceCollection();
 
         services.AddLogging();

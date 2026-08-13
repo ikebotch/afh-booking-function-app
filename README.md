@@ -146,13 +146,13 @@ Self-service rearrange request:
 ## Notification Configuration Split
 - Legacy Booking self-service link options are flat keys under `Notifications`:
   - `Notifications:ClientPortalBaseUrl`
-- Booking-side outbound notification publishing uses `Booking:Notifications:Http:*`:
-  - `Booking:Notifications:Http:BaseUrl`
-  - `Booking:Notifications:Http:RequestPath`
-  - `Booking:Notifications:Http:TimeoutSeconds`
-  - `Booking:Notifications:Http:FunctionKey`
+- Booking-side outbound notification publishing uses `Notifications:Integration:Http:*`:
+  - `Notifications:Integration:Http:BaseUrl`
+  - `Notifications:Integration:Http:RequestPath`
+  - `Notifications:Integration:Http:TimeoutSeconds`
+  - `Notifications:Integration:Http:FunctionKey`
     - Required when the receiving notification endpoint uses Azure Functions `AuthorizationLevel.Function`; sent as the `code` query value.
-  - `Booking:Notifications:Http:InternalToken`
+  - `Notifications:Integration:Http:InternalToken`
     - Required internal token for the notification API; sent as `Authorization: Bearer <InternalToken>`.
 - Notification-side source publishing uses `Notifications:Integration:*`:
   - `Notifications:Integration:Transport` supports `ServiceBus` and transitional/local `InProcess`.

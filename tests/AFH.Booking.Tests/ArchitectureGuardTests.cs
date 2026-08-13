@@ -43,15 +43,16 @@ public sealed class ArchitectureGuardTests
     }
 
     [Fact]
-    public void LocalSettingsTemplate_DocumentsBookingNotificationHttpPublisher()
+    public void LocalSettingsTemplate_DocumentsNotificationIntegrationHttpPublisher()
     {
         var templatePath = Path.Combine(Path.GetDirectoryName(GetProjectPath("AFH.Booking.Function"))!, "local.settings.template.json");
         var template = File.ReadAllText(templatePath);
 
-        Assert.Contains("Booking:Notifications:Http:BaseUrl", template, StringComparison.Ordinal);
-        Assert.Contains("Booking:Notifications:Http:FunctionKey", template, StringComparison.Ordinal);
-        Assert.Contains("Booking:Notifications:Http:InternalToken", template, StringComparison.Ordinal);
-        Assert.DoesNotContain("Notifications:Integration:Http:BaseUrl", template, StringComparison.Ordinal);
+        Assert.Contains("Notifications:Integration:Http:BaseUrl", template, StringComparison.Ordinal);
+        Assert.Contains("Notifications:Integration:Http:FunctionKey", template, StringComparison.Ordinal);
+        Assert.Contains("Notifications:Integration:Http:InternalToken", template, StringComparison.Ordinal);
+        var retiredPublisherKey = string.Join(':', "Booking", "Notifications", "Http", "BaseUrl");
+        Assert.DoesNotContain(retiredPublisherKey, template, StringComparison.Ordinal);
     }
 
     private static string GetProjectPath(string projectName)

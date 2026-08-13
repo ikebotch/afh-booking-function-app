@@ -9,6 +9,8 @@ using AFH.Booking.Application.Models.Lifecycle.Constants;
 using AFH.Booking.Application.Models.Notifications;
 using AFH.Booking.Domain.Bookings;
 using AFH.Booking.Domain.Calendar;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 using System.Text.Json;
 
@@ -26,6 +28,7 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
     private readonly IOperationalIssueRepository _issues;
     private readonly IUnitOfWork _uow;
     private readonly IBookingWorkflowNotificationAdapter? _notifications;
+    private readonly ILogger<BookingShowAsRemediationService> _logger;
 
     public BookingShowAsRemediationService(
         IBookingHoldRepository holds,
@@ -35,7 +38,8 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
         IHoldWindowFactory holdWindowFactory,
         IOperationalIssueRepository issues,
         IUnitOfWork uow,
-        IBookingWorkflowNotificationAdapter? notifications = null)
+        IBookingWorkflowNotificationAdapter? notifications = null,
+        ILogger<BookingShowAsRemediationService>? logger = null)
     {
         _holds = holds;
         _slots = slots;
@@ -45,6 +49,7 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
         _issues = issues;
         _uow = uow;
         _notifications = notifications;
+        _logger = logger ?? NullLogger<BookingShowAsRemediationService>.Instance;
     }
 
     public async Task<Result<CalendarShowAsRemediationResult>> HandleAsync(string bookingId, CancellationToken ct)
@@ -568,15 +573,12 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
 
         try
         {
-            await _notifications.RequestAsync(
+            var outcome = await _notifications.RequestAsync(
                 new BookingWorkflowNotificationRequest(
                     notificationType,
                     hold.Id,
                     LifecycleActors.System,
-                    [
-                        new BookingNotificationRecipient(BookingNotificationRecipientTypes.Adviser, slot.AdviserName, null),
-                        new BookingNotificationRecipient(BookingNotificationRecipientTypes.Manager, null, null)
-                    ],
+                    Array.Empty<BookingNotificationRecipient>(),
                     new Dictionary<string, string>
                     {
                         ["bookingId"] = hold.Id,
@@ -594,10 +596,36 @@ public sealed class BookingShowAsRemediationService : IBookingShowAsRemediationS
                         ["IdempotencyKey"] = $"{notificationType}:{hold.Id}:{providerEventId}"
                     }),
                 ct);
+
+            if (outcome.Status == BookingWorkflowNotificationOutcomeStatuses.Succeeded)
+            {
+                _logger.LogInformation(
+                    "Calendar correction notification published. NotificationType={NotificationType} BookingId={BookingId} ProviderEventId={ProviderEventId} RecipientCount={RecipientCount}",
+                    notificationType,
+                    hold.Id,
+                    providerEventId,
+                    outcome.RecipientCount);
+                return;
+            }
+
+            _logger.LogWarning(
+                "Calendar correction notification was not published. NotificationType={NotificationType} BookingId={BookingId} ProviderEventId={ProviderEventId} Status={Status} FailureCode={FailureCode} FailureMessage={FailureMessage}",
+                notificationType,
+                hold.Id,
+                providerEventId,
+                outcome.Status,
+                outcome.FailureCode,
+                outcome.FailureMessageSafe);
         }
-        catch
+        catch (Exception ex)
         {
             // Calendar correction must not fail because notification dispatch failed.
+            _logger.LogWarning(
+                ex,
+                "Calendar correction notification threw during publish. NotificationType={NotificationType} BookingId={BookingId} ProviderEventId={ProviderEventId}",
+                notificationType,
+                hold.Id,
+                providerEventId);
         }
     }
 

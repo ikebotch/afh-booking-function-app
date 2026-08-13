@@ -1,7 +1,9 @@
 using AFH.Booking.Application.Abstractions.Governance;
+using AFH.Booking.Application.Abstractions.Lifecycle;
 using AFH.Booking.Application.Calendar;
 using AFH.Booking.Application.Holds;
 using AFH.Booking.Application.Models.Calendar.Constants;
+using AFH.Booking.Application.Models.Lifecycle;
 using AFH.Booking.Domain.Bookings;
 
 namespace AFH.Booking.Tests;
@@ -129,6 +131,41 @@ public sealed class BookingCalendarGovernanceTests
         Assert.True(calendar.CreatedEvent);
         Assert.Contains(issues.Added, issue => issue.Code == OutlookIssueCodes.DeletionAttemptDetected);
         Assert.Contains(issues.Added, issue => issue.Code == OutlookIssueCodes.CalendarEventMissingRestored);
+    }
+
+    [Fact]
+    public async Task ProviderNotification_WithManualCalendarDeletion_UsesPolicyResolvedNotificationRecipients()
+    {
+        var hold = CreateHold(BookingHoldStatus.Confirmed, "evt-old");
+        var slot = CreateSlot();
+        var transaction = CreateTransaction();
+        var calendar = new StubCalendarGateway(existingEvent: null, createdEventId: "evt-new");
+        var notifications = new StubWorkflowNotificationAdapter();
+        var sut = CreateSut(
+            new StubHoldRepository(hold),
+            slot,
+            transaction,
+            calendar,
+            new StubOperationalIssueRepository(),
+            notifications);
+
+        var result = await sut.HandleProviderNotificationsAsync(
+            new CalendarProviderNotificationEnvelope
+            {
+                Value =
+                [
+                    new CalendarProviderNotificationItem
+                    {
+                        ChangeType = "deleted",
+                        ResourceData = new CalendarProviderResourceData { Id = "evt-old" }
+                    }
+                ]
+            },
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess);
+        Assert.NotNull(notifications.LastRequest);
+        Assert.Empty(notifications.LastRequest!.Recipients);
     }
 
     [Fact]
@@ -263,7 +300,8 @@ public sealed class BookingCalendarGovernanceTests
         BookingSlot slot,
         BookingTransaction transaction,
         StubCalendarGateway calendar,
-        StubOperationalIssueRepository issues)
+        StubOperationalIssueRepository issues,
+        IBookingWorkflowNotificationAdapter? notifications = null)
         => new(
             holds,
             new StubSlotRepository(slot),
@@ -271,7 +309,8 @@ public sealed class BookingCalendarGovernanceTests
             calendar,
             new HoldWindowFactory(),
             issues,
-            new StubUnitOfWork());
+            new StubUnitOfWork(),
+            notifications);
 
     private static BookingHold CreateHold(BookingHoldStatus status, string? providerEventId)
         => BookingHold.Rehydrate(
@@ -408,5 +447,18 @@ public sealed class BookingCalendarGovernanceTests
     private sealed class StubUnitOfWork : IUnitOfWork
     {
         public Task<int> SaveChangesAsync(CancellationToken ct = default) => Task.FromResult(1);
+    }
+
+    private sealed class StubWorkflowNotificationAdapter : IBookingWorkflowNotificationAdapter
+    {
+        public BookingWorkflowNotificationRequest? LastRequest { get; private set; }
+
+        public Task<BookingWorkflowNotificationOutcome> RequestAsync(
+            BookingWorkflowNotificationRequest request,
+            CancellationToken ct)
+        {
+            LastRequest = request;
+            return Task.FromResult(BookingWorkflowNotificationOutcome.Succeeded(request.LifecycleEventType, request.Recipients.Count));
+        }
     }
 }

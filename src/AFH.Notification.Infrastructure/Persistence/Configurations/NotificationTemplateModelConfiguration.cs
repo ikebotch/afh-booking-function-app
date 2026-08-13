@@ -158,6 +158,96 @@ public sealed class NotificationTemplateModelConfiguration : IEntityTypeConfigur
                 Operations should review this booking and reconcile the Outlook event.
 
                 This is an automated AFH booking notification.
+                """),
+            Template(
+                "10000000-0000-0000-0000-000000000007",
+                "calendar-event-corrected-adviser",
+                "Calendar event corrected - adviser",
+                "AFH Booking: Calendar Event Corrected",
+                """
+                A manual Outlook calendar change was detected and corrected.
+
+                Booking ID: {{bookingId}}
+                Transaction reference: {{transactionRef}}
+                Adviser: {{adviserName}}
+                When: {{when}}
+                Meeting type: {{meetingType}}
+                Provider event ID: {{providerEventId}}
+                Correction: {{correctionReason}}
+
+                No booking lifecycle event was created for this correction.
+                """),
+            Template(
+                "10000000-0000-0000-0000-000000000008",
+                "calendar-event-corrected-manager",
+                "Calendar event corrected - manager",
+                "AFH Booking: Calendar Event Corrected",
+                """
+                A manual Outlook calendar change was detected and corrected.
+
+                Booking ID: {{bookingId}}
+                Transaction reference: {{transactionRef}}
+                Adviser: {{adviserName}}
+                When: {{when}}
+                Meeting type: {{meetingType}}
+                Provider event ID: {{providerEventId}}
+                Correction: {{correctionReason}}
+
+                No booking lifecycle event was created for this correction.
+                """),
+            Template(
+                "10000000-0000-0000-0000-000000000009",
+                "calendar-event-correction-failed-adviser",
+                "Calendar event correction failed - adviser",
+                "AFH Booking: Calendar Reconciliation Required",
+                """
+                A manual Outlook calendar change was detected but could not be corrected automatically.
+
+                Booking ID: {{bookingId}}
+                Transaction reference: {{transactionRef}}
+                Adviser: {{adviserName}}
+                When: {{when}}
+                Meeting type: {{meetingType}}
+                Provider event ID: {{providerEventId}}
+                Reason: {{correctionReason}}
+
+                Operations should review this booking and reconcile the Outlook event.
+                """),
+            Template(
+                "10000000-0000-0000-0000-000000000010",
+                "calendar-event-correction-failed-manager",
+                "Calendar event correction failed - manager",
+                "AFH Booking: Calendar Reconciliation Required",
+                """
+                A manual Outlook calendar change was detected but could not be corrected automatically.
+
+                Booking ID: {{bookingId}}
+                Transaction reference: {{transactionRef}}
+                Adviser: {{adviserName}}
+                When: {{when}}
+                Meeting type: {{meetingType}}
+                Provider event ID: {{providerEventId}}
+                Reason: {{correctionReason}}
+
+                Operations should review this booking and reconcile the Outlook event.
+                """),
+            Template(
+                "10000000-0000-0000-0000-000000000011",
+                "calendar-event-correction-failed-contact-centre",
+                "Calendar event correction failed - contact centre",
+                "AFH Booking: Calendar Reconciliation Required",
+                """
+                A manual Outlook calendar change was detected but could not be corrected automatically.
+
+                Booking ID: {{bookingId}}
+                Transaction reference: {{transactionRef}}
+                Adviser: {{adviserName}}
+                When: {{when}}
+                Meeting type: {{meetingType}}
+                Provider event ID: {{providerEventId}}
+                Reason: {{correctionReason}}
+
+                Operations should review this booking and reconcile the Outlook event.
                 """));
     }
 

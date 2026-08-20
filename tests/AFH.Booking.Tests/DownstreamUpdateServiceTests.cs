@@ -33,7 +33,10 @@ public sealed class DownstreamUpdateServiceTests
         });
         await db.SaveChangesAsync();
 
-        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK));
+        var handler = new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"status":"success"}""")
+        });
         var sut = new DownstreamUpdateService(
             db,
             CreateHttpClientFactory(handler),
@@ -51,6 +54,9 @@ public sealed class DownstreamUpdateServiceTests
         Assert.Equal("Sent", row.Status);
         Assert.Equal(2, row.AttemptCount);
         Assert.Null(row.ErrorMessage);
+        Assert.Equal(200, row.ResponseStatusCode);
+        Assert.Equal("""{"status":"success"}""", row.ResponseBody);
+        Assert.NotNull(row.ResponseReceivedUtc);
     }
 
     [Fact]
@@ -99,7 +105,10 @@ public sealed class DownstreamUpdateServiceTests
         {
             capturedRequest = request;
             capturedBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
-            return new HttpResponseMessage(HttpStatusCode.OK);
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""{"status":"success"}""")
+            };
         });
 
         var sut = new DownstreamUpdateService(
@@ -147,6 +156,10 @@ public sealed class DownstreamUpdateServiceTests
         Assert.Equal("987654321", root.GetProperty("adviserId").GetString());
         Assert.Equal("Reason for reschedule if collected", root.GetProperty("notes").GetString());
         Assert.Equal("000123456", root.GetProperty("bookingReference").GetString());
+        var row = await db.DownstreamUpdates.SingleAsync();
+        Assert.Equal(200, row.ResponseStatusCode);
+        Assert.Equal("""{"status":"success"}""", row.ResponseBody);
+        Assert.NotNull(row.ResponseReceivedUtc);
     }
 
     [Fact]

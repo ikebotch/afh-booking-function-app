@@ -24,6 +24,8 @@ public sealed class DownstreamUpdateResponse
     public DateTime CreatedUtc { get; init; }
     public DateTime? ProcessedUtc { get; init; }
     public string? ErrorMessage { get; init; }
+    public int? ResponseStatusCode { get; init; }
+    public DateTime? ResponseReceivedUtc { get; init; }
 }
 
 public sealed class DownstreamUpdateReconciliationResponse
@@ -46,6 +48,8 @@ public sealed class DownstreamUpdateReconciliationItemResponse
     public int AttemptCount { get; init; }
     public DateTime? ProcessedUtc { get; init; }
     public string? ErrorMessage { get; init; }
+    public int? ResponseStatusCode { get; init; }
+    public DateTime? ResponseReceivedUtc { get; init; }
 }
 
 public sealed class AdviserProjectionSyncResult

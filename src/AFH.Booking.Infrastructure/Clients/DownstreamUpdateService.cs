@@ -105,7 +105,9 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 CurrentStatus = row.Status,
                 AttemptCount = row.AttemptCount,
                 ProcessedUtc = row.ProcessedUtc,
-                ErrorMessage = row.ErrorMessage
+                ErrorMessage = row.ErrorMessage,
+                ResponseStatusCode = row.ResponseStatusCode,
+                ResponseReceivedUtc = row.ResponseReceivedUtc
             });
         }
 
@@ -199,10 +201,16 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 "application/json");
 
             var response = await http.SendAsync(request, ct);
+            var responseBody = response.Content is null
+                ? null
+                : await response.Content.ReadAsStringAsync(ct);
             row.Status = response.IsSuccessStatusCode ? "Sent" : "Failed";
             row.ErrorMessage = response.IsSuccessStatusCode
                 ? null
                 : $"PartnerWorkflow:{DownstreamFailureClassifier.Classify(response.StatusCode)}:{(int)response.StatusCode}";
+            row.ResponseStatusCode = (int)response.StatusCode;
+            row.ResponseBody = TruncateResponseBody(responseBody);
+            row.ResponseReceivedUtc = DateTime.UtcNow;
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
             await TryWriteApplicationLogAsync(
@@ -227,6 +235,8 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                     Payload = outboundPayload,
                     Curl = BuildCurlPreview(updateUri, endpoint, idempotencyKey, outboundJson),
                     StatusCode = (int)response.StatusCode,
+                    ResponseBody = row.ResponseBody,
+                    row.ResponseReceivedUtc,
                     FailureCategory = response.IsSuccessStatusCode ? null : DownstreamFailureClassifier.Classify(response.StatusCode),
                     row.ErrorMessage
                 },
@@ -248,6 +258,9 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         {
             row.Status = "Failed";
             row.ErrorMessage = $"PartnerWorkflowException:{ex.GetType().Name}";
+            row.ResponseStatusCode = null;
+            row.ResponseBody = ex.Message;
+            row.ResponseReceivedUtc = DateTime.UtcNow;
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
             await TryWriteApplicationLogAsync(
@@ -534,6 +547,17 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                $"-d '{outboundJson.Replace("'", "'\\''", StringComparison.Ordinal)}'";
     }
 
+    private static string? TruncateResponseBody(string? responseBody)
+    {
+        if (string.IsNullOrEmpty(responseBody))
+            return responseBody;
+
+        const int maxLength = 16_000;
+        return responseBody.Length <= maxLength
+            ? responseBody
+            : responseBody[..maxLength];
+    }
+
     private static DownstreamUpdateResponse ToResponse(IReadOnlyList<DownstreamUpdateModel> rows)
     {
         if (rows.Count == 1)
@@ -549,7 +573,9 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
             Status = SummarizeStatus(rows),
             CreatedUtc = rows.Min(x => x.CreatedUtc),
             ProcessedUtc = rows.All(x => x.ProcessedUtc is not null) ? rows.Max(x => x.ProcessedUtc) : null,
-            ErrorMessage = string.Join("; ", rows.Where(x => !string.IsNullOrWhiteSpace(x.ErrorMessage)).Select(x => $"{x.PartnerKey ?? "unknown"}:{x.ErrorMessage}"))
+            ErrorMessage = string.Join("; ", rows.Where(x => !string.IsNullOrWhiteSpace(x.ErrorMessage)).Select(x => $"{x.PartnerKey ?? "unknown"}:{x.ErrorMessage}")),
+            ResponseStatusCode = rows.Count == 1 ? rows[0].ResponseStatusCode : null,
+            ResponseReceivedUtc = rows.All(x => x.ResponseReceivedUtc is not null) ? rows.Max(x => x.ResponseReceivedUtc) : null
         };
     }
 
@@ -564,7 +590,9 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
             Status = model.Status,
             CreatedUtc = model.CreatedUtc,
             ProcessedUtc = model.ProcessedUtc,
-            ErrorMessage = model.ErrorMessage
+            ErrorMessage = model.ErrorMessage,
+            ResponseStatusCode = model.ResponseStatusCode,
+            ResponseReceivedUtc = model.ResponseReceivedUtc
         };
     }
 

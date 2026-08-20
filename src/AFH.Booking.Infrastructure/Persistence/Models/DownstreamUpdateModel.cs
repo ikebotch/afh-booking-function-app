@@ -11,6 +11,9 @@ public sealed class DownstreamUpdateModel
     public string Status { get; set; } = "Pending";
     public int AttemptCount { get; set; }
     public string? ErrorMessage { get; set; }
+    public int? ResponseStatusCode { get; set; }
+    public string? ResponseBody { get; set; }
+    public DateTime? ResponseReceivedUtc { get; set; }
     public DateTime CreatedUtc { get; set; }
     public DateTime? ProcessedUtc { get; set; }
 }

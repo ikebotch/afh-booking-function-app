@@ -30,6 +30,24 @@ namespace AFH.Booking.Infrastructure.Migrations
                 maxLength: 100,
                 nullable: true);
 
+            migrationBuilder.AddColumn<string>(
+                name: "ResponseBody",
+                table: "DownstreamUpdates",
+                type: "nvarchar(max)",
+                nullable: true);
+
+            migrationBuilder.AddColumn<DateTime>(
+                name: "ResponseReceivedUtc",
+                table: "DownstreamUpdates",
+                type: "datetime2",
+                nullable: true);
+
+            migrationBuilder.AddColumn<int>(
+                name: "ResponseStatusCode",
+                table: "DownstreamUpdates",
+                type: "int",
+                nullable: true);
+
             migrationBuilder.AddPrimaryKey(
                 name: "PK_PartnerWorkflowRules",
                 table: "PartnerWorkflowRules",
@@ -121,6 +139,18 @@ namespace AFH.Booking.Infrastructure.Migrations
 
             migrationBuilder.DropColumn(
                 name: "PartnerKey",
+                table: "DownstreamUpdates");
+
+            migrationBuilder.DropColumn(
+                name: "ResponseBody",
+                table: "DownstreamUpdates");
+
+            migrationBuilder.DropColumn(
+                name: "ResponseReceivedUtc",
+                table: "DownstreamUpdates");
+
+            migrationBuilder.DropColumn(
+                name: "ResponseStatusCode",
                 table: "DownstreamUpdates");
 
             migrationBuilder.AddPrimaryKey(

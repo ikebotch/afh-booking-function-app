@@ -1284,6 +1284,15 @@ namespace AFH.Booking.Infrastructure.Migrations
                     b.Property<DateTime?>("ProcessedUtc")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("ResponseBody")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ResponseReceivedUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("ResponseStatusCode")
+                        .HasColumnType("int");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)

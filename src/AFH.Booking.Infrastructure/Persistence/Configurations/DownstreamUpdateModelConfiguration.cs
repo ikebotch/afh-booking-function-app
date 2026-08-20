@@ -19,6 +19,7 @@ public sealed class DownstreamUpdateModelConfiguration : IEntityTypeConfiguratio
         b.Property(x => x.PayloadJson).HasColumnType("nvarchar(max)").IsRequired();
         b.Property(x => x.Status).HasMaxLength(32).IsRequired();
         b.Property(x => x.ErrorMessage).HasMaxLength(2048);
+        b.Property(x => x.ResponseBody).HasColumnType("nvarchar(max)");
 
         b.HasIndex(x => new { x.Status, x.CreatedUtc });
         b.HasIndex(x => x.BookingId);

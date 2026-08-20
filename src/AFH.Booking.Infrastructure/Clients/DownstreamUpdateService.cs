@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
+using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Models.Clients;
 using AFH.Booking.Domain.Options;
@@ -15,18 +17,18 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
 {
     private readonly BookingDbContext _db;
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly XPlanOptions _xPlanOptions;
+    private readonly PartnerWorkflowOptions _partnerWorkflowOptions;
     private readonly ILogger<DownstreamUpdateService> _logger;
 
     public DownstreamUpdateService(
         BookingDbContext db,
         IHttpClientFactory httpClientFactory,
-        IOptions<XPlanOptions> xPlanOptions,
+        IOptions<PartnerWorkflowOptions> partnerWorkflowOptions,
         ILogger<DownstreamUpdateService> logger)
     {
         _db = db;
         _httpClientFactory = httpClientFactory;
-        _xPlanOptions = xPlanOptions.Value;
+        _partnerWorkflowOptions = partnerWorkflowOptions.Value;
         _logger = logger;
     }
 
@@ -108,7 +110,7 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         string? correlationId,
         CancellationToken ct)
     {
-        if (!_xPlanOptions.Enabled || string.IsNullOrWhiteSpace(_xPlanOptions.BaseUrl))
+        if (!_partnerWorkflowOptions.Enabled || !TryResolveUpdateUri(out var updateUri))
         {
             row.Status = "ConfiguredOff";
             row.ProcessedUtc = DateTime.UtcNow;
@@ -126,32 +128,27 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 row.AttemptCount,
                 correlationId);
 
-            var http = _httpClientFactory.CreateClient("xplan-updates");
-            http.BaseAddress = new Uri(_xPlanOptions.BaseUrl, UriKind.Absolute);
-            if (!string.IsNullOrWhiteSpace(_xPlanOptions.ApiKey))
-                http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _xPlanOptions.ApiKey);
+            var http = _httpClientFactory.CreateClient("partner-workflow-updates");
+            using var request = new HttpRequestMessage(HttpMethod.Post, updateUri);
+            AddApiKeyHeader(request);
+            AddIdempotencyHeader(request, row);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(BuildPayload(row)),
+                Encoding.UTF8,
+                "application/json");
 
-            var payload = new
-            {
-                bookingId = row.BookingId,
-                changeType = row.ChangeType,
-                transactionRef = row.TransactionRef,
-                payload = row.PayloadJson,
-                occurredUtc = DateTime.UtcNow
-            };
-
-            var response = await http.PostAsJsonAsync("/api/booking-updates", payload, ct);
+            var response = await http.SendAsync(request, ct);
             row.Status = response.IsSuccessStatusCode ? "Sent" : "Failed";
             row.ErrorMessage = response.IsSuccessStatusCode
                 ? null
-                : $"XPlan:{DownstreamFailureClassifier.Classify(response.StatusCode)}:{(int)response.StatusCode}";
+                : $"PartnerWorkflow:{DownstreamFailureClassifier.Classify(response.StatusCode)}:{(int)response.StatusCode}";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
 
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning(
-                    "Downstream booking change failed. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} StatusCode={StatusCode} FailureCategory={FailureCategory} CorrelationId={CorrelationId}",
+                    "Partner workflow booking change failed. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} StatusCode={StatusCode} FailureCategory={FailureCategory} CorrelationId={CorrelationId}",
                     row.Id,
                     row.BookingId,
                     row.ChangeType,
@@ -163,13 +160,13 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         catch (Exception ex)
         {
             row.Status = "Failed";
-            row.ErrorMessage = $"XPlanException:{ex.GetType().Name}";
+            row.ErrorMessage = $"PartnerWorkflowException:{ex.GetType().Name}";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
 
             _logger.LogWarning(
                 ex,
-                "Downstream booking change threw. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} AttemptCount={AttemptCount} CorrelationId={CorrelationId}",
+                "Partner workflow booking change threw. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} AttemptCount={AttemptCount} CorrelationId={CorrelationId}",
                 row.Id,
                 row.BookingId,
                 row.ChangeType,
@@ -177,6 +174,143 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 correlationId);
         }
     }
+
+    private bool TryResolveUpdateUri(out Uri updateUri)
+    {
+        if (!string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BookingUpdatesUrl) &&
+            Uri.TryCreate(_partnerWorkflowOptions.BookingUpdatesUrl.Trim(), UriKind.Absolute, out updateUri!))
+        {
+            return true;
+        }
+
+        updateUri = null!;
+        if (string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BaseUrl))
+            return false;
+
+        var baseUri = _partnerWorkflowOptions.BaseUrl.TrimEnd('/') + "/";
+        if (!Uri.TryCreate(baseUri, UriKind.Absolute, out var parsedBaseUri))
+            return false;
+
+        var path = string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BookingUpdatesPath)
+            ? "/api/booking-updates"
+            : _partnerWorkflowOptions.BookingUpdatesPath.Trim();
+
+        updateUri = new Uri(parsedBaseUri, path.TrimStart('/'));
+        return true;
+    }
+
+    private void AddApiKeyHeader(HttpRequestMessage request)
+    {
+        if (string.IsNullOrWhiteSpace(_partnerWorkflowOptions.ApiKey))
+            return;
+
+        var headerName = string.IsNullOrWhiteSpace(_partnerWorkflowOptions.ApiKeyHeaderName)
+            ? "Authorization"
+            : _partnerWorkflowOptions.ApiKeyHeaderName.Trim();
+
+        if (headerName.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _partnerWorkflowOptions.ApiKey.Trim());
+            return;
+        }
+
+        request.Headers.TryAddWithoutValidation(headerName, _partnerWorkflowOptions.ApiKey.Trim());
+    }
+
+    private void AddIdempotencyHeader(HttpRequestMessage request, DownstreamUpdateModel row)
+    {
+        var headerName = string.IsNullOrWhiteSpace(_partnerWorkflowOptions.IdempotencyKeyHeaderName)
+            ? "X-Idempotency-Key"
+            : _partnerWorkflowOptions.IdempotencyKeyHeaderName.Trim();
+
+        request.Headers.TryAddWithoutValidation(headerName, BuildIdempotencyKey(row));
+    }
+
+    private object BuildPayload(DownstreamUpdateModel row)
+        => IsPartnerWorkflowPayload()
+            ? BuildPartnerWorkflowPayload(row)
+            : new
+            {
+                bookingId = row.BookingId,
+                changeType = row.ChangeType,
+                transactionRef = row.TransactionRef,
+                payload = row.PayloadJson,
+                occurredUtc = DateTime.UtcNow
+            };
+
+    private bool IsPartnerWorkflowPayload()
+        => _partnerWorkflowOptions.PayloadFormat.Equals("PartnerWorkflow", StringComparison.OrdinalIgnoreCase);
+
+    private static object BuildPartnerWorkflowPayload(DownstreamUpdateModel row)
+    {
+        using var payload = TryParsePayload(row.PayloadJson);
+        var root = payload?.RootElement;
+
+        return new
+        {
+            transactionId = row.TransactionRef,
+            status = MapPartnerStatus(row.ChangeType),
+            dateTime = GetString(root, "newStartUtc", "startUtc", "dateTime", "cancelledUtc"),
+            meetingType = GetString(root, "meetingType"),
+            adviserId = GetString(root, "newAdviserId", "adviserId"),
+            notes = GetString(root, "reasonDetail", "reasonNotes", "notes", "reasonCode"),
+            bookingReference = GetString(root, "bookingReference") ?? row.TransactionRef
+        };
+    }
+
+    private static JsonDocument? TryParsePayload(string payloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(payloadJson))
+            return null;
+
+        try
+        {
+            return JsonDocument.Parse(payloadJson);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? GetString(JsonElement? root, params string[] names)
+    {
+        if (root is null || root.Value.ValueKind != JsonValueKind.Object)
+            return null;
+
+        foreach (var name in names)
+        {
+            if (!root.Value.TryGetProperty(name, out var value))
+                continue;
+
+            if (value.ValueKind == JsonValueKind.String)
+                return value.GetString();
+
+            if (value.ValueKind is JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False)
+                return value.ToString();
+        }
+
+        return null;
+    }
+
+    private static string MapPartnerStatus(string changeType)
+        => changeType.Trim().ToLowerInvariant() switch
+        {
+            "cancel" or "cancelled" or "canceled" => "Cancelled",
+            "rearrange" or "rearranged" or "reschedule" or "rescheduled" => "Rescheduled",
+            _ => changeType
+        };
+
+    private static string BuildIdempotencyKey(DownstreamUpdateModel row)
+        => $"{MapIdempotencyPrefix(row.ChangeType)}:{row.BookingId}";
+
+    private static string MapIdempotencyPrefix(string changeType)
+        => changeType.Trim().ToLowerInvariant() switch
+        {
+            "cancel" or "cancelled" or "canceled" => "booking-cancelled",
+            "rearrange" or "rearranged" or "reschedule" or "rescheduled" => "booking-rescheduled",
+            _ => $"booking-{changeType.Trim().ToLowerInvariant()}"
+        };
 
     private static DownstreamUpdateResponse ToResponse(DownstreamUpdateModel model)
     {

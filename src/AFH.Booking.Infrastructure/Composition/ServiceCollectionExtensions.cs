@@ -43,6 +43,7 @@ public static class ServiceCollectionExtensions
         services.Configure<LeadsOptions>(config.GetSection(LeadsOptions.SectionName));
         services.Configure<AcsOptions>(config.GetSection(AcsOptions.SectionName));
         services.Configure<XPlanOptions>(config.GetSection(XPlanOptions.SectionName));
+        services.Configure<PartnerWorkflowOptions>(config.GetSection(PartnerWorkflowOptions.SectionName));
         services.Configure<AzureAdOptions>(config.GetSection(AzureAdOptions.SectionName));
         services.Configure<LocationServiceOptions>(config.GetSection(LocationServiceOptions.SectionName));
         services.Configure<CalendarSubscriptionOptions>(config.GetSection(CalendarSubscriptionOptions.SectionName));

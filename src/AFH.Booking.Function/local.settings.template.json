@@ -110,6 +110,14 @@
     "InternalApiAuth:AllowAnonymousInDevelopment": "true",
     "XPlan:Enabled": "false",
     "XPlan:BaseUrl": "https://xplan.example",
-    "XPlan:ApiKey": "<xplan-api-key>"
+    "XPlan:ApiKey": "<xplan-api-key>",
+    "PartnerWorkflow:Enabled": "false",
+    "PartnerWorkflow:BookingUpdatesUrl": "",
+    "PartnerWorkflow:BaseUrl": "",
+    "PartnerWorkflow:BookingUpdatesPath": "/api/booking-updates",
+    "PartnerWorkflow:ApiKey": "<partner-api-key>",
+    "PartnerWorkflow:ApiKeyHeaderName": "Authorization",
+    "PartnerWorkflow:IdempotencyKeyHeaderName": "X-Idempotency-Key",
+    "PartnerWorkflow:PayloadFormat": "LegacyWrapper"
   }
 }

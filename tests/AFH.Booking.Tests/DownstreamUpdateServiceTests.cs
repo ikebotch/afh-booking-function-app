@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using System.Net;
+using System.Text.Json;
 
 namespace AFH.Booking.Tests;
 
@@ -34,7 +35,7 @@ public sealed class DownstreamUpdateServiceTests
         var sut = new DownstreamUpdateService(
             db,
             CreateHttpClientFactory(handler),
-            Options.Create(new XPlanOptions { Enabled = true, BaseUrl = "https://xplan.example", ApiKey = "token" }),
+            Options.Create(new PartnerWorkflowOptions { Enabled = true, BaseUrl = "https://partner.example", ApiKey = "token" }),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.ReconcileAsync(10, 5, includePending: false, correlationId: "cid-1", CancellationToken.None);
@@ -67,7 +68,7 @@ public sealed class DownstreamUpdateServiceTests
         var sut = new DownstreamUpdateService(
             db,
             CreateHttpClientFactory(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
-            Options.Create(new XPlanOptions { Enabled = true, BaseUrl = "https://xplan.example" }),
+            Options.Create(new PartnerWorkflowOptions { Enabled = true, BaseUrl = "https://partner.example" }),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.ReconcileAsync(10, 5, includePending: true, correlationId: null, CancellationToken.None);
@@ -76,6 +77,67 @@ public sealed class DownstreamUpdateServiceTests
         var row = await db.DownstreamUpdates.SingleAsync();
         Assert.Equal("Pending", row.Status);
         Assert.Equal(1, row.AttemptCount);
+    }
+
+    [Fact]
+    public async Task PublishBookingChangeAsync_WhenPartnerWorkflowConfigured_SendsPartnerPayloadAndHeaders()
+    {
+        await using var db = CreateDb();
+        HttpRequestMessage? capturedRequest = null;
+        string? capturedBody = null;
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            capturedRequest = request;
+            capturedBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+            return new HttpResponseMessage(HttpStatusCode.OK);
+        });
+
+        var sut = new DownstreamUpdateService(
+            db,
+            CreateHttpClientFactory(handler),
+            Options.Create(new PartnerWorkflowOptions
+            {
+                Enabled = true,
+                BookingUpdatesUrl = "https://hooks.zapier.com/hooks/catch/2090738/44r9dzl",
+                ApiKey = "test",
+                ApiKeyHeaderName = "X-Api-Key",
+                PayloadFormat = "PartnerWorkflow"
+            }),
+            NullLogger<DownstreamUpdateService>.Instance);
+
+        var result = await sut.PublishBookingChangeAsync(
+            bookingId: "32fa33614e1a49eeb6cd543d47da8afa",
+            changeType: "Rearrange",
+            transactionRef: "000123456",
+            payloadJson: """
+                {
+                  "newStartUtc": "2026-08-27T14:00:00Z",
+                  "meetingType": "Telephone",
+                  "newAdviserId": "987654321",
+                  "reasonDetail": "Reason for reschedule if collected",
+                  "bookingReference": "000123456"
+                }
+                """,
+            CancellationToken.None);
+
+        Assert.Equal("Sent", result.Status);
+        Assert.NotNull(capturedRequest);
+        Assert.Equal("https://hooks.zapier.com/hooks/catch/2090738/44r9dzl", capturedRequest!.RequestUri!.ToString());
+        Assert.Equal("test", capturedRequest.Headers.GetValues("X-Api-Key").Single());
+        Assert.Equal(
+            "booking-rescheduled:32fa33614e1a49eeb6cd543d47da8afa",
+            capturedRequest.Headers.GetValues("X-Idempotency-Key").Single());
+
+        Assert.NotNull(capturedBody);
+        using var body = JsonDocument.Parse(capturedBody!);
+        var root = body.RootElement;
+        Assert.Equal("000123456", root.GetProperty("transactionId").GetString());
+        Assert.Equal("Rescheduled", root.GetProperty("status").GetString());
+        Assert.Equal("2026-08-27T14:00:00Z", root.GetProperty("dateTime").GetString());
+        Assert.Equal("Telephone", root.GetProperty("meetingType").GetString());
+        Assert.Equal("987654321", root.GetProperty("adviserId").GetString());
+        Assert.Equal("Reason for reschedule if collected", root.GetProperty("notes").GetString());
+        Assert.Equal("000123456", root.GetProperty("bookingReference").GetString());
     }
 
     private static BookingDbContext CreateDb()

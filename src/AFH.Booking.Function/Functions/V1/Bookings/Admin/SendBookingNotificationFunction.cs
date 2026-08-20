@@ -1,9 +1,9 @@
 using AFH.Booking.Application.Abstractions.Notifications;
-using AFH.Booking.Contracts.V1.Requests;
 using AFH.Booking.Contracts.V1.Responses;
 using AFH.Booking.Function.Http;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using BookingNotificationSubmitRequest = AFH.Booking.Contracts.V1.Requests.BookingNotificationRequest;
 
 namespace AFH.Booking.Function.Functions.V1.Bookings;
 
@@ -22,7 +22,7 @@ public sealed class SendBookingNotificationFunction
         "Notifications",
         "Send booking notification",
         Description = "Queues a booking lifecycle notification for an existing booking. Supported eventType values are Booked, BookingConfirmed, Rearranged, BookingRescheduled, Cancelled, BookingCancelled, HoldCreated and BookingHoldCreated. The notification payload is rebuilt from persisted booking, slot, transaction and client data, including the standard booking notification variables shown on the generic notification request endpoint.",
-        RequestBodyType = typeof(BookingNotificationRequest),
+        RequestBodyType = typeof(BookingNotificationSubmitRequest),
         ResponseType = typeof(NotificationDispatchResponse),
         RequestExampleJson = """
         {
@@ -56,7 +56,7 @@ public sealed class SendBookingNotificationFunction
         if (string.IsNullOrWhiteSpace(bookingId))
             return await req.ProblemAsync(HttpStatusCode.BadRequest, "bookingId is required.", ct, "Validation");
 
-        var body = await req.ReadJsonAsync<BookingNotificationRequest>(ct);
+        var body = await req.ReadJsonAsync<BookingNotificationSubmitRequest>(ct);
         var eventType = string.IsNullOrWhiteSpace(body?.EventType) ? string.Empty : body!.EventType.Trim();
 
         var response = await _notifications.SendAsync(

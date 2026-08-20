@@ -37,7 +37,7 @@ public sealed class DownstreamUpdateServiceTests
         var sut = new DownstreamUpdateService(
             db,
             CreateHttpClientFactory(handler),
-            Options.Create(new PartnerWorkflowOptions { Enabled = true, BaseUrl = "https://partner.example", ApiKey = "token" }),
+            Options.Create(new PartnerWorkflowOptions { Enabled = true }),
             new PartnerWorkflowPolicyProvider(db),
             NoopApplicationLogSink.Instance,
             Options.Create(new ApplicationLoggingOptions()),
@@ -74,7 +74,7 @@ public sealed class DownstreamUpdateServiceTests
         var sut = new DownstreamUpdateService(
             db,
             CreateHttpClientFactory(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
-            Options.Create(new PartnerWorkflowOptions { Enabled = true, BaseUrl = "https://partner.example" }),
+            Options.Create(new PartnerWorkflowOptions { Enabled = true }),
             new PartnerWorkflowPolicyProvider(db),
             NoopApplicationLogSink.Instance,
             Options.Create(new ApplicationLoggingOptions()),
@@ -107,11 +107,7 @@ public sealed class DownstreamUpdateServiceTests
             CreateHttpClientFactory(handler),
             Options.Create(new PartnerWorkflowOptions
             {
-                Enabled = true,
-                BookingUpdatesUrl = "https://hooks.zapier.com/hooks/catch/2090738/44r9dzl",
-                ApiKey = "test",
-                ApiKeyHeaderName = "X-Api-Key",
-                PayloadFormat = "PartnerWorkflow"
+                Enabled = true
             }),
             new PartnerWorkflowPolicyProvider(db),
             NoopApplicationLogSink.Instance,
@@ -168,8 +164,7 @@ public sealed class DownstreamUpdateServiceTests
             })),
             Options.Create(new PartnerWorkflowOptions
             {
-                Enabled = true,
-                BookingUpdatesUrl = "https://partner.example/updates"
+                Enabled = true
             }),
             new PartnerWorkflowPolicyProvider(db),
             NoopApplicationLogSink.Instance,
@@ -205,9 +200,7 @@ public sealed class DownstreamUpdateServiceTests
             })),
             Options.Create(new PartnerWorkflowOptions
             {
-                Enabled = true,
-                BookingUpdatesUrl = "https://partner.example/updates",
-                PayloadFormat = "PartnerWorkflow"
+                Enabled = true
             }),
             new PartnerWorkflowPolicyProvider(db),
             NoopApplicationLogSink.Instance,
@@ -237,6 +230,66 @@ public sealed class DownstreamUpdateServiceTests
         Assert.Equal("B-1", body.RootElement.GetProperty("bookingReference").GetString());
     }
 
+    [Fact]
+    public async Task PublishBookingChangeAsync_WhenMultiplePartnersConfigured_CreatesOneUpdatePerPartner()
+    {
+        await using var db = CreateDb();
+        await EnablePartnerWorkflowAsync(db, "Cancel");
+        db.PartnerWorkflowEndpoints.Add(new PartnerWorkflowEndpointModel
+        {
+            PartnerKey = "Second",
+            DisplayName = "Second Partner",
+            Enabled = true,
+            BookingUpdatesUrl = "https://example.test/second",
+            ApiKey = "second-key",
+            ApiKeyHeaderName = "X-Api-Key",
+            IdempotencyKeyHeaderName = "X-Idempotency-Key",
+            PayloadFormat = "PartnerWorkflow",
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+        db.PartnerWorkflowRules.Add(new PartnerWorkflowRuleModel
+        {
+            ChangeType = "Cancel",
+            PartnerKey = "Second",
+            Enabled = true,
+            CreatedUtc = DateTime.UtcNow,
+            UpdatedUtc = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var requestUris = new List<string>();
+        var sut = new DownstreamUpdateService(
+            db,
+            CreateHttpClientFactory(new StubHttpMessageHandler(request =>
+            {
+                requestUris.Add(request.RequestUri!.ToString());
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            })),
+            Options.Create(new PartnerWorkflowOptions
+            {
+                Enabled = true
+            }),
+            new PartnerWorkflowPolicyProvider(db),
+            NoopApplicationLogSink.Instance,
+            Options.Create(new ApplicationLoggingOptions()),
+            NullLogger<DownstreamUpdateService>.Instance);
+
+        var result = await sut.PublishBookingChangeAsync(
+            bookingId: "booking-1",
+            changeType: "Cancel",
+            transactionRef: "TRX-1",
+            payloadJson: "{}",
+            CancellationToken.None);
+
+        Assert.Equal("Sent", result.Status);
+        Assert.Equal(2, requestUris.Count);
+        Assert.Contains("https://hooks.zapier.com/hooks/catch/2090738/44r9dzl", requestUris);
+        Assert.Contains("https://example.test/second", requestUris);
+        var rows = await db.DownstreamUpdates.OrderBy(x => x.PartnerKey).ToListAsync();
+        Assert.Equal(["Default", "Second"], rows.Select(x => x.PartnerKey!).ToArray());
+        Assert.All(rows, row => Assert.Equal("Sent", row.Status));
+    }
+
     private static BookingDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<BookingDbContext>()
@@ -248,11 +301,29 @@ public sealed class DownstreamUpdateServiceTests
 
     private static async Task EnablePartnerWorkflowAsync(BookingDbContext db, params string[] changeTypes)
     {
+        if (!await db.PartnerWorkflowEndpoints.AnyAsync(x => x.PartnerKey == "Default"))
+        {
+            db.PartnerWorkflowEndpoints.Add(new PartnerWorkflowEndpointModel
+            {
+                PartnerKey = "Default",
+                DisplayName = "Default Partner",
+                Enabled = true,
+                BookingUpdatesUrl = "https://hooks.zapier.com/hooks/catch/2090738/44r9dzl",
+                ApiKey = "test",
+                ApiKeyHeaderName = "X-Api-Key",
+                IdempotencyKeyHeaderName = "X-Idempotency-Key",
+                PayloadFormat = "PartnerWorkflow",
+                CreatedUtc = DateTime.UtcNow,
+                UpdatedUtc = DateTime.UtcNow
+            });
+        }
+
         foreach (var changeType in changeTypes)
         {
             db.PartnerWorkflowRules.Add(new PartnerWorkflowRuleModel
             {
                 ChangeType = PartnerWorkflowPolicyProvider.NormalizeChangeType(changeType),
+                PartnerKey = "Default",
                 Enabled = true,
                 CreatedUtc = DateTime.UtcNow,
                 UpdatedUtc = DateTime.UtcNow

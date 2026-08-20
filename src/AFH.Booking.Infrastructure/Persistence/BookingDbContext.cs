@@ -30,6 +30,7 @@ public sealed class BookingDbContext : DbContext
     public DbSet<IntegrationOperationAuditModel> IntegrationOperationAudits => Set<IntegrationOperationAuditModel>();
     public DbSet<ApplicationLogModel> ApplicationLogs => Set<ApplicationLogModel>();
     public DbSet<FeatureFlagModel> FeatureFlags => Set<FeatureFlagModel>();
+    public DbSet<PartnerWorkflowEndpointModel> PartnerWorkflowEndpoints => Set<PartnerWorkflowEndpointModel>();
     public DbSet<PartnerWorkflowRuleModel> PartnerWorkflowRules => Set<PartnerWorkflowRuleModel>();
     public DbSet<BookingReferenceAllocationModel> BookingReferenceAllocations => Set<BookingReferenceAllocationModel>();
     public DbSet<ApprovalRequestReferenceAllocationModel> ApprovalRequestReferenceAllocations => Set<ApprovalRequestReferenceAllocationModel>();

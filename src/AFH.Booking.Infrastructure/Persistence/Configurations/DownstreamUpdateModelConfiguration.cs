@@ -14,6 +14,7 @@ public sealed class DownstreamUpdateModelConfiguration : IEntityTypeConfiguratio
         b.Property(x => x.Id).HasMaxLength(64).IsRequired();
         b.Property(x => x.BookingId).HasMaxLength(64).IsRequired();
         b.Property(x => x.ChangeType).HasMaxLength(64).IsRequired();
+        b.Property(x => x.PartnerKey).HasMaxLength(100);
         b.Property(x => x.TransactionRef).HasMaxLength(256).IsRequired();
         b.Property(x => x.PayloadJson).HasColumnType("nvarchar(max)").IsRequired();
         b.Property(x => x.Status).HasMaxLength(32).IsRequired();
@@ -21,5 +22,6 @@ public sealed class DownstreamUpdateModelConfiguration : IEntityTypeConfiguratio
 
         b.HasIndex(x => new { x.Status, x.CreatedUtc });
         b.HasIndex(x => x.BookingId);
+        b.HasIndex(x => x.PartnerKey);
     }
 }

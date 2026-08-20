@@ -19,6 +19,7 @@ public sealed class DownstreamUpdateResponse
     public string UpdateId { get; init; } = default!;
     public string BookingId { get; init; } = default!;
     public string ChangeType { get; init; } = default!;
+    public string? PartnerKey { get; init; }
     public string Status { get; init; } = default!;
     public DateTime CreatedUtc { get; init; }
     public DateTime? ProcessedUtc { get; init; }
@@ -39,6 +40,7 @@ public sealed class DownstreamUpdateReconciliationItemResponse
     public string UpdateId { get; init; } = default!;
     public string BookingId { get; init; } = default!;
     public string ChangeType { get; init; } = default!;
+    public string? PartnerKey { get; init; }
     public string PreviousStatus { get; init; } = default!;
     public string CurrentStatus { get; init; } = default!;
     public int AttemptCount { get; init; }

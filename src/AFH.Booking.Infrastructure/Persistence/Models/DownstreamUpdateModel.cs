@@ -5,6 +5,7 @@ public sealed class DownstreamUpdateModel
     public string Id { get; set; } = default!;
     public string BookingId { get; set; } = default!;
     public string ChangeType { get; set; } = default!;
+    public string? PartnerKey { get; set; }
     public string TransactionRef { get; set; } = default!;
     public string PayloadJson { get; set; } = default!;
     public string Status { get; set; } = "Pending";

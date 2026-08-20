@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Clients;
@@ -49,24 +48,28 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         string payloadJson,
         CancellationToken ct)
     {
-        var row = new DownstreamUpdateModel
-        {
-            Id = Guid.NewGuid().ToString("N"),
-            BookingId = bookingId,
-            ChangeType = changeType,
-            TransactionRef = transactionRef,
-            PayloadJson = payloadJson,
-            Status = "Pending",
-            AttemptCount = 1,
-            CreatedUtc = DateTime.UtcNow
-        };
+        var policies = await _policyProvider.ListAsync(changeType, ct);
+        var rows = policies.Select(policy => new DownstreamUpdateModel
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                BookingId = bookingId,
+                ChangeType = policy.NormalizedChangeType,
+                PartnerKey = policy.PartnerKey ?? policy.Endpoint?.PartnerKey,
+                TransactionRef = transactionRef,
+                PayloadJson = payloadJson,
+                Status = "Pending",
+                AttemptCount = 1,
+                CreatedUtc = DateTime.UtcNow
+            })
+            .ToList();
 
-        _db.DownstreamUpdates.Add(row);
+        _db.DownstreamUpdates.AddRange(rows);
         await _db.SaveChangesAsync(ct);
 
-        await DispatchAsync(row, correlationId: null, ct);
+        for (var i = 0; i < rows.Count; i++)
+            await DispatchAsync(rows[i], policies[i], correlationId: null, ct);
 
-        return ToResponse(row);
+        return ToResponse(rows);
     }
 
     public async Task<DownstreamUpdateReconciliationResponse> ReconcileAsync(
@@ -97,6 +100,7 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 UpdateId = row.Id,
                 BookingId = row.BookingId,
                 ChangeType = row.ChangeType,
+                PartnerKey = row.PartnerKey,
                 PreviousStatus = previousStatus,
                 CurrentStatus = row.Status,
                 AttemptCount = row.AttemptCount,
@@ -120,46 +124,23 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         string? correlationId,
         CancellationToken ct)
     {
-        var hasUpdateUri = TryResolveUpdateUri(out var updateUri);
-        if (!_partnerWorkflowOptions.Enabled || !hasUpdateUri)
-        {
-            _logger.LogInformation(
-                "Partner workflow booking change configured off. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} Enabled={Enabled} HasBookingUpdatesUrl={HasBookingUpdatesUrl} HasBaseUrl={HasBaseUrl} HasResolvedUpdateUri={HasResolvedUpdateUri} CorrelationId={CorrelationId}",
-                row.Id,
-                row.BookingId,
-                row.ChangeType,
-                _partnerWorkflowOptions.Enabled,
-                !string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BookingUpdatesUrl),
-                !string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BaseUrl),
-                hasUpdateUri,
-                correlationId);
+        var policy = await _policyProvider.GetAsync(row.ChangeType, row.PartnerKey, ct);
+        await DispatchAsync(row, policy, correlationId, ct);
+    }
 
-            row.Status = "ConfiguredOff";
-            row.ProcessedUtc = DateTime.UtcNow;
-            await _db.SaveChangesAsync(ct);
-            await TryWriteApplicationLogAsync(
-                row,
-                correlationId,
-                level: "Information",
-                eventType: "PartnerWorkflowConfiguredOff",
-                result: "ConfiguredOff",
-                message: "Partner workflow booking change configured off.",
-                payload: new
-                {
-                    row.Id,
-                    row.BookingId,
-                    row.ChangeType,
-                    row.TransactionRef,
-                    _partnerWorkflowOptions.Enabled,
-                    HasBookingUpdatesUrl = !string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BookingUpdatesUrl),
-                    HasBaseUrl = !string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BaseUrl),
-                    HasResolvedUpdateUri = hasUpdateUri
-                },
-                ct);
+    private async Task DispatchAsync(
+        DownstreamUpdateModel row,
+        PartnerWorkflowSendPolicy policy,
+        string? correlationId,
+        CancellationToken ct)
+    {
+        if (!_partnerWorkflowOptions.Enabled)
+        {
+            await MarkConfiguredOffAsync(row, correlationId, "PartnerWorkflow:MasterDisabled", policy, endpoint: null, hasUpdateUri: false, ct);
             return;
         }
 
-        if (!await _policyProvider.IsEnabledAsync(row.ChangeType, ct))
+        if (!policy.WorkflowEnabled)
         {
             row.Status = "Skipped";
             row.ErrorMessage = "PartnerWorkflow:ChangeTypeDisabled";
@@ -177,10 +158,20 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                     row.Id,
                     row.BookingId,
                     row.ChangeType,
+                    row.PartnerKey,
                     row.TransactionRef,
                     row.ErrorMessage
                 },
                 ct);
+            return;
+        }
+
+        var endpoint = policy.Endpoint;
+        Uri? updateUri = null;
+        var hasUpdateUri = endpoint is not null && TryResolveUpdateUri(endpoint, out updateUri);
+        if (endpoint is null || !hasUpdateUri)
+        {
+            await MarkConfiguredOffAsync(row, correlationId, "PartnerWorkflow:EndpointMissingOrInvalid", policy, endpoint, hasUpdateUri, ct);
             return;
         }
 
@@ -194,12 +185,16 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 row.AttemptCount,
                 correlationId);
 
+            row.PartnerKey ??= endpoint.PartnerKey;
             var http = _httpClientFactory.CreateClient("partner-workflow-updates");
             using var request = new HttpRequestMessage(HttpMethod.Post, updateUri);
-            AddApiKeyHeader(request);
-            AddIdempotencyHeader(request, row);
+            AddApiKeyHeader(request, endpoint);
+            var idempotencyKey = BuildIdempotencyKey(row);
+            AddIdempotencyHeader(request, endpoint, idempotencyKey);
+            var outboundPayload = BuildPayload(row, endpoint);
+            var outboundJson = JsonSerializer.Serialize(outboundPayload);
             request.Content = new StringContent(
-                JsonSerializer.Serialize(BuildPayload(row)),
+                outboundJson,
                 Encoding.UTF8,
                 "application/json");
 
@@ -224,7 +219,13 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                     row.Id,
                     row.BookingId,
                     row.ChangeType,
+                    row.PartnerKey,
                     row.TransactionRef,
+                    EndpointPartnerKey = endpoint.PartnerKey,
+                    EndpointUrl = updateUri!.AbsoluteUri,
+                    IdempotencyKey = idempotencyKey,
+                    Payload = outboundPayload,
+                    Curl = BuildCurlPreview(updateUri, endpoint, idempotencyKey, outboundJson),
                     StatusCode = (int)response.StatusCode,
                     FailureCategory = response.IsSuccessStatusCode ? null : DownstreamFailureClassifier.Classify(response.StatusCode),
                     row.ErrorMessage
@@ -261,6 +262,7 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                     row.Id,
                     row.BookingId,
                     row.ChangeType,
+                    row.PartnerKey,
                     row.TransactionRef,
                     row.ErrorMessage
                 },
@@ -276,6 +278,59 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 row.AttemptCount,
                 correlationId);
         }
+    }
+
+    private async Task MarkConfiguredOffAsync(
+        DownstreamUpdateModel row,
+        string? correlationId,
+        string reason,
+        PartnerWorkflowSendPolicy policy,
+        PartnerWorkflowEndpoint? endpoint,
+        bool hasUpdateUri,
+        CancellationToken ct)
+    {
+        _logger.LogInformation(
+            "Partner workflow booking change configured off. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} Reason={Reason} MasterEnabled={MasterEnabled} WorkflowEnabled={WorkflowEnabled} PartnerKey={PartnerKey} HasBookingUpdatesUrl={HasBookingUpdatesUrl} HasBaseUrl={HasBaseUrl} HasResolvedUpdateUri={HasResolvedUpdateUri} CorrelationId={CorrelationId}",
+            row.Id,
+            row.BookingId,
+            row.ChangeType,
+            reason,
+            _partnerWorkflowOptions.Enabled,
+            policy.WorkflowEnabled,
+            endpoint?.PartnerKey,
+            !string.IsNullOrWhiteSpace(endpoint?.BookingUpdatesUrl),
+            !string.IsNullOrWhiteSpace(endpoint?.BaseUrl),
+            hasUpdateUri,
+            correlationId);
+
+        row.Status = "ConfiguredOff";
+        row.ErrorMessage = reason;
+        row.ProcessedUtc = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+        await TryWriteApplicationLogAsync(
+            row,
+            correlationId,
+            level: "Information",
+            eventType: "PartnerWorkflowConfiguredOff",
+            result: "ConfiguredOff",
+            message: "Partner workflow booking change configured off.",
+            payload: new
+            {
+                row.Id,
+                row.BookingId,
+                row.ChangeType,
+                row.PartnerKey,
+                row.TransactionRef,
+                Reason = reason,
+                MasterEnabled = _partnerWorkflowOptions.Enabled,
+                policy.WorkflowEnabled,
+                EndpointPartnerKey = endpoint?.PartnerKey,
+                EndpointDisplayName = endpoint?.DisplayName,
+                HasBookingUpdatesUrl = !string.IsNullOrWhiteSpace(endpoint?.BookingUpdatesUrl),
+                HasBaseUrl = !string.IsNullOrWhiteSpace(endpoint?.BaseUrl),
+                HasResolvedUpdateUri = hasUpdateUri
+            },
+            ct);
     }
 
     private async Task TryWriteApplicationLogAsync(
@@ -318,59 +373,59 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         }
     }
 
-    private bool TryResolveUpdateUri(out Uri updateUri)
+    private static bool TryResolveUpdateUri(PartnerWorkflowEndpoint endpoint, out Uri updateUri)
     {
-        if (!string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BookingUpdatesUrl) &&
-            Uri.TryCreate(_partnerWorkflowOptions.BookingUpdatesUrl.Trim(), UriKind.Absolute, out updateUri!))
+        if (!string.IsNullOrWhiteSpace(endpoint.BookingUpdatesUrl) &&
+            Uri.TryCreate(endpoint.BookingUpdatesUrl.Trim(), UriKind.Absolute, out updateUri!))
         {
             return true;
         }
 
         updateUri = null!;
-        if (string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BaseUrl))
+        if (string.IsNullOrWhiteSpace(endpoint.BaseUrl))
             return false;
 
-        var baseUri = _partnerWorkflowOptions.BaseUrl.TrimEnd('/') + "/";
+        var baseUri = endpoint.BaseUrl.TrimEnd('/') + "/";
         if (!Uri.TryCreate(baseUri, UriKind.Absolute, out var parsedBaseUri))
             return false;
 
-        var path = string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BookingUpdatesPath)
+        var path = string.IsNullOrWhiteSpace(endpoint.BookingUpdatesPath)
             ? "/api/booking-updates"
-            : _partnerWorkflowOptions.BookingUpdatesPath.Trim();
+            : endpoint.BookingUpdatesPath.Trim();
 
         updateUri = new Uri(parsedBaseUri, path.TrimStart('/'));
         return true;
     }
 
-    private void AddApiKeyHeader(HttpRequestMessage request)
+    private static void AddApiKeyHeader(HttpRequestMessage request, PartnerWorkflowEndpoint endpoint)
     {
-        if (string.IsNullOrWhiteSpace(_partnerWorkflowOptions.ApiKey))
+        if (string.IsNullOrWhiteSpace(endpoint.ApiKey))
             return;
 
-        var headerName = string.IsNullOrWhiteSpace(_partnerWorkflowOptions.ApiKeyHeaderName)
+        var headerName = string.IsNullOrWhiteSpace(endpoint.ApiKeyHeaderName)
             ? "Authorization"
-            : _partnerWorkflowOptions.ApiKeyHeaderName.Trim();
+            : endpoint.ApiKeyHeaderName.Trim();
 
         if (headerName.Equals("Authorization", StringComparison.OrdinalIgnoreCase))
         {
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _partnerWorkflowOptions.ApiKey.Trim());
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", endpoint.ApiKey.Trim());
             return;
         }
 
-        request.Headers.TryAddWithoutValidation(headerName, _partnerWorkflowOptions.ApiKey.Trim());
+        request.Headers.TryAddWithoutValidation(headerName, endpoint.ApiKey.Trim());
     }
 
-    private void AddIdempotencyHeader(HttpRequestMessage request, DownstreamUpdateModel row)
+    private static void AddIdempotencyHeader(HttpRequestMessage request, PartnerWorkflowEndpoint endpoint, string idempotencyKey)
     {
-        var headerName = string.IsNullOrWhiteSpace(_partnerWorkflowOptions.IdempotencyKeyHeaderName)
+        var headerName = string.IsNullOrWhiteSpace(endpoint.IdempotencyKeyHeaderName)
             ? "X-Idempotency-Key"
-            : _partnerWorkflowOptions.IdempotencyKeyHeaderName.Trim();
+            : endpoint.IdempotencyKeyHeaderName.Trim();
 
-        request.Headers.TryAddWithoutValidation(headerName, BuildIdempotencyKey(row));
+        request.Headers.TryAddWithoutValidation(headerName, idempotencyKey);
     }
 
-    private object BuildPayload(DownstreamUpdateModel row)
-        => IsPartnerWorkflowPayload()
+    private static object BuildPayload(DownstreamUpdateModel row, PartnerWorkflowEndpoint endpoint)
+        => IsPartnerWorkflowPayload(endpoint)
             ? BuildPartnerWorkflowPayload(row)
             : new
             {
@@ -381,8 +436,8 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 occurredUtc = DateTime.UtcNow
             };
 
-    private bool IsPartnerWorkflowPayload()
-        => _partnerWorkflowOptions.PayloadFormat.Equals("PartnerWorkflow", StringComparison.OrdinalIgnoreCase);
+    private static bool IsPartnerWorkflowPayload(PartnerWorkflowEndpoint endpoint)
+        => endpoint.PayloadFormat.Equals("PartnerWorkflow", StringComparison.OrdinalIgnoreCase);
 
     private static object BuildPartnerWorkflowPayload(DownstreamUpdateModel row)
     {
@@ -455,6 +510,49 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
             _ => $"booking-{changeType.Trim().ToLowerInvariant()}"
         };
 
+    private static string BuildCurlPreview(
+        Uri endpointUri,
+        PartnerWorkflowEndpoint endpoint,
+        string idempotencyKey,
+        string outboundJson)
+    {
+        var apiKeyHeaderName = string.IsNullOrWhiteSpace(endpoint.ApiKeyHeaderName)
+            ? "Authorization"
+            : endpoint.ApiKeyHeaderName.Trim();
+        var idempotencyHeaderName = string.IsNullOrWhiteSpace(endpoint.IdempotencyKeyHeaderName)
+            ? "X-Idempotency-Key"
+            : endpoint.IdempotencyKeyHeaderName.Trim();
+        var apiKeyValue = apiKeyHeaderName.Equals("Authorization", StringComparison.OrdinalIgnoreCase)
+            ? "Bearer <redacted>"
+            : "<redacted>";
+
+        return "curl -X POST " +
+               $"\"{endpointUri.AbsoluteUri}\" " +
+               "-H \"Content-Type: application/json\" " +
+               $"-H \"{apiKeyHeaderName}: {apiKeyValue}\" " +
+               $"-H \"{idempotencyHeaderName}: {idempotencyKey}\" " +
+               $"-d '{outboundJson.Replace("'", "'\\''", StringComparison.Ordinal)}'";
+    }
+
+    private static DownstreamUpdateResponse ToResponse(IReadOnlyList<DownstreamUpdateModel> rows)
+    {
+        if (rows.Count == 1)
+            return ToResponse(rows[0]);
+
+        var first = rows[0];
+        return new DownstreamUpdateResponse
+        {
+            UpdateId = string.Join(",", rows.Select(x => x.Id)),
+            BookingId = first.BookingId,
+            ChangeType = first.ChangeType,
+            PartnerKey = null,
+            Status = SummarizeStatus(rows),
+            CreatedUtc = rows.Min(x => x.CreatedUtc),
+            ProcessedUtc = rows.All(x => x.ProcessedUtc is not null) ? rows.Max(x => x.ProcessedUtc) : null,
+            ErrorMessage = string.Join("; ", rows.Where(x => !string.IsNullOrWhiteSpace(x.ErrorMessage)).Select(x => $"{x.PartnerKey ?? "unknown"}:{x.ErrorMessage}"))
+        };
+    }
+
     private static DownstreamUpdateResponse ToResponse(DownstreamUpdateModel model)
     {
         return new DownstreamUpdateResponse
@@ -462,10 +560,24 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
             UpdateId = model.Id,
             BookingId = model.BookingId,
             ChangeType = model.ChangeType,
+            PartnerKey = model.PartnerKey,
             Status = model.Status,
             CreatedUtc = model.CreatedUtc,
             ProcessedUtc = model.ProcessedUtc,
             ErrorMessage = model.ErrorMessage
         };
+    }
+
+    private static string SummarizeStatus(IReadOnlyList<DownstreamUpdateModel> rows)
+    {
+        if (rows.All(x => string.Equals(x.Status, "Sent", StringComparison.OrdinalIgnoreCase)))
+            return "Sent";
+        if (rows.Any(x => string.Equals(x.Status, "Failed", StringComparison.OrdinalIgnoreCase)))
+            return "Failed";
+        if (rows.All(x => string.Equals(x.Status, "Skipped", StringComparison.OrdinalIgnoreCase)))
+            return "Skipped";
+        if (rows.All(x => string.Equals(x.Status, "ConfiguredOff", StringComparison.OrdinalIgnoreCase)))
+            return "ConfiguredOff";
+        return "Partial";
     }
 }

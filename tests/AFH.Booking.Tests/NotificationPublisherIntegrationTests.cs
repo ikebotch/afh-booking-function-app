@@ -159,7 +159,8 @@ public sealed class NotificationPublisherIntegrationTests
     {
         var values = new Dictionary<string, string?>
         {
-            ["ConnectionStrings:BookingDb"] = "Server=localhost;Database=AFH.Booking;Trusted_Connection=True;TrustServerCertificate=True"
+            ["ConnectionStrings:BookingDb"] = "Server=localhost;Database=AFH.Booking;Trusted_Connection=True;TrustServerCertificate=True",
+            ["ConnectionStrings:NotificationDb"] = "Server=localhost;Database=AFH.Notification;Trusted_Connection=True;TrustServerCertificate=True"
         };
 
         foreach (var (key, value) in overrides)

@@ -25,10 +25,10 @@ public sealed class NotificationDbContextFactory : IDesignTimeDbContextFactory<N
 
         var configuration = configBuilder.Build();
 
-        var connectionString = configuration.GetConnectionString("BookingDb")
-            ?? configuration["Values:ConnectionStrings:BookingDb"]
-            ?? configuration["Values:BookingDb:ConnectionString"]
-            ?? "Server=(localdb)\\mssqllocaldb;Database=AFH.Booking.DesignTime;Trusted_Connection=True;TrustServerCertificate=True";
+        var connectionString = configuration.GetConnectionString("NotificationDb")
+            ?? configuration["Values:ConnectionStrings:NotificationDb"]
+            ?? configuration["Values:NotificationDb:ConnectionString"]
+            ?? "Server=(localdb)\\mssqllocaldb;Database=AFH.Notification.DesignTime;Trusted_Connection=True;TrustServerCertificate=True";
 
         var optionsBuilder = new DbContextOptionsBuilder<NotificationDbContext>();
         optionsBuilder

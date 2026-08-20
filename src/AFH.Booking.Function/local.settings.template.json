@@ -10,6 +10,7 @@
     "Booking:AiTools:EnableLocalLifecycleStub": "false",
     "Booking__AllowMockTokens": "false",
     "BookingDb:ConnectionString": "Server=localhost;Database=AFH.Booking;Trusted_Connection=True;TrustServerCertificate=True",
+    "NotificationDb:ConnectionString": "Server=localhost;Database=AFH.Notification;Trusted_Connection=True;TrustServerCertificate=True",
     "Calendar:DefaultTimezone": "Europe/London",
     "AzureAd:TenantId": "<entra-tenant-id>",
     "AzureAd:ClientId": "<entra-client-id>",

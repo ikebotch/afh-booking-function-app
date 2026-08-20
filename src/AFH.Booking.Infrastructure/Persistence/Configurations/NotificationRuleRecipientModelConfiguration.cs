@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace AFH.Booking.Infrastructure.Persistence.Configurations;
 
-public sealed class BookingNotificationRuleRecipientModelConfiguration : IEntityTypeConfiguration<BookingNotificationRuleRecipientModel>
+public sealed class NotificationRuleRecipientModelConfiguration : IEntityTypeConfiguration<NotificationRuleRecipientModel>
 {
-    public void Configure(EntityTypeBuilder<BookingNotificationRuleRecipientModel> b)
+    public void Configure(EntityTypeBuilder<NotificationRuleRecipientModel> b)
     {
-        b.ToTable("BookingNotificationRuleRecipients");
+        b.ToTable("NotificationRuleRecipients");
         b.HasKey(x => x.Id);
 
         b.Property(x => x.RecipientType).HasMaxLength(100).IsRequired();
@@ -22,10 +22,10 @@ public sealed class BookingNotificationRuleRecipientModelConfiguration : IEntity
         b.HasData(CreateSeeds());
     }
 
-    private static IReadOnlyList<BookingNotificationRuleRecipientModel> CreateSeeds()
+    private static IReadOnlyList<NotificationRuleRecipientModel> CreateSeeds()
     {
-        var rows = new List<BookingNotificationRuleRecipientModel>();
-        var now = BookingNotificationRuleModelConfiguration.SeedTimestampUtc;
+        var rows = new List<NotificationRuleRecipientModel>();
+        var now = NotificationRuleModelConfiguration.SeedTimestampUtc;
         Add(rows, "BookingConfirmed", enabled: true, now, "f3096f1b-fd20-4cc3-a431-22f1d1021d01", "12d8a812-96fc-4020-93cd-30a82efa3c02", "8f7c2b57-2d84-4d52-b9d0-00f1c9ccde01", "f7726ed6-0939-49d3-b18c-5f2e34959f03");
         Add(rows, "BookingRescheduled", enabled: true, now, "982657c1-2041-4fed-9cb1-5a802e258704", "42cda070-c4cd-4fdb-ab79-c3d6870baf7e", "10f4906d-1d29-41de-8baa-aecf96c5de02", "55f92361-2f74-4128-a794-703eff8ca9e3");
         Add(rows, "BookingCancelled", enabled: true, now, "a689b522-d031-44db-b145-e8109350c271", "566301d9-a5d6-4e2d-a688-65b6d11c00f2", "9224f2f1-8408-423e-a318-cb3dd69fde03", "27650cba-e5cf-4777-903d-24123832d1a3");
@@ -36,7 +36,7 @@ public sealed class BookingNotificationRuleRecipientModelConfiguration : IEntity
     }
 
     private static void Add(
-        List<BookingNotificationRuleRecipientModel> rows,
+        List<NotificationRuleRecipientModel> rows,
         string notificationType,
         bool enabled,
         DateTime now,
@@ -51,7 +51,7 @@ public sealed class BookingNotificationRuleRecipientModelConfiguration : IEntity
         rows.Add(Recipient(contactCentreId, notificationType, BookingNotificationRecipientTypes.ContactCentre, enabled, now));
     }
 
-    private static BookingNotificationRuleRecipientModel Recipient(
+    private static NotificationRuleRecipientModel Recipient(
         string id,
         string notificationType,
         string recipientType,
@@ -60,7 +60,7 @@ public sealed class BookingNotificationRuleRecipientModelConfiguration : IEntity
         => new()
         {
             Id = Guid.Parse(id),
-            RuleId = BookingNotificationRuleModelConfiguration.RuleIds[notificationType],
+            RuleId = NotificationRuleModelConfiguration.RuleIds[notificationType],
             RecipientType = recipientType,
             Enabled = enabled,
             CreatedUtc = now,

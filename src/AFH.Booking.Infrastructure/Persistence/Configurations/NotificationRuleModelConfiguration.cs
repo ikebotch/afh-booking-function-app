@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace AFH.Booking.Infrastructure.Persistence.Configurations;
 
-public sealed class BookingNotificationRuleModelConfiguration : IEntityTypeConfiguration<BookingNotificationRuleModel>
+public sealed class NotificationRuleModelConfiguration : IEntityTypeConfiguration<NotificationRuleModel>
 {
     private static readonly DateTime SeededUtc = new(2026, 5, 28, 0, 0, 0, DateTimeKind.Utc);
 
@@ -16,9 +16,9 @@ public sealed class BookingNotificationRuleModelConfiguration : IEntityTypeConfi
     private static readonly Guid AdviserRequestSubmittedRuleId = Guid.Parse("19c2f130-6649-42ed-82cb-95f0d8706d01");
     private static readonly Guid AdviserRequestOutcomeRuleId = Guid.Parse("9b9be0be-7633-4576-ba6d-24ef060a0e6d");
 
-    public void Configure(EntityTypeBuilder<BookingNotificationRuleModel> b)
+    public void Configure(EntityTypeBuilder<NotificationRuleModel> b)
     {
-        b.ToTable("BookingNotificationRules");
+        b.ToTable("NotificationRules");
         b.HasKey(x => x.Id);
 
         b.Property(x => x.SourceApplication).HasMaxLength(100).IsRequired();
@@ -60,7 +60,7 @@ public sealed class BookingNotificationRuleModelConfiguration : IEntityTypeConfi
 
     internal static DateTime SeedTimestampUtc => SeededUtc;
 
-    private static BookingNotificationRuleModel Rule(Guid id, string notificationType, bool enabled)
+    private static NotificationRuleModel Rule(Guid id, string notificationType, bool enabled)
         => new()
         {
             Id = id,

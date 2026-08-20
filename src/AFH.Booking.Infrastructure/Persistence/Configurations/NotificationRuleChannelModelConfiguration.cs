@@ -5,11 +5,11 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace AFH.Booking.Infrastructure.Persistence.Configurations;
 
-public sealed class BookingNotificationRuleChannelModelConfiguration : IEntityTypeConfiguration<BookingNotificationRuleChannelModel>
+public sealed class NotificationRuleChannelModelConfiguration : IEntityTypeConfiguration<NotificationRuleChannelModel>
 {
-    public void Configure(EntityTypeBuilder<BookingNotificationRuleChannelModel> b)
+    public void Configure(EntityTypeBuilder<NotificationRuleChannelModel> b)
     {
-        b.ToTable("BookingNotificationRuleChannels");
+        b.ToTable("NotificationRuleChannels");
         b.HasKey(x => x.Id);
 
         b.Property(x => x.Channel).HasMaxLength(50).IsRequired();
@@ -24,9 +24,9 @@ public sealed class BookingNotificationRuleChannelModelConfiguration : IEntityTy
         b.HasData(CreateSeeds());
     }
 
-    private static IReadOnlyList<BookingNotificationRuleChannelModel> CreateSeeds()
+    private static IReadOnlyList<NotificationRuleChannelModel> CreateSeeds()
     {
-        var now = BookingNotificationRuleModelConfiguration.SeedTimestampUtc;
+        var now = NotificationRuleModelConfiguration.SeedTimestampUtc;
         return
         [
             Channel("728736f1-89e2-4315-bab4-4670b526a201", "BookingConfirmed", "Email", true, "booking-confirmed", "v1", now),
@@ -44,7 +44,7 @@ public sealed class BookingNotificationRuleChannelModelConfiguration : IEntityTy
         ];
     }
 
-    private static BookingNotificationRuleChannelModel Channel(
+    private static NotificationRuleChannelModel Channel(
         string id,
         string notificationType,
         string channel,
@@ -55,7 +55,7 @@ public sealed class BookingNotificationRuleChannelModelConfiguration : IEntityTy
         => new()
         {
             Id = Guid.Parse(id),
-            RuleId = BookingNotificationRuleModelConfiguration.RuleIds[notificationType],
+            RuleId = NotificationRuleModelConfiguration.RuleIds[notificationType],
             Channel = channel,
             Enabled = enabled,
             TemplateKey = templateKey,

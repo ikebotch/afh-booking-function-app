@@ -33,7 +33,7 @@ public static class ServiceCollectionExtensions
         services.Configure<NotificationIntegrationOptions>(configuration.GetSection(NotificationIntegrationOptions.SectionName));
         services.Configure<ServiceBusNotificationPublisherOptions>(configuration.GetSection(ServiceBusNotificationPublisherOptions.SectionName));
 
-        var connectionString = ResolveBookingDbConnectionString(configuration);
+        var connectionString = ResolveNotificationDbConnectionString(configuration);
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new InvalidOperationException(
                 $"{NotificationDbOptions.SectionName}:ConnectionString is required (or ConnectionStrings:NotificationDb).");
@@ -172,14 +172,14 @@ public static class ServiceCollectionExtensions
 
 
 
-    internal static string? ResolveBookingDbConnectionString(IConfiguration config)
+    internal static string? ResolveNotificationDbConnectionString(IConfiguration config)
     {
         var options = config.GetSection(NotificationDbOptions.SectionName).Get<NotificationDbOptions>() ?? new NotificationDbOptions();
         if (!string.IsNullOrWhiteSpace(options.ConnectionString))
             return options.ConnectionString;
-        return config.GetConnectionString("BookingDb")
-            ?? config["Values:ConnectionStrings:BookingDb"]
-            ?? config["Values:BookingDb:ConnectionString"];
+        return config.GetConnectionString("NotificationDb")
+            ?? config["Values:ConnectionStrings:NotificationDb"]
+            ?? config["Values:NotificationDb:ConnectionString"];
     }
 
 }

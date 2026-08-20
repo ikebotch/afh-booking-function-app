@@ -151,7 +151,7 @@ public sealed class EmailNotificationDeliveryGatewayTests
                 ["Notifications:Email:Graph:SenderMailbox"] = "sender@example.test",
                 ["Notifications:Queue:QueueName"] = "notifications-send",
                 ["Notifications:Queue:ConnectionString"] = "UseDevelopmentStorage=true",
-                ["ConnectionStrings:BookingDb"] = "Server=localhost;Database=BookingDb;Trusted_Connection=True;"
+                ["ConnectionStrings:NotificationDb"] = "Server=localhost;Database=NotificationDb;Trusted_Connection=True;"
             })
             .Build();
         var services = new ServiceCollection();

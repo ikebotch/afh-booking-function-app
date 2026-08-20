@@ -8,9 +8,9 @@ namespace AFH.Booking.Infrastructure.Notifications;
 
 public sealed class BookingNotificationPolicyProvider : IBookingNotificationPolicyProvider
 {
-    private readonly BookingDbContext _db;
+    private readonly NotificationPolicyDbContext _db;
 
-    public BookingNotificationPolicyProvider(BookingDbContext db)
+    public BookingNotificationPolicyProvider(NotificationPolicyDbContext db)
     {
         _db = db;
     }
@@ -25,7 +25,7 @@ public sealed class BookingNotificationPolicyProvider : IBookingNotificationPoli
             : sourceApplication.Trim();
 
         var defaults = BookingNotificationDefaults.CreatePolicy(source, notificationType);
-        var row = await _db.BookingNotificationRules
+        var row = await _db.NotificationRules
             .AsNoTracking()
             .Include(x => x.Channels)
             .Include(x => x.Recipients)
@@ -46,7 +46,7 @@ public sealed class BookingNotificationPolicyProvider : IBookingNotificationPoli
 
     private static IReadOnlyList<BookingNotificationChannelPolicy> MergeChannels(
         BookingNotificationPolicy defaults,
-        IReadOnlyCollection<Persistence.Models.BookingNotificationRuleChannelModel> rows)
+        IReadOnlyCollection<Persistence.Models.NotificationRuleChannelModel> rows)
     {
         var channels = rows
             .Select(row => Enum.TryParse<BookingNotificationChannel>(row.Channel, ignoreCase: true, out var channel)
@@ -64,7 +64,7 @@ public sealed class BookingNotificationPolicyProvider : IBookingNotificationPoli
 
     private static IReadOnlyList<BookingNotificationRecipientPolicy> MergeRecipients(
         BookingNotificationPolicy defaults,
-        IReadOnlyCollection<Persistence.Models.BookingNotificationRuleRecipientModel> rows)
+        IReadOnlyCollection<Persistence.Models.NotificationRuleRecipientModel> rows)
     {
         var recipients = rows
             .Where(row => !string.IsNullOrWhiteSpace(row.RecipientType))

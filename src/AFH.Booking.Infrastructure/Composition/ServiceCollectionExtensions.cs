@@ -77,6 +77,12 @@ public static class ServiceCollectionExtensions
                 options.UseSqlServer(bookingDbConnectionString);
             },
             ServiceLifetime.Scoped);
+
+        var notificationDbConnectionString = ResolveNotificationDbConnectionString(config);
+        if (string.IsNullOrWhiteSpace(notificationDbConnectionString))
+            throw new InvalidOperationException("NotificationDb:ConnectionString is required (or ConnectionStrings:NotificationDb).");
+
+        services.AddDbContext<NotificationPolicyDbContext>(opt => opt.UseSqlServer(notificationDbConnectionString));
         services.AddAfhCommonErrorsApplicationInsights();
         services.AddAfhCommonErrorsEntityFramework<BookingDbContext>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
@@ -246,6 +252,7 @@ public static class ServiceCollectionExtensions
             http.Timeout = TimeSpan.FromSeconds(30);
         });
         services.AddHostedService<BookingOperationalStoreInitializer>();
+        services.AddHostedService<NotificationPolicyStoreInitializer>();
         services.AddSingleton(new JsonSerializerOptions
         {
             PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -264,5 +271,16 @@ public static class ServiceCollectionExtensions
         return config.GetConnectionString("BookingDb")
             ?? config["Values:ConnectionStrings:BookingDb"]
             ?? config["Values:BookingDb:ConnectionString"];
+    }
+
+    internal static string? ResolveNotificationDbConnectionString(IConfiguration config)
+    {
+        var sectionValue = config["NotificationDb:ConnectionString"];
+        if (!string.IsNullOrWhiteSpace(sectionValue))
+            return sectionValue;
+
+        return config.GetConnectionString("NotificationDb")
+            ?? config["Values:ConnectionStrings:NotificationDb"]
+            ?? config["Values:NotificationDb:ConnectionString"];
     }
 }

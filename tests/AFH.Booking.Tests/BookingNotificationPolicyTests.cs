@@ -36,7 +36,7 @@ public sealed class BookingNotificationPolicyTests
     {
         await using var db = CreateDbContext();
         var ruleId = Guid.NewGuid();
-        db.BookingNotificationRules.Add(new BookingNotificationRuleModel
+        db.NotificationRules.Add(new NotificationRuleModel
         {
             Id = ruleId,
             SourceApplication = "Booking",
@@ -46,8 +46,8 @@ public sealed class BookingNotificationPolicyTests
             UpdatedUtc = DateTime.UtcNow,
             Channels =
             [
-                new BookingNotificationRuleChannelModel { Id = Guid.NewGuid(), Channel = "Email", Enabled = true, TemplateKey = "booking-confirmed", TemplateVersion = "v2", CreatedUtc = DateTime.UtcNow, UpdatedUtc = DateTime.UtcNow },
-                new BookingNotificationRuleChannelModel { Id = Guid.NewGuid(), Channel = "Sms", Enabled = true, TemplateKey = "booking-confirmed-sms", TemplateVersion = "v1", CreatedUtc = DateTime.UtcNow, UpdatedUtc = DateTime.UtcNow }
+                new NotificationRuleChannelModel { Id = Guid.NewGuid(), Channel = "Email", Enabled = true, TemplateKey = "booking-confirmed", TemplateVersion = "v2", CreatedUtc = DateTime.UtcNow, UpdatedUtc = DateTime.UtcNow },
+                new NotificationRuleChannelModel { Id = Guid.NewGuid(), Channel = "Sms", Enabled = true, TemplateKey = "booking-confirmed-sms", TemplateVersion = "v1", CreatedUtc = DateTime.UtcNow, UpdatedUtc = DateTime.UtcNow }
             ]
         });
         await db.SaveChangesAsync();
@@ -67,7 +67,7 @@ public sealed class BookingNotificationPolicyTests
     {
         await using var db = CreateDbContext();
         var ruleId = Guid.NewGuid();
-        db.BookingNotificationRules.Add(new BookingNotificationRuleModel
+        db.NotificationRules.Add(new NotificationRuleModel
         {
             Id = ruleId,
             SourceApplication = "Booking",
@@ -77,7 +77,7 @@ public sealed class BookingNotificationPolicyTests
             UpdatedUtc = DateTime.UtcNow,
             Recipients =
             [
-                new BookingNotificationRuleRecipientModel { Id = Guid.NewGuid(), RecipientType = "RegionalManager", Enabled = true, CreatedUtc = DateTime.UtcNow, UpdatedUtc = DateTime.UtcNow }
+                new NotificationRuleRecipientModel { Id = Guid.NewGuid(), RecipientType = "RegionalManager", Enabled = true, CreatedUtc = DateTime.UtcNow, UpdatedUtc = DateTime.UtcNow }
             ]
         });
         await db.SaveChangesAsync();
@@ -484,13 +484,13 @@ public sealed class BookingNotificationPolicyTests
         }
     }
 
-    private static BookingDbContext CreateDbContext()
+    private static NotificationPolicyDbContext CreateDbContext()
     {
-        var options = new DbContextOptionsBuilder<BookingDbContext>()
+        var options = new DbContextOptionsBuilder<NotificationPolicyDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
 
-        return new BookingDbContext(options);
+        return new NotificationPolicyDbContext(options);
     }
 
     private static BookingNotificationPolicy DefaultPolicy(BookingNotificationType type)

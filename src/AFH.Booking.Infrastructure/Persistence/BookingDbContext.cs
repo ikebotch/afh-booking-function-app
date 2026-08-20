@@ -14,9 +14,6 @@ public sealed class BookingDbContext : DbContext
     public DbSet<BookingHoldModel> Holds => Set<BookingHoldModel>();
     public DbSet<ApprovalRequestModel> ApprovalRequests => Set<ApprovalRequestModel>();
     public DbSet<ApprovalHistoryModel> ApprovalHistory => Set<ApprovalHistoryModel>();
-    public DbSet<BookingNotificationRuleModel> BookingNotificationRules => Set<BookingNotificationRuleModel>();
-    public DbSet<BookingNotificationRuleChannelModel> BookingNotificationRuleChannels => Set<BookingNotificationRuleChannelModel>();
-    public DbSet<BookingNotificationRuleRecipientModel> BookingNotificationRuleRecipients => Set<BookingNotificationRuleRecipientModel>();
     public DbSet<LifecycleEventModel> LifecycleEvents => Set<LifecycleEventModel>();
     public DbSet<LifecycleStepModel> LifecycleSteps => Set<LifecycleStepModel>();
     public DbSet<DuplicateClientCaseModel> DuplicateClientCases => Set<DuplicateClientCaseModel>();
@@ -67,7 +64,11 @@ public sealed class BookingDbContext : DbContext
         modelBuilder.HasSequence<long>("BookingReferenceNumber", "dbo")
             .StartsAt(1001L);
 
-        modelBuilder.ApplyConfigurationsFromAssembly(typeof(BookingDbContext).Assembly);
+        modelBuilder.ApplyConfigurationsFromAssembly(
+            typeof(BookingDbContext).Assembly,
+            type => type != typeof(NotificationRuleModelConfiguration)
+                    && type != typeof(NotificationRuleChannelModelConfiguration)
+                    && type != typeof(NotificationRuleRecipientModelConfiguration));
         modelBuilder.ApplyConfiguration(new AdviserProfileProjectionModelConfiguration());
         modelBuilder.ApplyConfiguration(new AdviserSkillProjectionModelConfiguration());
         modelBuilder.AddErrorRecordEntity();

@@ -1,3 +1,5 @@
+using AFH.Booking.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AFH.Booking.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(BookingDbContext))]
     [Migration("20260813160000_AddManagerBookingNotificationRuleRecipients")]
     public partial class AddManagerBookingNotificationRuleRecipients : Migration
     {
@@ -16,7 +19,7 @@ namespace AFH.Booking.Infrastructure.Migrations
                     ([Id], [RuleId], [RecipientType], [Enabled], [CreatedUtc], [UpdatedUtc])
                 SELECT
                     seed.[Id],
-                    rule.[Id],
+                    notificationRule.[Id],
                     N'Manager',
                     seed.[Enabled],
                     SYSUTCDATETIME(),
@@ -27,14 +30,14 @@ namespace AFH.Booking.Infrastructure.Migrations
                     (N'BookingCancelled', CAST('9224F2F1-8408-423E-A318-CB3DD69FDE03' AS uniqueidentifier), CAST(1 AS bit)),
                     (N'BookingHoldCreated', CAST('D39F9F03-DF6F-4A1E-B7CB-DC94B2DDDE04' AS uniqueidentifier), CAST(0 AS bit))
                 ) AS seed([NotificationType], [Id], [Enabled])
-                INNER JOIN [dbo].[BookingNotificationRules] AS rule
-                    ON rule.[SourceApplication] = N'Booking'
-                   AND rule.[NotificationType] = seed.[NotificationType]
+                INNER JOIN [dbo].[BookingNotificationRules] AS notificationRule
+                    ON notificationRule.[SourceApplication] = N'Booking'
+                   AND notificationRule.[NotificationType] = seed.[NotificationType]
                 WHERE NOT EXISTS
                 (
                     SELECT 1
                     FROM [dbo].[BookingNotificationRuleRecipients] AS existing
-                    WHERE existing.[RuleId] = rule.[Id]
+                    WHERE existing.[RuleId] = notificationRule.[Id]
                       AND existing.[RecipientType] = N'Manager'
                 );
                 """);

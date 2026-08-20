@@ -1,3 +1,5 @@
+using AFH.Booking.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
@@ -5,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AFH.Booking.Infrastructure.Migrations
 {
     /// <inheritdoc />
+    [DbContext(typeof(BookingDbContext))]
     [Migration("20260820120000_AddApprovalRequestNotificationPolicies")]
     public partial class AddApprovalRequestNotificationPolicies : Migration
     {
@@ -31,23 +34,23 @@ namespace AFH.Booking.Infrastructure.Migrations
                 END;
 
                 INSERT INTO [dbo].[BookingNotificationRuleChannels] ([Id], [RuleId], [Channel], [Enabled], [TemplateKey], [TemplateVersion], [CreatedUtc], [UpdatedUtc])
-                SELECT seed.[Id], rule.[Id], seed.[Channel], seed.[Enabled], seed.[TemplateKey], N'v1', @now, @now
+                SELECT seed.[Id], notificationRule.[Id], seed.[Channel], seed.[Enabled], seed.[TemplateKey], N'v1', @now, @now
                 FROM (VALUES
                     (N'AdviserRequestSubmitted', CAST('14179CDB-D3A0-4142-80A0-387403FD9201' AS uniqueidentifier), N'Email', CAST(1 AS bit), N'adviser-request-submitted'),
                     (N'AdviserRequestSubmitted', CAST('6AF1C6AD-C7C2-4D98-8859-C36F9F4D9202' AS uniqueidentifier), N'Sms', CAST(0 AS bit), N'adviser-request-submitted-sms'),
                     (N'AdviserRequestOutcome', CAST('9BEEC961-A8F0-4CC9-BEC7-D5C28C3357AF' AS uniqueidentifier), N'Email', CAST(1 AS bit), N'adviser-request-outcome'),
                     (N'AdviserRequestOutcome', CAST('9BEEC961-A8F0-4CC9-BEC7-D5C28C3333BF' AS uniqueidentifier), N'Sms', CAST(0 AS bit), N'adviser-request-outcome-sms')
                 ) AS seed([NotificationType], [Id], [Channel], [Enabled], [TemplateKey])
-                INNER JOIN [dbo].[BookingNotificationRules] AS rule
-                    ON rule.[SourceApplication] = N'Booking'
-                   AND rule.[NotificationType] = seed.[NotificationType]
+                INNER JOIN [dbo].[BookingNotificationRules] AS notificationRule
+                    ON notificationRule.[SourceApplication] = N'Booking'
+                   AND notificationRule.[NotificationType] = seed.[NotificationType]
                 WHERE NOT EXISTS (
                     SELECT 1 FROM [dbo].[BookingNotificationRuleChannels] AS existing
-                    WHERE existing.[RuleId] = rule.[Id]
+                    WHERE existing.[RuleId] = notificationRule.[Id]
                       AND existing.[Channel] = seed.[Channel]);
 
                 INSERT INTO [dbo].[BookingNotificationRuleRecipients] ([Id], [RuleId], [RecipientType], [Enabled], [CreatedUtc], [UpdatedUtc])
-                SELECT seed.[Id], rule.[Id], seed.[RecipientType], 1, @now, @now
+                SELECT seed.[Id], notificationRule.[Id], seed.[RecipientType], 1, @now, @now
                 FROM (VALUES
                     (N'AdviserRequestSubmitted', CAST('7809FF7D-0721-430F-9B62-0FFB57DC9401' AS uniqueidentifier), N'Client'),
                     (N'AdviserRequestSubmitted', CAST('20AAF403-B3D1-4247-B6D6-885EAF8B9402' AS uniqueidentifier), N'Adviser'),
@@ -58,12 +61,12 @@ namespace AFH.Booking.Infrastructure.Migrations
                     (N'AdviserRequestOutcome', CAST('358AC452-B5AD-4373-A593-1FF936E83298' AS uniqueidentifier), N'Manager'),
                     (N'AdviserRequestOutcome', CAST('8B951DB9-B91E-443F-9715-55DF020B0B4B' AS uniqueidentifier), N'ContactCentre')
                 ) AS seed([NotificationType], [Id], [RecipientType])
-                INNER JOIN [dbo].[BookingNotificationRules] AS rule
-                    ON rule.[SourceApplication] = N'Booking'
-                   AND rule.[NotificationType] = seed.[NotificationType]
+                INNER JOIN [dbo].[BookingNotificationRules] AS notificationRule
+                    ON notificationRule.[SourceApplication] = N'Booking'
+                   AND notificationRule.[NotificationType] = seed.[NotificationType]
                 WHERE NOT EXISTS (
                     SELECT 1 FROM [dbo].[BookingNotificationRuleRecipients] AS existing
-                    WHERE existing.[RuleId] = rule.[Id]
+                    WHERE existing.[RuleId] = notificationRule.[Id]
                       AND existing.[RecipientType] = seed.[RecipientType]);
                 """);
         }

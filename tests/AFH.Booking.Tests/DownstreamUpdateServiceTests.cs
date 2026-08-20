@@ -16,6 +16,7 @@ public sealed class DownstreamUpdateServiceTests
     public async Task ReconcileAsync_RetriesFailedRowsAndMarksSuccess()
     {
         await using var db = CreateDb();
+        await EnablePartnerWorkflowAsync(db, "Cancel");
         db.DownstreamUpdates.Add(new DownstreamUpdateModel
         {
             Id = "upd-1",
@@ -36,6 +37,7 @@ public sealed class DownstreamUpdateServiceTests
             db,
             CreateHttpClientFactory(handler),
             Options.Create(new PartnerWorkflowOptions { Enabled = true, BaseUrl = "https://partner.example", ApiKey = "token" }),
+            new PartnerWorkflowPolicyProvider(db),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.ReconcileAsync(10, 5, includePending: false, correlationId: "cid-1", CancellationToken.None);
@@ -52,6 +54,7 @@ public sealed class DownstreamUpdateServiceTests
     public async Task ReconcileAsync_LeavesRecentPendingRowsAlone()
     {
         await using var db = CreateDb();
+        await EnablePartnerWorkflowAsync(db, "Rearrange");
         db.DownstreamUpdates.Add(new DownstreamUpdateModel
         {
             Id = "upd-2",
@@ -69,6 +72,7 @@ public sealed class DownstreamUpdateServiceTests
             db,
             CreateHttpClientFactory(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
             Options.Create(new PartnerWorkflowOptions { Enabled = true, BaseUrl = "https://partner.example" }),
+            new PartnerWorkflowPolicyProvider(db),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.ReconcileAsync(10, 5, includePending: true, correlationId: null, CancellationToken.None);
@@ -83,6 +87,7 @@ public sealed class DownstreamUpdateServiceTests
     public async Task PublishBookingChangeAsync_WhenPartnerWorkflowConfigured_SendsPartnerPayloadAndHeaders()
     {
         await using var db = CreateDb();
+        await EnablePartnerWorkflowAsync(db, "Rearrange");
         HttpRequestMessage? capturedRequest = null;
         string? capturedBody = null;
         var handler = new StubHttpMessageHandler(request =>
@@ -103,6 +108,7 @@ public sealed class DownstreamUpdateServiceTests
                 ApiKeyHeaderName = "X-Api-Key",
                 PayloadFormat = "PartnerWorkflow"
             }),
+            new PartnerWorkflowPolicyProvider(db),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.PublishBookingChangeAsync(
@@ -140,6 +146,86 @@ public sealed class DownstreamUpdateServiceTests
         Assert.Equal("000123456", root.GetProperty("bookingReference").GetString());
     }
 
+    [Fact]
+    public async Task PublishBookingChangeAsync_WhenChangeTypeNotEnabled_RecordsSkippedWithoutSending()
+    {
+        await using var db = CreateDb();
+        await EnablePartnerWorkflowAsync(db, "Cancel", "Rearrange");
+        var sendCount = 0;
+        var sut = new DownstreamUpdateService(
+            db,
+            CreateHttpClientFactory(new StubHttpMessageHandler(_ =>
+            {
+                sendCount++;
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            })),
+            Options.Create(new PartnerWorkflowOptions
+            {
+                Enabled = true,
+                BookingUpdatesUrl = "https://partner.example/updates"
+            }),
+            new PartnerWorkflowPolicyProvider(db),
+            NullLogger<DownstreamUpdateService>.Instance);
+
+        var result = await sut.PublishBookingChangeAsync(
+            bookingId: "booking-1",
+            changeType: "Booked",
+            transactionRef: "TRX-1",
+            payloadJson: "{}",
+            CancellationToken.None);
+
+        Assert.Equal("Skipped", result.Status);
+        Assert.Equal(0, sendCount);
+        var row = await db.DownstreamUpdates.SingleAsync();
+        Assert.Equal("Skipped", row.Status);
+        Assert.Equal("PartnerWorkflow:ChangeTypeDisabled", row.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task PublishBookingChangeAsync_WhenBookedEnabled_SendsConfirmedPartnerPayload()
+    {
+        await using var db = CreateDb();
+        await EnablePartnerWorkflowAsync(db, "Booked");
+        string? capturedBody = null;
+        var sut = new DownstreamUpdateService(
+            db,
+            CreateHttpClientFactory(new StubHttpMessageHandler(request =>
+            {
+                capturedBody = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult();
+                return new HttpResponseMessage(HttpStatusCode.OK);
+            })),
+            Options.Create(new PartnerWorkflowOptions
+            {
+                Enabled = true,
+                BookingUpdatesUrl = "https://partner.example/updates",
+                PayloadFormat = "PartnerWorkflow"
+            }),
+            new PartnerWorkflowPolicyProvider(db),
+            NullLogger<DownstreamUpdateService>.Instance);
+
+        var result = await sut.PublishBookingChangeAsync(
+            bookingId: "booking-1",
+            changeType: "Booked",
+            transactionRef: "TRX-1",
+            payloadJson: """
+                {
+                  "startUtc": "2026-08-27T14:00:00Z",
+                  "meetingType": "Telephone",
+                  "adviserId": "987654321",
+                  "bookingReference": "B-1"
+                }
+                """,
+            CancellationToken.None);
+
+        Assert.Equal("Sent", result.Status);
+        Assert.NotNull(capturedBody);
+        using var body = JsonDocument.Parse(capturedBody!);
+        Assert.Equal("Booked", body.RootElement.GetProperty("status").GetString());
+        Assert.Equal("TRX-1", body.RootElement.GetProperty("transactionId").GetString());
+        Assert.Equal("2026-08-27T14:00:00Z", body.RootElement.GetProperty("dateTime").GetString());
+        Assert.Equal("B-1", body.RootElement.GetProperty("bookingReference").GetString());
+    }
+
     private static BookingDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<BookingDbContext>()
@@ -147,6 +233,22 @@ public sealed class DownstreamUpdateServiceTests
             .Options;
 
         return new BookingDbContext(options);
+    }
+
+    private static async Task EnablePartnerWorkflowAsync(BookingDbContext db, params string[] changeTypes)
+    {
+        foreach (var changeType in changeTypes)
+        {
+            db.PartnerWorkflowRules.Add(new PartnerWorkflowRuleModel
+            {
+                ChangeType = PartnerWorkflowPolicyProvider.NormalizeChangeType(changeType),
+                Enabled = true,
+                CreatedUtc = DateTime.UtcNow,
+                UpdatedUtc = DateTime.UtcNow
+            });
+        }
+
+        await db.SaveChangesAsync();
     }
 
     private static IHttpClientFactory CreateHttpClientFactory(HttpMessageHandler handler)

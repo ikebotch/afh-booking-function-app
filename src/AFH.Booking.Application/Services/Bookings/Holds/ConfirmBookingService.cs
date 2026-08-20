@@ -14,6 +14,7 @@ using AFH.Booking.Domain.Bookings.Commands;
 using AFH.Booking.Domain.Calendar;
 using AFH.Booking.Domain.Options;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 
 namespace AFH.Booking.Application.Holds;
 
@@ -35,6 +36,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
     private readonly IBookingTokenService _tokenService;
     private readonly NotificationsOptions _notificationOptions;
     private readonly IClientDirectory? _clients;
+    private readonly IDownstreamUpdateService? _downstreamUpdates;
 
     public ConfirmBookingService(
         IBookingHoldRepository holds,
@@ -52,7 +54,8 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         IHoldWindowFactory holdWindowFactory,
         IBookingTokenService tokenService,
         IOptions<NotificationsOptions> notificationOptions,
-        IClientDirectory? clients = null)
+        IClientDirectory? clients = null,
+        IDownstreamUpdateService? downstreamUpdates = null)
     {
         _holds = holds;
         _slots = slots;
@@ -70,6 +73,7 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         _tokenService = tokenService;
         _notificationOptions = notificationOptions.Value;
         _clients = clients;
+        _downstreamUpdates = downstreamUpdates;
     }
 
     public async Task<Result<ConfirmBookingResponse>> HandleAsync(
@@ -108,6 +112,8 @@ public sealed class ConfirmBookingService : IConfirmBookingService
 
         await SendBookedNotificationAsync(context, eventId, joinUrl, selfServiceLinks, ct);
         await _uow.SaveChangesAsync(ct);
+
+        await PublishBookedUpdateAsync(context, eventId, ct);
 
         return OkResponse(context.Hold, context.Transaction, joinUrl);
     }
@@ -428,6 +434,32 @@ public sealed class ConfirmBookingService : IConfirmBookingService
         return tokenResult.IsSuccess
             ? BookingSelfServiceLinkBuilder.Build(_notificationOptions.ClientPortalBaseUrl, bookingId, tokenResult.Value)
             : null;
+    }
+
+    private async Task PublishBookedUpdateAsync(
+        ConfirmationContext context,
+        string eventId,
+        CancellationToken ct)
+    {
+        if (_downstreamUpdates is null)
+            return;
+
+        await _downstreamUpdates.PublishBookingChangeAsync(
+            bookingId: context.Hold.Id,
+            changeType: "Booked",
+            transactionRef: context.Transaction.TransactionRef,
+            payloadJson: JsonSerializer.Serialize(new
+            {
+                bookingId = context.Hold.Id,
+                bookingReference = context.Transaction.BookingReference ?? context.Hold.Reference ?? context.Transaction.TransactionRef,
+                slotId = context.Slot.Id,
+                adviserId = context.Slot.AdviserId,
+                startUtc = context.Slot.StartUtc,
+                endUtc = context.Slot.EndUtc,
+                meetingType = context.Transaction.MeetingType,
+                lifecycleEventId = eventId
+            }),
+            ct: ct);
     }
 
     private static Result<ConfirmBookingResponse> OkResponse(

@@ -18,17 +18,20 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
     private readonly BookingDbContext _db;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PartnerWorkflowOptions _partnerWorkflowOptions;
+    private readonly IPartnerWorkflowPolicyProvider _policyProvider;
     private readonly ILogger<DownstreamUpdateService> _logger;
 
     public DownstreamUpdateService(
         BookingDbContext db,
         IHttpClientFactory httpClientFactory,
         IOptions<PartnerWorkflowOptions> partnerWorkflowOptions,
+        IPartnerWorkflowPolicyProvider policyProvider,
         ILogger<DownstreamUpdateService> logger)
     {
         _db = db;
         _httpClientFactory = httpClientFactory;
         _partnerWorkflowOptions = partnerWorkflowOptions.Value;
+        _policyProvider = policyProvider;
         _logger = logger;
     }
 
@@ -113,6 +116,15 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         if (!_partnerWorkflowOptions.Enabled || !TryResolveUpdateUri(out var updateUri))
         {
             row.Status = "ConfiguredOff";
+            row.ProcessedUtc = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+            return;
+        }
+
+        if (!await _policyProvider.IsEnabledAsync(row.ChangeType, ct))
+        {
+            row.Status = "Skipped";
+            row.ErrorMessage = "PartnerWorkflow:ChangeTypeDisabled";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
             return;

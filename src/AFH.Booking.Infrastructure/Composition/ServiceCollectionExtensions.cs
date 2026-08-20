@@ -235,6 +235,7 @@ public static class ServiceCollectionExtensions
         });
         services.AddHostedService<AdviserProjectionSyncWorker>();
         services.AddScoped<IDuplicateClientService, DuplicateClientService>();
+        services.AddScoped<IPartnerWorkflowPolicyProvider, PartnerWorkflowPolicyProvider>();
         services.AddScoped<IDownstreamUpdateService, DownstreamUpdateService>();
         services.AddScoped<IDownstreamUpdateReconciliationService, DownstreamUpdateService>();
 

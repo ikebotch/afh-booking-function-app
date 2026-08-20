@@ -1,4 +1,5 @@
 using AFH.Booking.Infrastructure.Clients;
+using AFH.Booking.Infrastructure.Logging;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using AFH.Booking.Domain.Options;
@@ -38,6 +39,8 @@ public sealed class DownstreamUpdateServiceTests
             CreateHttpClientFactory(handler),
             Options.Create(new PartnerWorkflowOptions { Enabled = true, BaseUrl = "https://partner.example", ApiKey = "token" }),
             new PartnerWorkflowPolicyProvider(db),
+            NoopApplicationLogSink.Instance,
+            Options.Create(new ApplicationLoggingOptions()),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.ReconcileAsync(10, 5, includePending: false, correlationId: "cid-1", CancellationToken.None);
@@ -73,6 +76,8 @@ public sealed class DownstreamUpdateServiceTests
             CreateHttpClientFactory(new StubHttpMessageHandler(_ => new HttpResponseMessage(HttpStatusCode.OK))),
             Options.Create(new PartnerWorkflowOptions { Enabled = true, BaseUrl = "https://partner.example" }),
             new PartnerWorkflowPolicyProvider(db),
+            NoopApplicationLogSink.Instance,
+            Options.Create(new ApplicationLoggingOptions()),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.ReconcileAsync(10, 5, includePending: true, correlationId: null, CancellationToken.None);
@@ -109,6 +114,8 @@ public sealed class DownstreamUpdateServiceTests
                 PayloadFormat = "PartnerWorkflow"
             }),
             new PartnerWorkflowPolicyProvider(db),
+            NoopApplicationLogSink.Instance,
+            Options.Create(new ApplicationLoggingOptions()),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.PublishBookingChangeAsync(
@@ -165,6 +172,8 @@ public sealed class DownstreamUpdateServiceTests
                 BookingUpdatesUrl = "https://partner.example/updates"
             }),
             new PartnerWorkflowPolicyProvider(db),
+            NoopApplicationLogSink.Instance,
+            Options.Create(new ApplicationLoggingOptions()),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.PublishBookingChangeAsync(
@@ -201,6 +210,8 @@ public sealed class DownstreamUpdateServiceTests
                 PayloadFormat = "PartnerWorkflow"
             }),
             new PartnerWorkflowPolicyProvider(db),
+            NoopApplicationLogSink.Instance,
+            Options.Create(new ApplicationLoggingOptions()),
             NullLogger<DownstreamUpdateService>.Instance);
 
         var result = await sut.PublishBookingChangeAsync(
@@ -263,5 +274,13 @@ public sealed class DownstreamUpdateServiceTests
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             => Task.FromResult(responder(request));
+    }
+
+    private sealed class NoopApplicationLogSink : IApplicationLogSink
+    {
+        public static readonly NoopApplicationLogSink Instance = new();
+
+        public Task WriteAsync(ApplicationLogEntry entry, CancellationToken cancellationToken = default)
+            => Task.CompletedTask;
     }
 }

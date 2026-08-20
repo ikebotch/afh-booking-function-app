@@ -5,6 +5,7 @@ using System.Text.Json;
 using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Models.Clients;
 using AFH.Booking.Domain.Options;
+using AFH.Booking.Infrastructure.Logging;
 using AFH.Booking.Infrastructure.Persistence;
 using AFH.Booking.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,8 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly PartnerWorkflowOptions _partnerWorkflowOptions;
     private readonly IPartnerWorkflowPolicyProvider _policyProvider;
+    private readonly IApplicationLogSink _logSink;
+    private readonly ApplicationLoggingOptions _loggingOptions;
     private readonly ILogger<DownstreamUpdateService> _logger;
 
     public DownstreamUpdateService(
@@ -26,12 +29,16 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         IHttpClientFactory httpClientFactory,
         IOptions<PartnerWorkflowOptions> partnerWorkflowOptions,
         IPartnerWorkflowPolicyProvider policyProvider,
+        IApplicationLogSink logSink,
+        IOptions<ApplicationLoggingOptions> loggingOptions,
         ILogger<DownstreamUpdateService> logger)
     {
         _db = db;
         _httpClientFactory = httpClientFactory;
         _partnerWorkflowOptions = partnerWorkflowOptions.Value;
         _policyProvider = policyProvider;
+        _logSink = logSink;
+        _loggingOptions = loggingOptions.Value;
         _logger = logger;
     }
 
@@ -113,11 +120,42 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         string? correlationId,
         CancellationToken ct)
     {
-        if (!_partnerWorkflowOptions.Enabled || !TryResolveUpdateUri(out var updateUri))
+        var hasUpdateUri = TryResolveUpdateUri(out var updateUri);
+        if (!_partnerWorkflowOptions.Enabled || !hasUpdateUri)
         {
+            _logger.LogInformation(
+                "Partner workflow booking change configured off. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType} Enabled={Enabled} HasBookingUpdatesUrl={HasBookingUpdatesUrl} HasBaseUrl={HasBaseUrl} HasResolvedUpdateUri={HasResolvedUpdateUri} CorrelationId={CorrelationId}",
+                row.Id,
+                row.BookingId,
+                row.ChangeType,
+                _partnerWorkflowOptions.Enabled,
+                !string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BookingUpdatesUrl),
+                !string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BaseUrl),
+                hasUpdateUri,
+                correlationId);
+
             row.Status = "ConfiguredOff";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
+            await TryWriteApplicationLogAsync(
+                row,
+                correlationId,
+                level: "Information",
+                eventType: "PartnerWorkflowConfiguredOff",
+                result: "ConfiguredOff",
+                message: "Partner workflow booking change configured off.",
+                payload: new
+                {
+                    row.Id,
+                    row.BookingId,
+                    row.ChangeType,
+                    row.TransactionRef,
+                    _partnerWorkflowOptions.Enabled,
+                    HasBookingUpdatesUrl = !string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BookingUpdatesUrl),
+                    HasBaseUrl = !string.IsNullOrWhiteSpace(_partnerWorkflowOptions.BaseUrl),
+                    HasResolvedUpdateUri = hasUpdateUri
+                },
+                ct);
             return;
         }
 
@@ -127,6 +165,22 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
             row.ErrorMessage = "PartnerWorkflow:ChangeTypeDisabled";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
+            await TryWriteApplicationLogAsync(
+                row,
+                correlationId,
+                level: "Information",
+                eventType: "PartnerWorkflowSkipped",
+                result: "Skipped",
+                message: "Partner workflow booking change skipped by DB policy.",
+                payload: new
+                {
+                    row.Id,
+                    row.BookingId,
+                    row.ChangeType,
+                    row.TransactionRef,
+                    row.ErrorMessage
+                },
+                ct);
             return;
         }
 
@@ -156,6 +210,26 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 : $"PartnerWorkflow:{DownstreamFailureClassifier.Classify(response.StatusCode)}:{(int)response.StatusCode}";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
+            await TryWriteApplicationLogAsync(
+                row,
+                correlationId,
+                level: response.IsSuccessStatusCode ? "Information" : "Warning",
+                eventType: response.IsSuccessStatusCode ? "PartnerWorkflowSent" : "PartnerWorkflowFailed",
+                result: row.Status,
+                message: response.IsSuccessStatusCode
+                    ? "Partner workflow booking change sent."
+                    : "Partner workflow booking change failed.",
+                payload: new
+                {
+                    row.Id,
+                    row.BookingId,
+                    row.ChangeType,
+                    row.TransactionRef,
+                    StatusCode = (int)response.StatusCode,
+                    FailureCategory = response.IsSuccessStatusCode ? null : DownstreamFailureClassifier.Classify(response.StatusCode),
+                    row.ErrorMessage
+                },
+                ct);
 
             if (!response.IsSuccessStatusCode)
             {
@@ -175,6 +249,23 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
             row.ErrorMessage = $"PartnerWorkflowException:{ex.GetType().Name}";
             row.ProcessedUtc = DateTime.UtcNow;
             await _db.SaveChangesAsync(ct);
+            await TryWriteApplicationLogAsync(
+                row,
+                correlationId,
+                level: "Warning",
+                eventType: "PartnerWorkflowFailed",
+                result: "Failure",
+                message: "Partner workflow booking change threw.",
+                payload: new
+                {
+                    row.Id,
+                    row.BookingId,
+                    row.ChangeType,
+                    row.TransactionRef,
+                    row.ErrorMessage
+                },
+                ct,
+                exception: ex);
 
             _logger.LogWarning(
                 ex,
@@ -184,6 +275,46 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
                 row.ChangeType,
                 row.AttemptCount,
                 correlationId);
+        }
+    }
+
+    private async Task TryWriteApplicationLogAsync(
+        DownstreamUpdateModel row,
+        string? correlationId,
+        string level,
+        string eventType,
+        string result,
+        string message,
+        object payload,
+        CancellationToken ct,
+        Exception? exception = null)
+    {
+        try
+        {
+            await _logSink.WriteAsync(new ApplicationLogEntry
+            {
+                OccurredUtc = DateTime.UtcNow,
+                Level = level,
+                Category = "PartnerWorkflow",
+                Operation = "DownstreamBookingChange",
+                CorrelationId = correlationId,
+                ContextId = row.Id,
+                EventType = eventType,
+                Result = result,
+                Message = message,
+                ExceptionType = exception?.GetType().Name,
+                ExceptionMessage = exception?.Message,
+                PayloadJson = ApplicationLogPayloadHelper.Serialize(payload, _loggingOptions)
+            }, ct);
+        }
+        catch (Exception logEx)
+        {
+            _logger.LogWarning(
+                logEx,
+                "Failed to persist partner workflow application log. UpdateId={UpdateId} BookingId={BookingId} ChangeType={ChangeType}",
+                row.Id,
+                row.BookingId,
+                row.ChangeType);
         }
     }
 

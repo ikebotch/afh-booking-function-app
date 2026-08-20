@@ -27,6 +27,8 @@ public static class BookingNotificationDefaults
             BookingNotificationTypes.BookingRescheduledName => "booking-rescheduled",
             BookingNotificationTypes.BookingCancelledName => "booking-cancelled",
             BookingNotificationTypes.BookingHoldCreatedName => "booking-hold",
+            BookingNotificationTypes.AdviserRequestSubmittedName => "adviser-request-submitted",
+            BookingNotificationTypes.AdviserRequestOutcomeName => "adviser-request-outcome",
             BookingNotificationTypes.CalendarEventCorrectedName => "calendar-event-corrected",
             BookingNotificationTypes.CalendarEventCorrectionFailedName => "calendar-event-correction-failed",
             _ => ToKebabCase(notificationType)
@@ -38,6 +40,8 @@ public static class BookingNotificationDefaults
             BookingNotificationTypes.BookingRescheduledName => "booking-rescheduled-sms",
             BookingNotificationTypes.BookingCancelledName => "booking-cancelled-sms",
             BookingNotificationTypes.BookingHoldCreatedName => "booking-hold-sms",
+            BookingNotificationTypes.AdviserRequestSubmittedName => "adviser-request-submitted-sms",
+            BookingNotificationTypes.AdviserRequestOutcomeName => "adviser-request-outcome-sms",
             BookingNotificationTypes.CalendarEventCorrectedName => "calendar-event-corrected-sms",
             BookingNotificationTypes.CalendarEventCorrectionFailedName => "calendar-event-correction-failed-sms",
             _ => $"{ToKebabCase(notificationType)}-sms"

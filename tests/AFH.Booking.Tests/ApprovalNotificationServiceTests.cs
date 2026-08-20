@@ -2,7 +2,9 @@ using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Approvals;
 using AFH.Booking.Application.Models.AdviserProjection;
+using AFH.Booking.Application.Models.Approvals;
 using AFH.Booking.Application.Models.Notifications;
+using AFH.Booking.Domain.Bookings;
 using AFH.Notification.Application.Policies.Booking;
 using AFH.Notification.Contract.V1.Dtos;
 using AFH.Notification.Contract.V1.Requests;
@@ -18,7 +20,7 @@ public sealed class ApprovalNotificationServiceTests
     [InlineData("Cancel", "Rejected")]
     [InlineData("Rearrange", "Approved")]
     [InlineData("Rearrange", "Rejected")]
-    public async Task RecordOutcomeAsync_PublishesAdviserOutcomeNotification(
+    public async Task RecordOutcomeAsync_PublishesPolicyResolvedOutcomeNotification(
         string changeType,
         string outcome)
     {
@@ -28,60 +30,75 @@ public sealed class ApprovalNotificationServiceTests
             .Callback<BookingNotificationRequest, CancellationToken>((request, _) => published = request)
             .Returns(Task.CompletedTask);
 
-        var sut = new ApprovalNotificationService(
-            NullLogger<ApprovalNotificationService>.Instance,
-            publisher.Object,
-            AdviserRepository("adviser-1", "adviser@example.com"));
+        var sut = CreateService(publisher.Object, adviserEmail: "adviser@example.com");
 
         await sut.RecordOutcomeAsync(
-            requestId: "approval-1",
-            bookingId: "booking-1",
-            transactionId: "tx-1",
-            transactionRef: "txn-ref",
-            requesterId: "adviser-1",
+            Approval(changeType, outcome),
+            ApprovalBooking(),
             approverId: "manager-1",
-            outcome: outcome,
-            changeType: changeType,
-            reasonCode: "CLIENT_REQUEST",
-            reasonDetail: "Client asked",
-            notes: "Reviewed",
             CancellationToken.None);
 
         Assert.NotNull(published);
         Assert.Equal("AdviserRequestOutcome", published!.Type.Name);
-        var recipient = Assert.Single(published.Recipients);
-        Assert.Equal("Adviser", recipient.RecipientType);
-        Assert.Equal("adviser@example.com", recipient.Email);
+        Assert.Equal(
+            [BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.Manager],
+            published.Recipients.Select(x => x.RecipientType).OrderBy(x => x, StringComparer.Ordinal).ToArray());
         Assert.Equal("approval-outcome:approval-1:" + outcome, published.Data["IdempotencyKey"]);
         Assert.Equal(changeType, published.Data["changeType"]);
         Assert.Equal(outcome, published.Data["outcome"]);
         Assert.Equal("Reviewed", published.Data["decisionNotes"]);
+        Assert.Equal("adviser-request-outcome", published.Data["TemplateKey:Email"]);
     }
 
     [Fact]
-    public async Task RecordOutcomeAsync_MissingAdviserEmailSkipsSafely()
+    public async Task RecordRequestSubmittedAsync_PublishesPolicyResolvedSubmittedNotification()
     {
+        BookingNotificationRequest? published = null;
         var publisher = new Mock<IBookingNotificationPublisher>();
-        var sut = new ApprovalNotificationService(
-            NullLogger<ApprovalNotificationService>.Instance,
-            publisher.Object,
-            AdviserRepository("adviser-1", null));
+        publisher.Setup(x => x.PublishAsync(It.IsAny<BookingNotificationRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<BookingNotificationRequest, CancellationToken>((request, _) => published = request)
+            .Returns(Task.CompletedTask);
 
-        await sut.RecordOutcomeAsync(
-            "approval-1",
-            "booking-1",
-            "tx-1",
-            "txn-ref",
+        var sut = CreateService(publisher.Object, adviserEmail: "adviser@example.com");
+
+        await sut.RecordRequestSubmittedAsync(
+            new ApprovalRouteTarget("Role", "booking-approvers", "Booking Approvers"),
+            Approval("Cancel", "Pending"),
+            ApprovalBooking(),
             "adviser-1",
-            "manager-1",
-            "Approved",
-            "Cancel",
-            "CLIENT_REQUEST",
-            null,
-            null,
             CancellationToken.None);
 
-        publisher.Verify(x => x.PublishAsync(It.IsAny<BookingNotificationRequest>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.NotNull(published);
+        Assert.Equal("AdviserRequestSubmitted", published!.Type.Name);
+        Assert.Equal("approval-submitted:approval-1", published.Data["IdempotencyKey"]);
+        Assert.Equal("Submitted", published.Data["outcome"]);
+        Assert.Equal("Pending", published.Data["status"]);
+        Assert.Equal("adviser-request-submitted", published.Data["TemplateKey:Email"]);
+        Assert.Equal(
+            [BookingNotificationRecipientTypes.Adviser, BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.Manager],
+            published.Recipients.Select(x => x.RecipientType).OrderBy(x => x, StringComparer.Ordinal).ToArray());
+    }
+
+    [Fact]
+    public async Task RecordOutcomeAsync_MissingAdviserEmailStillPublishesOtherResolvedRecipients()
+    {
+        BookingNotificationRequest? published = null;
+        var publisher = new Mock<IBookingNotificationPublisher>();
+        publisher.Setup(x => x.PublishAsync(It.IsAny<BookingNotificationRequest>(), It.IsAny<CancellationToken>()))
+            .Callback<BookingNotificationRequest, CancellationToken>((request, _) => published = request)
+            .Returns(Task.CompletedTask);
+        var sut = CreateService(publisher.Object, adviserEmail: null);
+
+        await sut.RecordOutcomeAsync(
+            Approval("Cancel", "Approved"),
+            ApprovalBooking(),
+            "manager-1",
+            CancellationToken.None);
+
+        Assert.NotNull(published);
+        Assert.Equal(
+            [BookingNotificationRecipientTypes.Client, BookingNotificationRecipientTypes.Manager],
+            published!.Recipients.Select(x => x.RecipientType).OrderBy(x => x, StringComparer.Ordinal).ToArray());
     }
 
     [Fact]
@@ -91,23 +108,12 @@ public sealed class ApprovalNotificationServiceTests
         publisher.Setup(x => x.PublishAsync(It.IsAny<BookingNotificationRequest>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("publisher unavailable"));
 
-        var sut = new ApprovalNotificationService(
-            NullLogger<ApprovalNotificationService>.Instance,
-            publisher.Object,
-            AdviserRepository("adviser-1", "adviser@example.com"));
+        var sut = CreateService(publisher.Object, adviserEmail: "adviser@example.com");
 
         await sut.RecordOutcomeAsync(
-            "approval-1",
-            "booking-1",
-            "tx-1",
-            "txn-ref",
-            "adviser-1",
+            Approval("Rearrange", "Rejected"),
+            ApprovalBooking(),
             "manager-1",
-            "Rejected",
-            "Rearrange",
-            "CLIENT_REQUEST",
-            null,
-            "No availability",
             CancellationToken.None);
 
         publisher.Verify(x => x.PublishAsync(It.IsAny<BookingNotificationRequest>(), It.IsAny<CancellationToken>()), Times.Once);
@@ -153,5 +159,134 @@ public sealed class ApprovalNotificationServiceTests
                     MailboxUserId = email
                 });
         return repo.Object;
+    }
+
+    private static ApprovalNotificationService CreateService(
+        IBookingNotificationPublisher publisher,
+        string? adviserEmail)
+        => new(
+            NullLogger<ApprovalNotificationService>.Instance,
+            publisher,
+            AdviserRepository("adviser-1", adviserEmail),
+            new StubPolicyProvider(),
+            new StubRecipientResolver());
+
+    private static ApprovalWorkflowRecord Approval(string changeType, string status)
+        => new()
+        {
+            Id = "approval-1",
+            Reference = "REQ-1",
+            BookingId = "booking-1",
+            TransactionId = "tx-1",
+            ChangeType = changeType,
+            RequestedBy = "Adviser",
+            RequesterId = "adviser-1",
+            Status = status,
+            ReasonCode = "CLIENT_REQUEST",
+            ReasonDetail = "Client asked",
+            ReviewNotes = "Reviewed",
+            ClientName = "Alice Client",
+            AdviserName = "Ada Adviser",
+            MeetingType = "Review",
+            BookingDateTime = FixedNow.AddDays(1)
+        };
+
+    private static ApprovalBookingSnapshot ApprovalBooking()
+    {
+        var slot = BookingSlot.Rehydrate(
+            "slot-1",
+            "tx-1",
+            "adviser-1",
+            "Ada Adviser",
+            FixedNow.AddDays(1),
+            FixedNow.AddDays(1).AddHours(1),
+            5,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            FixedNow);
+        var hold = BookingHold.Rehydrate(
+            "booking-1",
+            "slot-1",
+            "user-1",
+            BookingHoldStatus.Confirmed,
+            FixedNow.AddHours(-2),
+            FixedNow.AddHours(1),
+            FixedNow.AddHours(-1),
+            null,
+            null,
+            null,
+            null,
+            null,
+            "BK-1");
+        var transaction = BookingTransaction.Rehydrate(
+            "tx-1",
+            "txn-ref",
+            "BK-1",
+            "Alice Client",
+            "client@example.com",
+            "1 Client Street",
+            null,
+            "Client Town",
+            null,
+            "AB1 2CD",
+            FixedNow,
+            TimeSpan.FromHours(1),
+            "Europe/London",
+            true,
+            "Review",
+            null,
+            BookingTransactionStatus.Open,
+            FixedNow,
+            null,
+            [slot]);
+
+        return new ApprovalBookingSnapshot(hold, slot, transaction);
+    }
+
+    private static readonly DateTime FixedNow = new(2026, 8, 20, 9, 0, 0, DateTimeKind.Utc);
+
+    private sealed class StubPolicyProvider : IBookingNotificationPolicyProvider
+    {
+        public Task<BookingNotificationPolicy> GetAsync(
+            string sourceApplication,
+            BookingNotificationType notificationType,
+            CancellationToken ct)
+            => Task.FromResult(new BookingNotificationPolicy(
+                sourceApplication,
+                notificationType.Name,
+                true,
+                [new BookingNotificationChannelPolicy(BookingNotificationChannel.Email, true, notificationType.Name == BookingNotificationTypes.AdviserRequestSubmittedName ? "adviser-request-submitted" : "adviser-request-outcome", "v1")],
+                [
+                    new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Client, true),
+                    new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Adviser, true),
+                    new BookingNotificationRecipientPolicy(BookingNotificationRecipientTypes.Manager, true)
+                ]));
+    }
+
+    private sealed class StubRecipientResolver : IBookingNotificationRecipientResolver
+    {
+        public Task<IReadOnlyList<BookingNotificationRecipient>> ResolveAsync(
+            BookingNotificationPolicy policy,
+            IReadOnlyList<BookingNotificationRecipient> requestedRecipients,
+            IReadOnlyDictionary<string, string> data,
+            CancellationToken ct)
+        {
+            var recipients = requestedRecipients.ToList();
+            if (policy.Recipients.Any(x => x.Enabled && x.RecipientType == BookingNotificationRecipientTypes.Manager))
+            {
+                recipients.Add(new BookingNotificationRecipient(
+                    BookingNotificationRecipientTypes.Manager,
+                    "Booking Manager",
+                    "manager@example.com",
+                    PreferredChannels: [BookingNotificationChannel.Email]));
+            }
+
+            return Task.FromResult<IReadOnlyList<BookingNotificationRecipient>>(recipients);
+        }
     }
 }

@@ -27,7 +27,9 @@ internal static class NotificationRecipientDataSafety
     [
         "booking-confirmed",
         "booking-cancelled",
-        "booking-rescheduled"
+        "booking-rescheduled",
+        "adviser-request-submitted",
+        "adviser-request-outcome"
     ];
 
     public static NotificationRequested ForRecipientChannel(

@@ -171,13 +171,9 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
 
             await _notifications.RecordRequestSubmittedAsync(
                 routeTarget,
-                booking.Hold.Id,
-                booking.Transaction.Id,
-                booking.Transaction.TransactionRef,
+                existingPending,
+                booking,
                 requesterId ?? requestedBy,
-                existingPending.ChangeType,
-                request.ReasonCode!,
-                request.ReasonDetail,
                 ct);
 
             return ToResponse(existingPending);
@@ -255,13 +251,9 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
 
         await _notifications.RecordRequestSubmittedAsync(
             routeTarget,
-            booking.Hold.Id,
-            booking.Transaction.Id,
-            booking.Transaction.TransactionRef,
+            model,
+            booking,
             requesterId ?? requestedBy,
-            model.ChangeType,
-            request.ReasonCode!,
-            request.ReasonDetail,
             ct);
 
         return ToResponse(model);
@@ -361,17 +353,9 @@ public sealed class ApprovalWorkflowService : IApprovalWorkflowService
         await _uow.SaveChangesAsync(ct);
 
         await _notifications.RecordOutcomeAsync(
-            row.Id,
-            row.BookingId,
-            row.TransactionId,
-            bookingBeforeDecision.Transaction.TransactionRef,
-            row.RequesterId ?? row.RequestedBy,
+            row,
+            bookingBeforeDecision,
             reviewerId ?? row.Reviewer!,
-            row.Status,
-            row.ChangeType,
-            row.ReasonCode,
-            row.ReasonDetail,
-            row.ReviewNotes,
             ct);
 
         if (request.Approved)

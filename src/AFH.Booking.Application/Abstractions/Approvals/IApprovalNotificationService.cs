@@ -6,26 +6,14 @@ public interface IApprovalNotificationService
 {
     Task RecordRequestSubmittedAsync(
         ApprovalRouteTarget routeTarget,
-        string bookingId,
-        string transactionId,
-        string transactionRef,
+        ApprovalWorkflowRecord approval,
+        ApprovalBookingSnapshot booking,
         string requesterId,
-        string changeType,
-        string reasonCode,
-        string? reasonDetail,
         CancellationToken ct);
 
     Task RecordOutcomeAsync(
-        string requestId,
-        string bookingId,
-        string transactionId,
-        string transactionRef,
-        string requesterId,
+        ApprovalWorkflowRecord approval,
+        ApprovalBookingSnapshot booking,
         string approverId,
-        string outcome,
-        string changeType,
-        string? reasonCode,
-        string? reasonDetail,
-        string? notes,
         CancellationToken ct);
 }

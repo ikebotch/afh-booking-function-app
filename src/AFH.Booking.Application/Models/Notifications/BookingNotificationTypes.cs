@@ -8,6 +8,7 @@ public static class BookingNotificationTypes
     public const string BookingRescheduledName = "BookingRescheduled";
     public const string BookingCancelledName = "BookingCancelled";
     public const string BookingHoldCreatedName = "BookingHoldCreated";
+    public const string AdviserRequestSubmittedName = "AdviserRequestSubmitted";
     public const string AdviserRequestOutcomeName = "AdviserRequestOutcome";
     public const string CalendarEventCorrectedName = "CalendarEventCorrected";
     public const string CalendarEventCorrectionFailedName = "CalendarEventCorrectionFailed";
@@ -16,6 +17,7 @@ public static class BookingNotificationTypes
     public static readonly BookingNotificationType BookingRescheduled = new(SourceApplication, BookingRescheduledName);
     public static readonly BookingNotificationType BookingCancelled = new(SourceApplication, BookingCancelledName);
     public static readonly BookingNotificationType BookingHoldCreated = new(SourceApplication, BookingHoldCreatedName);
+    public static readonly BookingNotificationType AdviserRequestSubmitted = new(SourceApplication, AdviserRequestSubmittedName);
     public static readonly BookingNotificationType AdviserRequestOutcome = new(SourceApplication, AdviserRequestOutcomeName);
     public static readonly BookingNotificationType CalendarEventCorrected = new(SourceApplication, CalendarEventCorrectedName);
     public static readonly BookingNotificationType CalendarEventCorrectionFailed = new(SourceApplication, CalendarEventCorrectionFailedName);
@@ -31,6 +33,7 @@ public static class BookingNotificationTypes
             BookingRescheduledName => BookingRescheduled,
             BookingCancelledName => BookingCancelled,
             BookingHoldCreatedName => BookingHoldCreated,
+            AdviserRequestSubmittedName => AdviserRequestSubmitted,
             AdviserRequestOutcomeName => AdviserRequestOutcome,
             CalendarEventCorrectedName => CalendarEventCorrected,
             CalendarEventCorrectionFailedName => CalendarEventCorrectionFailed,

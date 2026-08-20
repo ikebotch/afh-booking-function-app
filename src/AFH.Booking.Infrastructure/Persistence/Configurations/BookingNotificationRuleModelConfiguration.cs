@@ -13,6 +13,8 @@ public sealed class BookingNotificationRuleModelConfiguration : IEntityTypeConfi
     private static readonly Guid BookingRescheduledRuleId = Guid.Parse("7f6c8f21-9d36-481e-b5ad-08454d0036a6");
     private static readonly Guid BookingCancelledRuleId = Guid.Parse("f6096d32-d3c7-49d4-8d16-9b7135e66274");
     private static readonly Guid BookingHoldCreatedRuleId = Guid.Parse("4e428654-c797-4f91-97fa-bd7b5086395a");
+    private static readonly Guid AdviserRequestSubmittedRuleId = Guid.Parse("19c2f130-6649-42ed-82cb-95f0d8706d01");
+    private static readonly Guid AdviserRequestOutcomeRuleId = Guid.Parse("9b9be0be-7633-4576-ba6d-24ef060a0e6d");
 
     public void Configure(EntityTypeBuilder<BookingNotificationRuleModel> b)
     {
@@ -41,7 +43,9 @@ public sealed class BookingNotificationRuleModelConfiguration : IEntityTypeConfi
             Rule(BookingConfirmedRuleId, BookingNotificationTypes.BookingConfirmed.Name, enabled: true),
             Rule(BookingRescheduledRuleId, BookingNotificationTypes.BookingRescheduled.Name, enabled: true),
             Rule(BookingCancelledRuleId, BookingNotificationTypes.BookingCancelled.Name, enabled: true),
-            Rule(BookingHoldCreatedRuleId, BookingNotificationTypes.BookingHoldCreated.Name, enabled: false));
+            Rule(BookingHoldCreatedRuleId, BookingNotificationTypes.BookingHoldCreated.Name, enabled: false),
+            Rule(AdviserRequestSubmittedRuleId, BookingNotificationTypes.AdviserRequestSubmitted.Name, enabled: true),
+            Rule(AdviserRequestOutcomeRuleId, BookingNotificationTypes.AdviserRequestOutcome.Name, enabled: true));
     }
 
     internal static IReadOnlyDictionary<string, Guid> RuleIds => new Dictionary<string, Guid>(StringComparer.Ordinal)
@@ -49,7 +53,9 @@ public sealed class BookingNotificationRuleModelConfiguration : IEntityTypeConfi
         [BookingNotificationTypes.BookingConfirmed.Name] = BookingConfirmedRuleId,
         [BookingNotificationTypes.BookingRescheduled.Name] = BookingRescheduledRuleId,
         [BookingNotificationTypes.BookingCancelled.Name] = BookingCancelledRuleId,
-        [BookingNotificationTypes.BookingHoldCreated.Name] = BookingHoldCreatedRuleId
+        [BookingNotificationTypes.BookingHoldCreated.Name] = BookingHoldCreatedRuleId,
+        [BookingNotificationTypes.AdviserRequestSubmitted.Name] = AdviserRequestSubmittedRuleId,
+        [BookingNotificationTypes.AdviserRequestOutcome.Name] = AdviserRequestOutcomeRuleId
     };
 
     internal static DateTime SeedTimestampUtc => SeededUtc;

@@ -9,6 +9,7 @@ public sealed class BookingNotificationTemplatePolicy : INotificationTemplatePol
     private const string BookingRescheduled = "BookingRescheduled";
     private const string BookingCancelled = "BookingCancelled";
     private const string BookingHoldCreated = "BookingHoldCreated";
+    private const string AdviserRequestSubmitted = "AdviserRequestSubmitted";
     private const string AdviserRequestOutcome = "AdviserRequestOutcome";
     private const string CalendarEventCorrected = "CalendarEventCorrected";
     private const string CalendarEventCorrectionFailed = "CalendarEventCorrectionFailed";
@@ -23,6 +24,7 @@ public sealed class BookingNotificationTemplatePolicy : INotificationTemplatePol
             BookingRescheduled => "Booking.booking-rescheduled.v1.txt",
             BookingCancelled => "Booking.booking-cancelled.v1.txt",
             BookingHoldCreated => "Booking.booking-hold.v1.txt",
+            AdviserRequestSubmitted => "Booking.adviser-request-submitted.v1.txt",
             AdviserRequestOutcome => "Booking.adviser-request-outcome.v1.txt",
             CalendarEventCorrected => "Booking.calendar-event-corrected.v1.txt",
             CalendarEventCorrectionFailed => "Booking.calendar-event-correction-failed.v1.txt",

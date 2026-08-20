@@ -2,99 +2,137 @@ using AFH.Booking.Application.Abstractions.Approvals;
 using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.Approvals;
+using AFH.Booking.Application.Models.AdviserProjection;
 using AFH.Booking.Application.Models.Notifications;
+using AFH.Booking.Application.Services.Notifications;
 using Microsoft.Extensions.Logging;
 
 namespace AFH.Booking.Application.Approvals;
 
 public sealed class ApprovalNotificationService : IApprovalNotificationService
 {
+    private const string SubmittedTemplateKey = "adviser-request-submitted";
+    private const string SubmittedSmsTemplateKey = "adviser-request-submitted-sms";
     private const string OutcomeTemplateKey = "adviser-request-outcome";
     private const string OutcomeSmsTemplateKey = "adviser-request-outcome-sms";
-    private const string OutcomeTemplateVersion = "v1";
+    private const string TemplateVersion = "v1";
 
     private readonly ILogger<ApprovalNotificationService> _logger;
     private readonly IBookingNotificationPublisher _publisher;
     private readonly IAdviserProfileProjectionRepository _advisers;
+    private readonly IBookingNotificationPolicyProvider _policyProvider;
+    private readonly IBookingNotificationRecipientResolver _recipientResolver;
 
     public ApprovalNotificationService(
         ILogger<ApprovalNotificationService> logger,
         IBookingNotificationPublisher publisher,
-        IAdviserProfileProjectionRepository advisers)
+        IAdviserProfileProjectionRepository advisers,
+        IBookingNotificationPolicyProvider policyProvider,
+        IBookingNotificationRecipientResolver recipientResolver)
     {
         _logger = logger;
         _publisher = publisher;
         _advisers = advisers;
+        _policyProvider = policyProvider;
+        _recipientResolver = recipientResolver;
     }
 
     public async Task RecordRequestSubmittedAsync(
         ApprovalRouteTarget routeTarget,
-        string bookingId,
-        string transactionId,
-        string transactionRef,
+        ApprovalWorkflowRecord approval,
+        ApprovalBookingSnapshot booking,
         string requesterId,
-        string changeType,
-        string reasonCode,
-        string? reasonDetail,
         CancellationToken ct)
     {
         await AddAsync(
-            bookingId,
-            transactionId,
-            transactionRef,
+            approval.BookingId,
+            approval.TransactionId,
+            booking.Transaction.TransactionRef,
             "ApprovalSubmitted",
             routeTarget.TargetValue,
-            $"Adviser request submitted for {changeType}. Reason: {reasonCode}{(string.IsNullOrWhiteSpace(reasonDetail) ? string.Empty : $" - {reasonDetail.Trim()}")}. Routed to {routeTarget.DisplayName}. Requester={requesterId}.",
+            $"Adviser request submitted for {approval.ChangeType}. Reason: {approval.ReasonCode}{(string.IsNullOrWhiteSpace(approval.ReasonDetail) ? string.Empty : $" - {approval.ReasonDetail.Trim()}")}. Routed to {routeTarget.DisplayName}. Requester={requesterId}.",
+            ct);
+
+        var data = await BuildApprovalDataAsync(
+            approval,
+            booking,
+            requesterId,
+            reviewerId: routeTarget.TargetValue,
+            notificationStatus: "Pending",
+            outcome: "Submitted",
+            templateKey: SubmittedTemplateKey,
+            smsTemplateKey: SubmittedSmsTemplateKey,
+            idempotencyKey: $"approval-submitted:{approval.Id.Trim()}",
+            ct);
+
+        var adviser = await ResolveAdviserAsync(requesterId, ct);
+        await PublishPolicyNotificationAsync(
+            BookingNotificationTypes.AdviserRequestSubmitted,
+            approval.Id,
+            new BookingNotificationActor(
+                ActorType: "Adviser",
+                SourceApplication: "ApprovalWorkflow",
+                Id: requesterId,
+                DisplayName: data.GetValueOrDefault("adviserName", requesterId),
+                Email: null),
+            BuildRequestedRecipients(booking, adviser),
+            data,
             ct);
     }
 
     public async Task RecordOutcomeAsync(
-        string requestId,
-        string bookingId,
-        string transactionId,
-        string transactionRef,
-        string requesterId,
+        ApprovalWorkflowRecord approval,
+        ApprovalBookingSnapshot booking,
         string approverId,
-        string outcome,
-        string changeType,
-        string? reasonCode,
-        string? reasonDetail,
-        string? notes,
         CancellationToken ct)
     {
         await AddAsync(
-            bookingId,
-            transactionId,
-            transactionRef,
+            approval.BookingId,
+            approval.TransactionId,
+            booking.Transaction.TransactionRef,
             "ApprovalOutcome",
-            requesterId,
-            $"Approval outcome for {changeType}: {outcome}. Approver={approverId}.{(string.IsNullOrWhiteSpace(notes) ? string.Empty : $" Notes: {notes.Trim()}")}",
+            approval.RequesterId ?? approval.RequestedBy,
+            $"Approval outcome for {approval.ChangeType}: {approval.Status}. Approver={approverId}.{(string.IsNullOrWhiteSpace(approval.ReviewNotes) ? string.Empty : $" Notes: {approval.ReviewNotes.Trim()}")}",
             ct);
 
+        var requestId = approval.Id;
+        var requesterId = approval.RequesterId ?? approval.RequestedBy;
         if (string.IsNullOrWhiteSpace(requesterId))
         {
             _logger.LogWarning(
                 "Approval outcome notification skipped because requester id is missing. RequestId={RequestId} BookingId={BookingId} Outcome={Outcome}",
                 requestId,
-                bookingId,
-                outcome);
+                approval.BookingId,
+                approval.Status);
             return;
         }
 
         var adviser = await _advisers.GetAsync(requesterId.Trim(), ct);
-        if (adviser is null || string.IsNullOrWhiteSpace(adviser.MailboxUserId))
+        if (adviser is null)
         {
             _logger.LogWarning(
-                "Approval outcome notification skipped because adviser email could not be resolved. RequestId={RequestId} BookingId={BookingId} AdviserId={AdviserId} Outcome={Outcome}",
+                "Approval outcome notification skipped because adviser could not be resolved. RequestId={RequestId} BookingId={BookingId} AdviserId={AdviserId} Outcome={Outcome}",
                 requestId,
-                bookingId,
+                approval.BookingId,
                 requesterId,
-                outcome);
+                approval.Status);
             return;
         }
 
-        var idempotencyKey = $"approval-outcome:{requestId.Trim()}:{outcome.Trim()}";
-        var notification = new BookingNotificationRequest(
+        var idempotencyKey = $"approval-outcome:{requestId.Trim()}:{approval.Status.Trim()}";
+        var data = await BuildApprovalDataAsync(
+            approval,
+            booking,
+            requesterId,
+            approverId,
+            approval.Status,
+            approval.Status,
+            OutcomeTemplateKey,
+            OutcomeSmsTemplateKey,
+            idempotencyKey,
+            ct);
+
+        await PublishPolicyNotificationAsync(
             BookingNotificationTypes.AdviserRequestOutcome,
             string.IsNullOrWhiteSpace(requestId) ? Guid.NewGuid().ToString("N") : requestId.Trim(),
             new BookingNotificationActor(
@@ -103,99 +141,166 @@ public sealed class ApprovalNotificationService : IApprovalNotificationService
                 Id: approverId,
                 DisplayName: approverId,
                 Email: null),
-            [
-                new BookingNotificationRecipient(
-                    RecipientType: "Adviser",
-                    DisplayName: string.IsNullOrWhiteSpace(adviser.DisplayName) ? requesterId : adviser.DisplayName,
-                    Email: adviser.MailboxUserId,
-                    PreferredChannels: [BookingNotificationChannel.Email])
-            ],
-            BuildOutcomeData(
-                requestId,
-                bookingId,
-                transactionId,
-                transactionRef,
-                requesterId,
-                approverId,
-                outcome,
-                changeType,
-                reasonCode,
-                reasonDetail,
-                notes,
-                idempotencyKey));
+            BuildRequestedRecipients(booking, adviser),
+            data,
+            ct);
+    }
 
+    private async Task PublishPolicyNotificationAsync(
+        BookingNotificationType notificationType,
+        string correlationId,
+        BookingNotificationActor actor,
+        IReadOnlyList<BookingNotificationRecipient> requestedRecipients,
+        IReadOnlyDictionary<string, string> data,
+        CancellationToken ct)
+    {
         try
         {
+            var policy = await _policyProvider.GetAsync(BookingNotificationTypes.SourceApplication, notificationType, ct);
+            if (!policy.Enabled)
+            {
+                _logger.LogInformation(
+                    "Approval notification skipped because policy is disabled. NotificationType={NotificationType} CorrelationId={CorrelationId}",
+                    notificationType.Name,
+                    correlationId);
+                return;
+            }
+
+            var recipients = await _recipientResolver.ResolveAsync(policy, requestedRecipients, data, ct);
+            if (recipients.Count == 0)
+            {
+                _logger.LogWarning(
+                    "Approval notification skipped because no recipients resolved. NotificationType={NotificationType} CorrelationId={CorrelationId}",
+                    notificationType.Name,
+                    correlationId);
+                return;
+            }
+
+            var notification = new BookingNotificationRequest(
+                notificationType,
+                string.IsNullOrWhiteSpace(correlationId) ? Guid.NewGuid().ToString("N") : correlationId.Trim(),
+                actor,
+                recipients,
+                data);
+
             await _publisher.PublishAsync(notification, ct);
             _logger.LogInformation(
-                "Approval outcome notification published. RequestId={RequestId} BookingId={BookingId} AdviserId={AdviserId} Outcome={Outcome} IdempotencyKey={IdempotencyKey}",
-                requestId,
-                bookingId,
-                requesterId,
-                outcome,
-                idempotencyKey);
+                "Approval notification published. NotificationType={NotificationType} CorrelationId={CorrelationId} RecipientCount={RecipientCount} IdempotencyKey={IdempotencyKey}",
+                notificationType.Name,
+                correlationId,
+                recipients.Count,
+                data.GetValueOrDefault("IdempotencyKey"));
         }
         catch (Exception ex)
         {
             _logger.LogError(
                 ex,
-                "Approval outcome notification publish failed after approval decision was recorded. RequestId={RequestId} BookingId={BookingId} AdviserId={AdviserId} Outcome={Outcome}",
-                requestId,
-                bookingId,
-                requesterId,
-                outcome);
+                "Approval notification publish failed after approval state was recorded. NotificationType={NotificationType} CorrelationId={CorrelationId}",
+                notificationType.Name,
+                correlationId);
         }
     }
 
-    private static IReadOnlyDictionary<string, string> BuildOutcomeData(
-        string requestId,
-        string bookingId,
-        string transactionId,
-        string transactionRef,
+    private async Task<IReadOnlyDictionary<string, string>> BuildApprovalDataAsync(
+        ApprovalWorkflowRecord approval,
+        ApprovalBookingSnapshot booking,
         string requesterId,
-        string approverId,
+        string reviewerId,
+        string notificationStatus,
         string outcome,
-        string changeType,
-        string? reasonCode,
-        string? reasonDetail,
-        string? notes,
-        string idempotencyKey)
+        string templateKey,
+        string smsTemplateKey,
+        string idempotencyKey,
+        CancellationToken ct)
     {
+        var adviser = await ResolveAdviserAsync(requesterId, ct);
+        var adviserName = FirstNonEmpty(adviser?.DisplayName, booking.Slot.AdviserName, requesterId);
         var data = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["RequestId"] = requestId,
-            ["requestId"] = requestId,
-            ["BookingId"] = bookingId,
-            ["bookingId"] = bookingId,
-            ["TransactionId"] = transactionId,
-            ["transactionId"] = transactionId,
-            ["TransactionRef"] = transactionRef,
-            ["transactionRef"] = transactionRef,
+            ["RequestId"] = approval.Id,
+            ["requestId"] = approval.Id,
+            ["approvalRequestId"] = approval.Id,
+            ["requestReference"] = approval.Reference ?? string.Empty,
+            ["BookingId"] = approval.BookingId,
+            ["bookingId"] = approval.BookingId,
+            ["TransactionId"] = approval.TransactionId,
+            ["transactionId"] = approval.TransactionId,
+            ["TransactionRef"] = booking.Transaction.TransactionRef,
+            ["transactionRef"] = booking.Transaction.TransactionRef,
             ["AdviserId"] = requesterId,
             ["adviserId"] = requesterId,
-            ["Reviewer"] = approverId,
-            ["reviewer"] = approverId,
+            ["AdviserName"] = adviserName,
+            ["adviserName"] = adviserName,
+            ["Reviewer"] = reviewerId,
+            ["reviewer"] = reviewerId,
             ["Outcome"] = outcome,
             ["outcome"] = outcome,
-            ["Status"] = outcome,
-            ["status"] = outcome,
-            ["ChangeType"] = changeType,
-            ["changeType"] = changeType,
+            ["Status"] = notificationStatus,
+            ["status"] = notificationStatus,
+            ["ChangeType"] = approval.ChangeType,
+            ["changeType"] = approval.ChangeType,
             ["IdempotencyKey"] = idempotencyKey,
-            ["TemplateKey:Email"] = OutcomeTemplateKey,
-            ["TemplateVersion:Email"] = OutcomeTemplateVersion,
-            ["TemplateKey:Sms"] = OutcomeSmsTemplateKey,
-            ["TemplateVersion:Sms"] = OutcomeTemplateVersion
+            ["TemplateKey:Email"] = templateKey,
+            ["TemplateVersion:Email"] = TemplateVersion,
+            ["TemplateKey:Sms"] = smsTemplateKey,
+            ["TemplateVersion:Sms"] = TemplateVersion,
+            ["greetingName"] = "there",
+            ["note"] = BuildNotificationNote(approval, outcome),
+            ["decisionNotes"] = approval.ReviewNotes ?? string.Empty,
+            ["DecisionNotes"] = approval.ReviewNotes ?? string.Empty,
+            ["clientName"] = booking.Transaction.ClientName ?? approval.ClientName ?? string.Empty,
+            ["clientEmail"] = booking.Transaction.ClientEmail ?? string.Empty
         };
 
-        AddIfPresent(data, "ReasonCode", reasonCode);
-        AddIfPresent(data, "reasonCode", reasonCode);
-        AddIfPresent(data, "ReasonDetail", reasonDetail);
-        AddIfPresent(data, "reasonDetail", reasonDetail);
-        AddIfPresent(data, "DecisionNotes", notes);
-        AddIfPresent(data, "decisionNotes", notes);
+        BookingNotificationPayloadFields.AddStandardBookingFields(
+            data,
+            booking.Transaction,
+            booking.Slot,
+            notificationStatus);
+
+        AddIfPresent(data, "ReasonCode", approval.ReasonCode);
+        AddIfPresent(data, "reasonCode", approval.ReasonCode);
+        AddIfPresent(data, "ReasonDetail", approval.ReasonDetail);
+        AddIfPresent(data, "reasonDetail", approval.ReasonDetail);
         return data;
     }
+
+    private async Task<AdviserProfileProjectionRecord?> ResolveAdviserAsync(string requesterId, CancellationToken ct)
+        => string.IsNullOrWhiteSpace(requesterId)
+            ? null
+            : await _advisers.GetAsync(requesterId.Trim(), ct);
+
+    private static IReadOnlyList<BookingNotificationRecipient> BuildRequestedRecipients(
+        ApprovalBookingSnapshot booking,
+        AdviserProfileProjectionRecord? adviser = null)
+    {
+        var recipients = new List<BookingNotificationRecipient>();
+        if (!string.IsNullOrWhiteSpace(booking.Transaction.ClientEmail))
+        {
+            recipients.Add(new BookingNotificationRecipient(
+                BookingNotificationRecipientTypes.Client,
+                booking.Transaction.ClientName,
+                booking.Transaction.ClientEmail,
+                PreferredChannels: [BookingNotificationChannel.Email]));
+        }
+
+        if (adviser is not null && !string.IsNullOrWhiteSpace(adviser.MailboxUserId))
+        {
+            recipients.Add(new BookingNotificationRecipient(
+                BookingNotificationRecipientTypes.Adviser,
+                string.IsNullOrWhiteSpace(adviser.DisplayName) ? booking.Slot.AdviserName : adviser.DisplayName,
+                adviser.MailboxUserId,
+                PreferredChannels: [BookingNotificationChannel.Email]));
+        }
+
+        return recipients;
+    }
+
+    private static string BuildNotificationNote(ApprovalWorkflowRecord approval, string outcome)
+        => $"Adviser {approval.ChangeType} request {outcome.ToLowerInvariant()}. Reason: {approval.ReasonCode}{(string.IsNullOrWhiteSpace(approval.ReasonDetail) ? string.Empty : $" - {approval.ReasonDetail.Trim()}")}.";
+
+    private static string FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? string.Empty;
 
     private static void AddIfPresent(
         IDictionary<string, string> data,

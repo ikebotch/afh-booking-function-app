@@ -30,6 +30,8 @@ public sealed class BookingNotificationRuleRecipientModelConfiguration : IEntity
         Add(rows, "BookingRescheduled", enabled: true, now, "982657c1-2041-4fed-9cb1-5a802e258704", "42cda070-c4cd-4fdb-ab79-c3d6870baf7e", "10f4906d-1d29-41de-8baa-aecf96c5de02", "55f92361-2f74-4128-a794-703eff8ca9e3");
         Add(rows, "BookingCancelled", enabled: true, now, "a689b522-d031-44db-b145-e8109350c271", "566301d9-a5d6-4e2d-a688-65b6d11c00f2", "9224f2f1-8408-423e-a318-cb3dd69fde03", "27650cba-e5cf-4777-903d-24123832d1a3");
         Add(rows, "BookingHoldCreated", enabled: false, now, "9c987676-c344-476a-a57a-8a22e2d97922", "6bc808c6-53a3-473f-972d-d8871678e4d4", "d39f9f03-df6f-4a1e-b7cb-dc94b2ddde04", "84186f63-a40d-419b-933d-573106880aeb");
+        Add(rows, "AdviserRequestSubmitted", enabled: true, now, "7809ff7d-0721-430f-9b62-0ffb57dc9401", "20aaf403-b3d1-4247-b6d6-885eaf8b9402", "f8495119-62a9-45ee-9bf0-ae099ada9403", "f1e20620-c6b2-4871-b79f-ef9d23509404");
+        Add(rows, "AdviserRequestOutcome", enabled: true, now, "e5cd76c9-dc76-4a92-9686-f152b3d4c901", "9f053bd8-906f-4f48-8d22-cac5590afccb", "358ac452-b5ad-4373-a593-1ff936e83298", "8b951db9-b91e-443f-9715-55df020b0b4b");
         return rows;
     }
 

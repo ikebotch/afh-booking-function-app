@@ -44,6 +44,54 @@ public sealed class DbApprovalWorkflowStoreTests
     }
 
     [Fact]
+    public async Task ListAsync_FiltersByBookingSearchFieldsAndBookingDate()
+    {
+        await using var db = CreateDbContext();
+        await SeedApprovalBookingAsync(db);
+        var store = new DbApprovalWorkflowStore(db);
+
+        var results = await store.ListAsync(new ListApprovalWorkflowRequestsQuery(
+            RequesterId: null,
+            BookingIds: [],
+            Statuses: ["Pending"],
+            ChangeTypes: ["Rearrange"],
+            Search: "fiona",
+            BookingReferences: ["BK-APPROVAL-1"],
+            AdviserNames: ["Ada Adviser"],
+            ClientNames: ["Fiona Lead"],
+            MeetingTypes: ["Pensions"],
+            FromUtc: new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc),
+            ToUtc: new DateTime(2026, 8, 27, 23, 59, 59, DateTimeKind.Utc)), CancellationToken.None);
+
+        var result = Assert.Single(results);
+        Assert.Equal("request-approval-1", result.Id);
+        Assert.Equal("Fiona Lead", result.ClientName);
+        Assert.Equal("Ada Adviser", result.AdviserName);
+        Assert.Equal("Pensions", result.MeetingType);
+        Assert.Equal(new DateTime(2026, 8, 27, 14, 0, 0, DateTimeKind.Utc), result.BookingDateTime);
+    }
+
+    [Fact]
+    public async Task ListAsync_DateFieldRequestedFiltersByApprovalRequestedDate()
+    {
+        await using var db = CreateDbContext();
+        await SeedApprovalBookingAsync(db);
+        var store = new DbApprovalWorkflowStore(db);
+
+        var results = await store.ListAsync(new ListApprovalWorkflowRequestsQuery(
+            RequesterId: null,
+            BookingIds: [],
+            Statuses: [],
+            ChangeTypes: [],
+            FromUtc: new DateTime(2026, 8, 20, 0, 0, 0, DateTimeKind.Utc),
+            ToUtc: new DateTime(2026, 8, 20, 23, 59, 59, DateTimeKind.Utc),
+            DateField: "requested"), CancellationToken.None);
+
+        var result = Assert.Single(results);
+        Assert.Equal("request-approval-1", result.Id);
+    }
+
+    [Fact]
     public async Task ListAsync_EnrichesClientNameFromClientDirectoryWhenTransactionSnapshotIsEmpty()
     {
         await using var db = CreateDbContext();
@@ -202,6 +250,54 @@ public sealed class DbApprovalWorkflowStoreTests
             Request("request-3", "booking-3", "Rearrange", "adv-1", "Rejected", new DateTime(2026, 7, 17, 9, 0, 0, DateTimeKind.Utc)),
             Request("request-4", "booking-4", "Cancel", "adv-2", "Pending", new DateTime(2026, 7, 18, 9, 0, 0, DateTimeKind.Utc)));
 
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SeedApprovalBookingAsync(BookingDbContext db)
+    {
+        await db.BookingTransactions.AddAsync(new BookingTransactionModel
+        {
+            Id = "tx-approval-1",
+            TransactionRef = "TRX-APPROVAL-1",
+            BookingReference = "BK-APPROVAL-1",
+            ClientName = "Fiona Lead",
+            ClientEmail = "fiona@example.test",
+            ProposedStartUtc = new DateTime(2026, 8, 27, 14, 0, 0, DateTimeKind.Utc),
+            DurationMinutes = 60,
+            IsRemote = true,
+            MeetingType = "Pensions",
+            Status = 0,
+            CreatedUtc = new DateTime(2026, 8, 18, 9, 0, 0, DateTimeKind.Utc),
+            RowVersion = [1]
+        });
+        await db.BookingSlots.AddAsync(new BookingSlotModel
+        {
+            Id = "slot-approval-1",
+            TransactionId = "tx-approval-1",
+            AdviserId = "adv-1",
+            AdviserName = "Ada Adviser",
+            StartUtc = new DateTime(2026, 8, 27, 14, 0, 0, DateTimeKind.Utc),
+            EndUtc = new DateTime(2026, 8, 27, 15, 0, 0, DateTimeKind.Utc),
+            CreatedUtc = new DateTime(2026, 8, 18, 9, 0, 0, DateTimeKind.Utc)
+        });
+        await db.Holds.AddAsync(new BookingHoldModel
+        {
+            Id = "booking-approval-1",
+            Reference = "BK-APPROVAL-1",
+            UserId = "user-1",
+            SlotId = "slot-approval-1",
+            Status = HoldStatus.Confirmed,
+            CreatedUtc = new DateTime(2026, 8, 18, 9, 0, 0, DateTimeKind.Utc),
+            HoldExpiresUtc = new DateTime(2026, 8, 18, 9, 15, 0, DateTimeKind.Utc),
+            RowVersion = [1]
+        });
+        await db.ApprovalRequests.AddAsync(Request(
+            "request-approval-1",
+            "booking-approval-1",
+            "Rearrange",
+            "adv-1",
+            "Pending",
+            new DateTime(2026, 8, 20, 10, 0, 0, DateTimeKind.Utc)));
         await db.SaveChangesAsync();
     }
 

@@ -29,7 +29,19 @@ public sealed record ListApprovalWorkflowRequestsQuery(
     string? RequesterId,
     IReadOnlyList<string> BookingIds,
     IReadOnlyList<string> Statuses,
-    IReadOnlyList<string> ChangeTypes);
+    IReadOnlyList<string> ChangeTypes,
+    string? Search = null,
+    IReadOnlyList<string>? BookingReferences = null,
+    IReadOnlyList<string>? TransactionIds = null,
+    IReadOnlyList<string>? TransactionRefs = null,
+    IReadOnlyList<string>? AdviserIds = null,
+    IReadOnlyList<string>? AdviserNames = null,
+    IReadOnlyList<string>? ClientNames = null,
+    IReadOnlyList<string>? MeetingTypes = null,
+    IReadOnlyList<string>? RequestedBys = null,
+    DateTime? FromUtc = null,
+    DateTime? ToUtc = null,
+    string? DateField = null);
 
 public sealed record ApprovalRouteTarget(
     string TargetType,

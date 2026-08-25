@@ -92,6 +92,67 @@ public sealed class AdminBookingSearchRepositoryTests
     }
 
     [Fact]
+    public async Task SearchAsync_FiltersByReferenceLeadNameAndMeetingTopic()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+        var transaction = await db.BookingTransactions.SingleAsync(x => x.Id == "tx-1");
+        transaction.BookingReference = "BK-REF-1";
+        transaction.ClientName = "Alice Lead";
+        await db.SaveChangesAsync();
+        var repository = new AdminBookingSearchRepository(db);
+
+        var result = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            BookingReferences = ["BK-REF-1"],
+            ClientNames = ["Alice Lead"],
+            MeetingTypes = ["Review"],
+            Page = 1,
+            PageSize = 25
+        }, CancellationToken.None);
+
+        var item = Assert.Single(result.Items);
+        Assert.Equal("booking-1", item.BookingId);
+        Assert.Equal("BK-REF-1", item.BookingReference);
+        Assert.Equal("Alice Lead", item.ClientName);
+    }
+
+    [Fact]
+    public async Task SearchAsync_SearchMatchesBookingReferenceAdviserAndLeadName()
+    {
+        await using var db = CreateDbContext();
+        await SeedAsync(db);
+        var transaction = await db.BookingTransactions.SingleAsync(x => x.Id == "tx-1");
+        transaction.BookingReference = "BK-SEARCH-1";
+        transaction.ClientName = "Fiona Lead";
+        await db.SaveChangesAsync();
+        var repository = new AdminBookingSearchRepository(db);
+
+        var byReference = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            Search = "BK-SEARCH",
+            Page = 1,
+            PageSize = 25
+        }, CancellationToken.None);
+        var byAdviser = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            Search = "Ada Adviser",
+            Page = 1,
+            PageSize = 25
+        }, CancellationToken.None);
+        var byLead = await repository.SearchAsync(new SearchAdminBookingsQuery
+        {
+            Search = "Fiona",
+            Page = 1,
+            PageSize = 25
+        }, CancellationToken.None);
+
+        Assert.Contains(byReference.Items, item => item.BookingId == "booking-1");
+        Assert.Contains(byAdviser.Items, item => item.BookingId == "booking-1");
+        Assert.Contains(byLead.Items, item => item.BookingId == "booking-1");
+    }
+
+    [Fact]
     public async Task SearchAsync_EnrichesClientSnapshotFromTransactionRef()
     {
         await using var db = CreateDbContext();

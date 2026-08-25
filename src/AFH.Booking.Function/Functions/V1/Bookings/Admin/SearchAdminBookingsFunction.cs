@@ -23,18 +23,24 @@ public sealed class SearchAdminBookingsFunction
         Description = "Returns paged admin booking results for users with booking admin read permission.",
         ResponseType = typeof(AdminBookingSearchResponse))]
     [BookingOpenApiQueryParameter("search", "string", Description = "Optional free-text search across reference, client, adviser, meeting type and location fields.", Example = "Fiona")]
+    [BookingOpenApiQueryParameter("q", "string", Description = "Alias for search.", Example = "BK-123")]
     [BookingOpenApiQueryParameter("bookingId", "string", Description = "Optional booking id filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "booking-123")]
+    [BookingOpenApiQueryParameter("bookingReference", "string", Description = "Optional booking reference filter. reference is accepted as an alias. Repeat the parameter or use comma-separated values for multiple selections.", Example = "BK-123")]
     [BookingOpenApiQueryParameter("transactionId", "string", Description = "Optional booking transaction id filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "tx-123")]
     [BookingOpenApiQueryParameter("transactionRef", "string", Description = "Optional external transaction/client reference filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "TRX-123")]
     [BookingOpenApiQueryParameter("status", "string", Description = "Optional hold status filter: Active, Confirmed, PendingReschedule, Released, Cancelled or Expired. Repeat the parameter or use comma-separated values for multiple selections.", Example = "Confirmed,PendingReschedule")]
     [BookingOpenApiQueryParameter("adviserId", "string", Description = "Optional adviser id filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "adv-123")]
     [BookingOpenApiQueryParameter("adviserName", "string", Description = "Optional adviser name filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "John Doe")]
     [BookingOpenApiQueryParameter("clientRef", "string", Description = "Optional client/user reference filter. clientId is accepted as an alias. Repeat the parameter or use comma-separated values for multiple selections.", Example = "client-123")]
+    [BookingOpenApiQueryParameter("leadName", "string", Description = "Optional lead/client name filter. clientName is accepted as an alias. Repeat the parameter or use comma-separated values for multiple selections.", Example = "Fiona")]
     [BookingOpenApiQueryParameter("locationRef", "string", Description = "Optional location reference filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "branch-123")]
     [BookingOpenApiQueryParameter("meetingType", "string", Description = "Optional meeting type filter. Repeat the parameter or use comma-separated values for multiple selections.", Example = "Review")]
+    [BookingOpenApiQueryParameter("meetingTopic", "string", Description = "Alias for meetingType. Repeat the parameter or use comma-separated values for multiple selections.", Example = "Pensions")]
     [BookingOpenApiQueryParameter("mode", "string", Description = "Optional mode filter: " + BookingModeScalars.Online + ", " + BookingModeScalars.InPerson + " or " + BookingModeScalars.Phone + ". Repeat the parameter or use comma-separated values for multiple selections.", Example = BookingModeScalars.InPerson)]
     [BookingOpenApiQueryParameter("from", "string", Format = "date-time", Description = "Optional UTC lower bound for booking start.", Example = "2026-07-01T00:00:00Z")]
     [BookingOpenApiQueryParameter("to", "string", Format = "date-time", Description = "Optional UTC upper bound for booking start.", Example = "2026-07-31T23:59:59Z")]
+    [BookingOpenApiQueryParameter("dateFrom", "string", Format = "date-time", Description = "Alias for from.", Example = "2026-07-01T00:00:00Z")]
+    [BookingOpenApiQueryParameter("dateTo", "string", Format = "date-time", Description = "Alias for to.", Example = "2026-07-31T23:59:59Z")]
     [BookingOpenApiQueryParameter("page", "integer", Description = "1-based page number.", Example = "1")]
     [BookingOpenApiQueryParameter("pageSize", "integer", Description = "Page size from 1 to 100.", Example = "25")]
     public async Task<HttpResponseData> Run(
@@ -47,8 +53,8 @@ public sealed class SearchAdminBookingsFunction
             return authResult.Response!;
 
         var scope = BuildBookingSearchScope(authResult.User!);
-        var fromIsValid = TryParseUtc(req.Query("from"), out var fromUtc, out var fromError);
-        var toIsValid = TryParseUtc(req.Query("to"), out var toUtc, out var toError);
+        var fromIsValid = TryParseUtc(QueryFirst(req, "from", "dateFrom", "startFrom", "startUtcFrom"), out var fromUtc, out var fromError);
+        var toIsValid = TryParseUtc(QueryFirst(req, "to", "dateTo", "startTo", "startUtcTo"), out var toUtc, out var toError);
 
         if (!fromIsValid || !toIsValid)
         {
@@ -88,16 +94,18 @@ public sealed class SearchAdminBookingsFunction
         DateTime? toUtc)
         => new()
         {
-            Search = req.Query("search"),
+            Search = QueryFirst(req, "search", "q", "query", "keyword"),
             BookingIds = req.QueryMany("bookingId"),
+            BookingReferences = QueryMany(req, "bookingReference", "bookingRef", "reference"),
             TransactionIds = req.QueryMany("transactionId"),
-            TransactionRefs = req.QueryMany("transactionRef"),
+            TransactionRefs = QueryMany(req, "transactionRef", "transactionReference"),
             Statuses = req.QueryMany("status"),
             AdviserIds = req.QueryMany("adviserId"),
             AdviserNames = req.QueryMany("adviserName"),
-            ClientRefs = req.QueryMany("clientRef").Concat(req.QueryMany("clientId")).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+            ClientRefs = QueryMany(req, "clientRef", "clientId"),
+            ClientNames = QueryMany(req, "leadName", "clientName", "customerName"),
             LocationRefs = req.QueryMany("locationRef"),
-            MeetingTypes = req.QueryMany("meetingType"),
+            MeetingTypes = QueryMany(req, "meetingType", "meetingTopic", "topic"),
             Modes = req.QueryMany("mode"),
             HasUnrestrictedAccess = scope.HasUnrestrictedAccess,
             ScopedAdviserIds = scope.ScopedAdviserIds,
@@ -111,6 +119,12 @@ public sealed class SearchAdminBookingsFunction
 
     private static int ParseInt(string? value, int fallback)
         => int.TryParse(value, out var parsed) ? parsed : fallback;
+
+    private static string? QueryFirst(HttpRequestData req, params string[] keys)
+        => keys.Select(key => req.Query(key)).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
+    private static IReadOnlyList<string> QueryMany(HttpRequestData req, params string[] keys)
+        => keys.SelectMany(key => req.QueryMany(key)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
 
     private static BookingSearchAccessScope BuildBookingSearchScope(AFH.Booking.Application.Models.Auth.AdviserUserContext user)
     {

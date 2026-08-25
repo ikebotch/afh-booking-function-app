@@ -89,6 +89,16 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
             rows = rows.Where(x => bookingIds.Contains(x.BookingId) || bookingIds.Contains(x.BookingReference!));
         }
 
+        if (query.BookingReferences is { Count: > 0 })
+        {
+            var bookingReferences = Normalize(query.BookingReferences);
+            rows = rows.Where(x =>
+                bookingReferences.Contains(x.BookingReference!) ||
+                _db.Holds.Any(hold =>
+                    (hold.Id == x.BookingId || hold.Reference == x.BookingId || hold.Reference == x.BookingReference) &&
+                    bookingReferences.Contains(hold.Reference!)));
+        }
+
         if (query.Statuses.Count > 0)
         {
             var statuses = Normalize(query.Statuses);
@@ -99,6 +109,119 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
         {
             var changeTypes = Normalize(query.ChangeTypes);
             rows = rows.Where(x => changeTypes.Contains(x.ChangeType));
+        }
+
+        if (query.RequestedBys is { Count: > 0 })
+        {
+            var requestedBys = Normalize(query.RequestedBys);
+            rows = rows.Where(x => requestedBys.Contains(x.RequestedBy));
+        }
+
+        if (query.TransactionIds is { Count: > 0 })
+        {
+            var transactionIds = Normalize(query.TransactionIds);
+            rows = rows.Where(x => transactionIds.Contains(x.TransactionId));
+        }
+
+        if (query.TransactionRefs is { Count: > 0 })
+        {
+            var transactionRefs = Normalize(query.TransactionRefs);
+            rows = rows.Where(x =>
+                _db.Holds.Any(hold =>
+                    (hold.Id == x.BookingId || hold.Reference == x.BookingId || hold.Reference == x.BookingReference) &&
+                    _db.BookingSlots.Any(slot =>
+                        slot.Id == hold.SlotId &&
+                        _db.BookingTransactions.Any(tx =>
+                            tx.Id == slot.TransactionId &&
+                            transactionRefs.Contains(tx.TransactionRef)))));
+        }
+
+        if (query.AdviserIds is { Count: > 0 })
+        {
+            var adviserIds = Normalize(query.AdviserIds);
+            rows = rows.Where(x =>
+                _db.Holds.Any(hold =>
+                    (hold.Id == x.BookingId || hold.Reference == x.BookingId || hold.Reference == x.BookingReference) &&
+                    _db.BookingSlots.Any(slot =>
+                        slot.Id == hold.SlotId &&
+                        adviserIds.Contains(slot.AdviserId))));
+        }
+
+        if (query.AdviserNames is { Count: > 0 })
+        {
+            var adviserNames = Normalize(query.AdviserNames);
+            rows = rows.Where(x =>
+                _db.Holds.Any(hold =>
+                    (hold.Id == x.BookingId || hold.Reference == x.BookingId || hold.Reference == x.BookingReference) &&
+                    _db.BookingSlots.Any(slot =>
+                        slot.Id == hold.SlotId &&
+                        adviserNames.Contains(slot.AdviserName))));
+        }
+
+        if (query.ClientNames is { Count: > 0 })
+        {
+            var clientNames = Normalize(query.ClientNames);
+            rows = rows.Where(x =>
+                _db.Holds.Any(hold =>
+                    (hold.Id == x.BookingId || hold.Reference == x.BookingId || hold.Reference == x.BookingReference) &&
+                    _db.BookingSlots.Any(slot =>
+                        slot.Id == hold.SlotId &&
+                        _db.BookingTransactions.Any(tx =>
+                            tx.Id == slot.TransactionId &&
+                            clientNames.Contains(tx.ClientName!)))));
+        }
+
+        if (query.MeetingTypes is { Count: > 0 })
+        {
+            var meetingTypes = Normalize(query.MeetingTypes);
+            rows = rows.Where(x =>
+                _db.Holds.Any(hold =>
+                    (hold.Id == x.BookingId || hold.Reference == x.BookingId || hold.Reference == x.BookingReference) &&
+                    _db.BookingSlots.Any(slot =>
+                        slot.Id == hold.SlotId &&
+                        _db.BookingTransactions.Any(tx =>
+                            tx.Id == slot.TransactionId &&
+                            meetingTypes.Contains(tx.MeetingType!)))));
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim().ToLower();
+            rows = rows.Where(x =>
+                (x.Id != null && x.Id.ToLower().Contains(search)) ||
+                (x.Reference != null && x.Reference.ToLower().Contains(search)) ||
+                (x.BookingId != null && x.BookingId.ToLower().Contains(search)) ||
+                (x.BookingReference != null && x.BookingReference.ToLower().Contains(search)) ||
+                (x.TransactionId != null && x.TransactionId.ToLower().Contains(search)) ||
+                (x.ChangeType != null && x.ChangeType.ToLower().Contains(search)) ||
+                (x.RequestedBy != null && x.RequestedBy.ToLower().Contains(search)) ||
+                (x.RequesterId != null && x.RequesterId.ToLower().Contains(search)) ||
+                _db.Holds.Any(hold =>
+                    (hold.Id == x.BookingId || hold.Reference == x.BookingId || hold.Reference == x.BookingReference) &&
+                    ((hold.Reference != null && hold.Reference.ToLower().Contains(search)) ||
+                     _db.BookingSlots.Any(slot =>
+                         slot.Id == hold.SlotId &&
+                         ((slot.AdviserId != null && slot.AdviserId.ToLower().Contains(search)) ||
+                          (slot.AdviserName != null && slot.AdviserName.ToLower().Contains(search)) ||
+                          _db.BookingTransactions.Any(tx =>
+                              tx.Id == slot.TransactionId &&
+                              ((tx.TransactionRef != null && tx.TransactionRef.ToLower().Contains(search)) ||
+                               (tx.BookingReference != null && tx.BookingReference.ToLower().Contains(search)) ||
+                               (tx.ClientName != null && tx.ClientName.ToLower().Contains(search)) ||
+                               (tx.ClientEmail != null && tx.ClientEmail.ToLower().Contains(search)) ||
+                               (tx.MeetingType != null && tx.MeetingType.ToLower().Contains(search)))))))));
+        }
+
+        if (query.FromUtc.HasValue || query.ToUtc.HasValue)
+        {
+            var filterRequestedDate = string.Equals(query.DateField, "requested", StringComparison.OrdinalIgnoreCase)
+                                      || string.Equals(query.DateField, "created", StringComparison.OrdinalIgnoreCase);
+            var fromUtc = query.FromUtc.HasValue ? DateTime.SpecifyKind(query.FromUtc.Value, DateTimeKind.Utc) : (DateTime?)null;
+            var toUtc = query.ToUtc.HasValue ? DateTime.SpecifyKind(query.ToUtc.Value, DateTimeKind.Utc) : (DateTime?)null;
+
+            rows = filterRequestedDate
+                ? ApplyRequestedDateFilter(rows, fromUtc, toUtc)
+                : ApplyBookingDateFilter(rows, fromUtc, toUtc);
         }
 
         var results = await rows
@@ -227,6 +350,48 @@ public sealed class DbApprovalWorkflowStore : IApprovalWorkflowStore
             .Select(value => value.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
+
+    private IQueryable<ApprovalRequestModel> ApplyRequestedDateFilter(
+        IQueryable<ApprovalRequestModel> rows,
+        DateTime? fromUtc,
+        DateTime? toUtc)
+    {
+        if (fromUtc.HasValue)
+            rows = rows.Where(x => x.RequestedUtc >= fromUtc.Value);
+
+        if (toUtc.HasValue)
+            rows = rows.Where(x => x.RequestedUtc <= toUtc.Value);
+
+        return rows;
+    }
+
+    private IQueryable<ApprovalRequestModel> ApplyBookingDateFilter(
+        IQueryable<ApprovalRequestModel> rows,
+        DateTime? fromUtc,
+        DateTime? toUtc)
+    {
+        if (fromUtc.HasValue)
+        {
+            rows = rows.Where(x =>
+                _db.Holds.Any(hold =>
+                    (hold.Id == x.BookingId || hold.Reference == x.BookingId || hold.Reference == x.BookingReference) &&
+                    _db.BookingSlots.Any(slot =>
+                        slot.Id == hold.SlotId &&
+                        slot.StartUtc >= fromUtc.Value)));
+        }
+
+        if (toUtc.HasValue)
+        {
+            rows = rows.Where(x =>
+                _db.Holds.Any(hold =>
+                    (hold.Id == x.BookingId || hold.Reference == x.BookingId || hold.Reference == x.BookingReference) &&
+                    _db.BookingSlots.Any(slot =>
+                        slot.Id == hold.SlotId &&
+                        slot.StartUtc <= toUtc.Value)));
+        }
+
+        return rows;
+    }
 
     public async Task<ApprovalWorkflowRecord?> GetAsync(string requestId, CancellationToken ct)
     {

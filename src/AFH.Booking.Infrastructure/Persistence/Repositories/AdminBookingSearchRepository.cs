@@ -213,6 +213,14 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
                 || bookingIds.Contains(x.Slot.Transaction.BookingReference!));
         }
 
+        if (query.BookingReferences.Count > 0)
+        {
+            var bookingReferences = Normalize(query.BookingReferences);
+            rows = rows.Where(x =>
+                bookingReferences.Contains(x.Reference!)
+                || bookingReferences.Contains(x.Slot.Transaction.BookingReference!));
+        }
+
         if (query.TransactionIds.Count > 0)
         {
             var transactionIds = Normalize(query.TransactionIds);
@@ -273,6 +281,12 @@ public sealed class AdminBookingSearchRepository : IAdminBookingSearchRepository
             rows = rows.Where(x =>
                 clientRefs.Contains(x.Slot.Transaction.TransactionRef)
                 || clientRefs.Contains(x.UserId));
+        }
+
+        if (query.ClientNames.Count > 0)
+        {
+            var clientNames = Normalize(query.ClientNames);
+            rows = rows.Where(x => clientNames.Contains(x.Slot.Transaction.ClientName!));
         }
 
         if (query.LocationRefs.Count > 0)

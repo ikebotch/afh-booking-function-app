@@ -13,6 +13,7 @@ internal sealed record SubmitNotificationRequestDto
     public NotificationActor? Actor { get; init; }
     public IReadOnlyList<SubmitNotificationRecipientDto>? Recipients { get; init; }
     public IReadOnlyDictionary<string, string>? Data { get; init; }
+    public IReadOnlyList<NotificationAttachment>? Attachments { get; init; }
     public string? SourceApplication { get; init; }
 
     [JsonPropertyName("notificationType")]
@@ -49,7 +50,8 @@ internal sealed record SubmitNotificationRequestDto
             CorrelationId!,
             Actor!,
             recipients!,
-            data);
+            data,
+            Attachments);
     }
 
     private NotificationType? CreateTypeFromFlatProperties()

@@ -36,7 +36,17 @@ public sealed record BookingNotificationRequest(
     string CorrelationId,
     BookingNotificationActor Actor,
     IReadOnlyList<BookingNotificationRecipient> Recipients,
-    IReadOnlyDictionary<string, string> Data)
+    IReadOnlyDictionary<string, string> Data,
+    IReadOnlyList<BookingNotificationAttachment>? Attachments = null)
 {
     public string SourceSystem => Type.SourceApplication;
 }
+
+public sealed record BookingNotificationAttachment(
+    string FileName,
+    string ContentType,
+    string Base64Content,
+    string? ContentId = null,
+    bool Inline = false,
+    IReadOnlyList<string>? RecipientTypes = null,
+    IReadOnlyList<BookingNotificationChannel>? Channels = null);

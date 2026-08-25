@@ -111,12 +111,38 @@ public sealed class GraphEmailSender : IGraphEmailSender
                         Name = "x-afh-provider-correlation-id",
                         Value = providerCorrelationId
                     }
-                ]
+                ],
+                Attachments = BuildAttachments(request)
             },
             SaveToSentItems = true
         };
 
         return _graphClient.Users[senderMailbox].SendMail.PostAsync(body, cancellationToken: ct);
+    }
+
+    private static List<Attachment>? BuildAttachments(NotificationDeliveryRequest request)
+    {
+        if (request.Attachments is null || request.Attachments.Count == 0)
+            return null;
+
+        var attachments = new List<Attachment>();
+        foreach (var attachment in request.Attachments)
+        {
+            if (string.IsNullOrWhiteSpace(attachment.FileName) || string.IsNullOrWhiteSpace(attachment.Base64Content))
+                continue;
+
+            attachments.Add(new FileAttachment
+            {
+                OdataType = "#microsoft.graph.fileAttachment",
+                Name = attachment.FileName,
+                ContentType = attachment.ContentType,
+                ContentBytes = Convert.FromBase64String(attachment.Base64Content),
+                ContentId = attachment.ContentId,
+                IsInline = attachment.Inline
+            });
+        }
+
+        return attachments.Count == 0 ? null : attachments;
     }
 }
 

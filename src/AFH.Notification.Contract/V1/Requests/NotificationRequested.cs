@@ -7,7 +7,8 @@ public sealed record NotificationRequested(
     string CorrelationId,
     NotificationActor Actor,
     IReadOnlyList<NotificationRecipient> Recipients,
-    IReadOnlyDictionary<string, string> Data)
+    IReadOnlyDictionary<string, string> Data,
+    IReadOnlyList<NotificationAttachment>? Attachments = null)
 {
     public string SourceSystem => Type.SourceApplication;
 }

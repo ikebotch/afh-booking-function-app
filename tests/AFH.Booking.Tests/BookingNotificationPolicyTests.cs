@@ -2,9 +2,9 @@ using AFH.Booking.Application.Abstractions.Clients;
 using AFH.Booking.Application.Abstractions.Notifications;
 using AFH.Booking.Application.Abstractions.Persistence;
 using AFH.Booking.Application.Models.AdviserProjection;
-using AFH.Booking.Application.Models.OrganisationAssignments;
 using AFH.Booking.Application.Models.Lifecycle.Constants;
 using AFH.Booking.Application.Models.Notifications;
+using AFH.Booking.Application.Models.OrganisationAssignments;
 using AFH.Booking.Application.Services.Lifecycle;
 using AFH.Booking.Infrastructure.Notifications;
 using AFH.Booking.Infrastructure.Persistence;
@@ -12,6 +12,7 @@ using AFH.Booking.Infrastructure.Persistence.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
+using System.Text;
 using Xunit;
 
 namespace AFH.Booking.Tests;
@@ -482,6 +483,59 @@ public sealed class BookingNotificationPolicyTests
             Assert.DoesNotContain("manageBookingLinks", request.Data.Keys);
             Assert.DoesNotContain("token=secret", string.Join('\n', request.Data.Values), StringComparison.OrdinalIgnoreCase);
         }
+    }
+
+    [Fact]
+    public async Task Step_AttachesCalendarInviteToClientAndAdviserOnly()
+    {
+        var publisher = new CapturingPublisher();
+        var step = new BookingNotificationStep(
+            publisher,
+            new StubPolicyProvider(DefaultPolicy(BookingNotificationTypes.BookingConfirmed)),
+            CreateRecipientResolver(adviserEmail: "adviser@example.com"),
+            NullLogger<BookingNotificationStep>.Instance);
+
+        var result = await step.ExecuteAsync(
+            LifecycleEventTypes.Booked,
+            "booking-1",
+            LifecycleActors.Client,
+            [new BookingNotificationRecipient(BookingNotificationRecipientTypes.Client, "Jane Client", "client@example.com")],
+            new Dictionary<string, string>
+            {
+                ["bookingId"] = "booking-1",
+                ["adviserId"] = "adv-1",
+                ["adviserName"] = "Ada Adviser",
+                ["startUtc"] = "2026-08-27T14:00:00Z",
+                ["endUtc"] = "2026-08-27T15:00:00Z",
+                ["meetingType"] = "Telephone",
+                ["transactionRef"] = "S123",
+                ["locationLine"] = "Telephone meeting"
+            },
+            CancellationToken.None);
+
+        Assert.Equal(LifecycleStepStatuses.Succeeded, result.Status);
+
+        var clientRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Client);
+        var adviserRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Adviser);
+        var managerRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.Manager);
+        var contactCentreRequest = Assert.Single(publisher.Requests, x => x.Recipients.Single().RecipientType == BookingNotificationRecipientTypes.ContactCentre);
+
+        var clientAttachment = Assert.Single(clientRequest.Attachments!);
+        Assert.Equal("booking-booking-1.ics", clientAttachment.FileName);
+        Assert.Contains("method=REQUEST", clientAttachment.ContentType);
+        Assert.Contains(BookingNotificationChannel.Email, clientAttachment.Channels!);
+
+        var ics = Encoding.UTF8.GetString(Convert.FromBase64String(clientAttachment.Base64Content));
+        Assert.Contains("BEGIN:VCALENDAR\r\n", ics);
+        Assert.Contains("METHOD:REQUEST\r\n", ics);
+        Assert.Contains("UID:booking-booking-1@afh-booking\r\n", ics);
+        Assert.Contains("DTSTART:20260827T140000Z\r\n", ics);
+        Assert.Contains("DTEND:20260827T150000Z\r\n", ics);
+        Assert.Contains("STATUS:CONFIRMED\r\n", ics);
+
+        Assert.NotNull(adviserRequest.Attachments);
+        Assert.Null(managerRequest.Attachments);
+        Assert.Null(contactCentreRequest.Attachments);
     }
 
     private static NotificationPolicyDbContext CreateDbContext()

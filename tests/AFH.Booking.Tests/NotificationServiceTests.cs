@@ -215,6 +215,77 @@ public sealed class NotificationServiceTests
     }
 
     [Fact]
+    public async Task PublishAsync_FiltersAttachmentsByRecipientAndChannel()
+    {
+        var emailDelivery = new StubNotificationDeliveryGateway(NotificationChannel.Email);
+        var service = new NotificationService(
+            new StubNotificationAuditStore(),
+            new StubNotificationDeliveryAuditStore(),
+            CreateRecipientResolver(),
+            CreateTemplateRenderer(),
+            [emailDelivery],
+            NullLogger<NotificationService>.Instance);
+
+        await service.PublishAsync(
+            new NotificationRequested(
+                new NotificationType("Booking", "BookingConfirmed"),
+                "booking-1",
+                new NotificationActor(LifecycleActors.Client, "Booking", "client-1", "Jane Client", "jane@example.test"),
+                [
+                    new NotificationRecipient(
+                        BookingNotificationRecipientTypes.Client,
+                        "Jane Client",
+                        "jane@example.test",
+                        PreferredChannels: [NotificationChannel.Email]),
+                    new NotificationRecipient(
+                        BookingNotificationRecipientTypes.Manager,
+                        "Manager",
+                        "manager@example.test",
+                        PreferredChannels: [NotificationChannel.Email])
+                ],
+                new Dictionary<string, string>
+                {
+                    ["transactionRef"] = "TRX-1",
+                    ["bookingId"] = "booking-1",
+                    ["adviserName"] = "Alex Adviser",
+                    ["meetingType"] = "Review",
+                    ["when"] = "2026-03-26 12:00 (Europe/London) -> 2026-03-26 13:00 (Europe/London)",
+                    ["whereLine"] = "Join link: https://meeting.example/join",
+                    ["travelLine"] = "Travel: N/A (remote meeting)",
+                    ["TemplateKey"] = "booking-confirmed",
+                    ["TemplateVersion"] = "v1"
+                },
+                [
+                    new NotificationAttachment(
+                        "booking.ics",
+                        "text/calendar; charset=utf-8; method=REQUEST",
+                        Convert.ToBase64String(Encoding.UTF8.GetBytes("BEGIN:VCALENDAR")),
+                        RecipientTypes: [BookingNotificationRecipientTypes.Client],
+                        Channels: [NotificationChannel.Email]),
+                    new NotificationAttachment(
+                        "manager-sms-only.ics",
+                        "text/calendar; charset=utf-8; method=REQUEST",
+                        Convert.ToBase64String(Encoding.UTF8.GetBytes("BEGIN:VCALENDAR")),
+                        RecipientTypes: [BookingNotificationRecipientTypes.Manager],
+                        Channels: [NotificationChannel.Sms]),
+                    new NotificationAttachment(
+                        "adviser-only.ics",
+                        "text/calendar; charset=utf-8; method=REQUEST",
+                        Convert.ToBase64String(Encoding.UTF8.GetBytes("BEGIN:VCALENDAR")),
+                        RecipientTypes: [BookingNotificationRecipientTypes.Adviser],
+                        Channels: [NotificationChannel.Email])
+                ]),
+            CancellationToken.None);
+
+        var clientEmail = Assert.Single(emailDelivery.Requests, x => x.Recipient.RecipientType == BookingNotificationRecipientTypes.Client);
+        var managerEmail = Assert.Single(emailDelivery.Requests, x => x.Recipient.RecipientType == BookingNotificationRecipientTypes.Manager);
+
+        var attachment = Assert.Single(clientEmail.Attachments!);
+        Assert.Equal("booking.ics", attachment.FileName);
+        Assert.Null(managerEmail.Attachments);
+    }
+
+    [Fact]
     public async Task PublishAsync_BookingRescheduled_RendersTemplateAndSendsDeliveryRequest()
     {
         var audit = new StubNotificationAuditStore();

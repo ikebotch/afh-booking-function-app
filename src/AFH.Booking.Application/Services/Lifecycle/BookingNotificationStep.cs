@@ -147,7 +147,8 @@ public sealed class BookingNotificationStep : IBookingNotificationStep
                         correlationId,
                         new BookingNotificationActor(actorType, "Booking", null, null, null),
                         recipientGroup.ToArray(),
-                        BuildPolicyData(data, policy, notificationType, recipientType)),
+                        BuildPolicyData(data, policy, notificationType, recipientType),
+                        BookingCalendarInviteAttachmentFactory.Create(lifecycleEventType, data, recipientType, DateTime.UtcNow)),
                     ct);
             }
 

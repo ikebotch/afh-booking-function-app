@@ -46,7 +46,8 @@ internal static class NotificationRecipientDataSafety
                     PreferredChannels = [channel]
                 }
             ],
-            Data = BuildRecipientData(notification, recipient, channel)
+            Data = BuildRecipientData(notification, recipient, channel),
+            Attachments = FilterAttachments(notification.Attachments, recipient.RecipientType, channel)
         };
     }
 
@@ -110,6 +111,32 @@ internal static class NotificationRecipientDataSafety
     private static bool IsClientOnlyDataKey(string key)
         => key.Contains("token", StringComparison.OrdinalIgnoreCase)
            || ClientOnlyDataKeys.Contains(key, StringComparer.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<NotificationAttachment>? FilterAttachments(
+        IReadOnlyList<NotificationAttachment>? attachments,
+        string recipientType,
+        NotificationChannel channel)
+    {
+        if (attachments is null || attachments.Count == 0)
+            return null;
+
+        var filtered = attachments
+            .Where(attachment => IsEligibleForChannel(attachment, channel))
+            .Where(attachment => IsEligibleForRecipient(attachment, recipientType))
+            .ToArray();
+
+        return filtered.Length == 0 ? null : filtered;
+    }
+
+    private static bool IsEligibleForChannel(NotificationAttachment attachment, NotificationChannel channel)
+        => attachment.Channels is null
+           || attachment.Channels.Count == 0
+           || attachment.Channels.Contains(channel);
+
+    private static bool IsEligibleForRecipient(NotificationAttachment attachment, string recipientType)
+        => attachment.RecipientTypes is null
+           || attachment.RecipientTypes.Count == 0
+           || attachment.RecipientTypes.Contains(recipientType, StringComparer.OrdinalIgnoreCase);
 
     private static string NormalizeRecipientType(string recipientType)
     {

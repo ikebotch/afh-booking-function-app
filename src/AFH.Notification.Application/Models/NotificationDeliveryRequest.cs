@@ -9,4 +9,5 @@ public sealed record NotificationDeliveryRequest(
     string? Subject,
     string? HtmlBody,
     string TextBody,
-    IReadOnlyDictionary<string, string>? ProviderMetadata = null);
+    IReadOnlyDictionary<string, string>? ProviderMetadata = null,
+    IReadOnlyList<NotificationAttachment>? Attachments = null);

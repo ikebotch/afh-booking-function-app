@@ -79,41 +79,46 @@ public sealed class GraphEmailSender : IGraphEmailSender
         string providerCorrelationId,
         CancellationToken ct)
     {
+        var message = new Message
+        {
+            Subject = request.Subject ?? string.Empty,
+            Body = new ItemBody
+            {
+                ContentType = string.IsNullOrWhiteSpace(request.HtmlBody) ? BodyType.Text : BodyType.Html,
+                Content = string.IsNullOrWhiteSpace(request.HtmlBody) ? request.TextBody : request.HtmlBody
+            },
+            ToRecipients =
+            [
+                new Recipient
+                {
+                    EmailAddress = new EmailAddress
+                    {
+                        Address = request.Recipient.Email
+                    }
+                }
+            ],
+            InternetMessageHeaders =
+            [
+                new InternetMessageHeader
+                {
+                    Name = "x-afh-notification-correlation-id",
+                    Value = request.CorrelationId
+                },
+                new InternetMessageHeader
+                {
+                    Name = "x-afh-provider-correlation-id",
+                    Value = providerCorrelationId
+                }
+            ]
+        };
+
+        var attachments = BuildAttachments(request);
+        if (attachments is not null)
+            message.Attachments = attachments;
+
         var body = new SendMailPostRequestBody
         {
-            Message = new Message
-            {
-                Subject = request.Subject ?? string.Empty,
-                Body = new ItemBody
-                {
-                    ContentType = string.IsNullOrWhiteSpace(request.HtmlBody) ? BodyType.Text : BodyType.Html,
-                    Content = string.IsNullOrWhiteSpace(request.HtmlBody) ? request.TextBody : request.HtmlBody
-                },
-                ToRecipients =
-                [
-                    new Recipient
-                    {
-                        EmailAddress = new EmailAddress
-                        {
-                            Address = request.Recipient.Email
-                        }
-                    }
-                ],
-                InternetMessageHeaders =
-                [
-                    new InternetMessageHeader
-                    {
-                        Name = "x-afh-notification-correlation-id",
-                        Value = request.CorrelationId
-                    },
-                    new InternetMessageHeader
-                    {
-                        Name = "x-afh-provider-correlation-id",
-                        Value = providerCorrelationId
-                    }
-                ],
-                Attachments = BuildAttachments(request)
-            },
+            Message = message,
             SaveToSentItems = true
         };
 

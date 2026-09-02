@@ -8,6 +8,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using Microsoft.Graph;
+using System.Net;
+using System.Text;
 
 namespace AFH.Booking.Tests;
 
@@ -140,6 +143,57 @@ public sealed class EmailNotificationDeliveryGatewayTests
     }
 
     [Fact]
+    public async Task GraphEmailSender_WithAttachment_SerializesAttachmentsAsArray()
+    {
+        string? requestJson = null;
+        var httpClient = new HttpClient(new CapturingHttpHandler(async request =>
+        {
+            requestJson = await request.Content!.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.Accepted);
+        }));
+        var sender = new GraphEmailSender(new GraphServiceClient(httpClient));
+        var request = CreateRequest() with
+        {
+            Attachments =
+            [
+                new NotificationAttachment(
+                    "booking.ics",
+                    "text/calendar; charset=utf-8; method=REQUEST",
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes("BEGIN:VCALENDAR")))
+            ]
+        };
+
+        await sender.SendAsync("sender@example.test", request, "provider-corr", CancellationToken.None);
+
+        Assert.NotNull(requestJson);
+        using var payload = System.Text.Json.JsonDocument.Parse(requestJson!);
+        Assert.True(payload.RootElement.TryGetProperty("Message", out var message), requestJson);
+        Assert.True(message.TryGetProperty("attachments", out var attachments), requestJson);
+        Assert.Equal(
+            System.Text.Json.JsonValueKind.Array,
+            attachments.ValueKind);
+    }
+
+    [Fact]
+    public async Task GraphEmailSender_WithoutAttachments_OmitsAttachmentsProperty()
+    {
+        string? requestJson = null;
+        var httpClient = new HttpClient(new CapturingHttpHandler(async request =>
+        {
+            requestJson = await request.Content!.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.Accepted);
+        }));
+        var sender = new GraphEmailSender(new GraphServiceClient(httpClient));
+
+        await sender.SendAsync("sender@example.test", CreateRequest(), "provider-corr", CancellationToken.None);
+
+        Assert.NotNull(requestJson);
+        using var payload = System.Text.Json.JsonDocument.Parse(requestJson!);
+        var message = payload.RootElement.GetProperty("Message");
+        Assert.False(message.TryGetProperty("attachments", out _), requestJson);
+    }
+
+    [Fact]
     public void AddNotificationInfrastructure_GraphProvider_RegistersGraphGateway()
     {
         var configuration = new ConfigurationBuilder()
@@ -230,5 +284,11 @@ public sealed class EmailNotificationDeliveryGatewayTests
 
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class CapturingHttpHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => handler(request);
     }
 }

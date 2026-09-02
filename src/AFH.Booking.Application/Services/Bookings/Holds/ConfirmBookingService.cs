@@ -451,12 +451,14 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             payloadJson: JsonSerializer.Serialize(new
             {
                 bookingId = context.Hold.Id,
+                transactionRef = context.Transaction.TransactionRef,
                 bookingReference = context.Transaction.BookingReference ?? context.Hold.Reference ?? context.Transaction.TransactionRef,
                 slotId = context.Slot.Id,
                 adviserId = context.Slot.AdviserId,
                 startUtc = context.Slot.StartUtc,
                 endUtc = context.Slot.EndUtc,
                 meetingType = context.Transaction.MeetingType,
+                meetingMode = context.Transaction.IsRemote ? "online" : "face-to-face",
                 lifecycleEventId = eventId
             }),
             ct: ct);

@@ -324,12 +324,14 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             payloadJson: JsonSerializer.Serialize(new
             {
                 bookingId = context.Hold.Id,
+                transactionRef = context.Transaction.TransactionRef,
                 bookingReference = context.Transaction.BookingReference ?? context.Hold.Reference ?? context.Transaction.TransactionRef,
                 slotId = context.Slot.Id,
                 adviserId = context.Slot.AdviserId,
                 startUtc = context.Slot.StartUtc,
                 endUtc = context.Slot.EndUtc,
                 meetingType = context.Transaction.MeetingType,
+                meetingMode = context.Transaction.IsRemote ? "online" : "face-to-face",
                 cancelledUtc = context.Hold.CancelledUtc,
                 reasonCode = cmd.ReasonCode,
                 reasonNotes = cmd.ReasonDetail ?? cmd.Reason,

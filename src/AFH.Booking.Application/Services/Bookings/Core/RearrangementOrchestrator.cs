@@ -500,6 +500,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
             {
                 previousBookingId = existingBooking.Hold.Id,
                 newBookingId = newBooking.Hold.Id,
+                transactionRef = existingBooking.Transaction.TransactionRef,
                 bookingReference = newBooking.BookingReference ?? newBooking.Hold.Reference ?? existingBooking.Transaction.TransactionRef,
                 previousSlotId = existingBooking.Slot.Id,
                 newSlotId = newBooking.Slot.Id,
@@ -508,6 +509,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
                 newStartUtc = newBooking.Slot.StartUtc,
                 newEndUtc = newBooking.Slot.EndUtc,
                 meetingType = existingBooking.Transaction.MeetingType,
+                meetingMode = existingBooking.Transaction.IsRemote ? "online" : "face-to-face",
                 previousAdviserId = existingBooking.Slot.AdviserId,
                 newAdviserId = newBooking.Slot.AdviserId,
                 requestedBy = cmd.RequestedBy,

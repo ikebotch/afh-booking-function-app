@@ -130,7 +130,9 @@ public sealed class DownstreamUpdateServiceTests
             payloadJson: """
                 {
                   "newStartUtc": "2026-08-27T14:00:00Z",
+                  "transactionRef": "000123456",
                   "meetingType": "Telephone",
+                  "meetingMode": "online",
                   "newAdviserId": "987654321",
                   "reasonDetail": "Reason for reschedule if collected",
                   "bookingReference": "000123456"
@@ -150,9 +152,11 @@ public sealed class DownstreamUpdateServiceTests
         using var body = JsonDocument.Parse(capturedBody!);
         var root = body.RootElement;
         Assert.Equal("000123456", root.GetProperty("transactionId").GetString());
+        Assert.Equal("000123456", root.GetProperty("transactionRef").GetString());
         Assert.Equal("Rescheduled", root.GetProperty("status").GetString());
         Assert.Equal("2026-08-27T14:00:00Z", root.GetProperty("dateTime").GetString());
         Assert.Equal("Telephone", root.GetProperty("meetingType").GetString());
+        Assert.Equal("online", root.GetProperty("meetingMode").GetString());
         Assert.Equal("987654321", root.GetProperty("adviserId").GetString());
         Assert.Equal("Reason for reschedule if collected", root.GetProperty("notes").GetString());
         Assert.Equal("000123456", root.GetProperty("bookingReference").GetString());

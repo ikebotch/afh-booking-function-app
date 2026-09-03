@@ -461,6 +461,7 @@ public sealed class DownstreamUpdateService : IDownstreamUpdateService, IDownstr
         {
             transactionId = row.TransactionRef,
             transactionRef = GetString(root, "transactionRef") ?? row.TransactionRef,
+            performedBy = GetString(root, "performedBy") ?? "Unknown",
             status = MapPartnerStatus(row.ChangeType),
             dateTime = GetString(root, "newStartUtc", "startUtc", "dateTime", "cancelledUtc"),
             meetingType = GetString(root, "meetingType"),

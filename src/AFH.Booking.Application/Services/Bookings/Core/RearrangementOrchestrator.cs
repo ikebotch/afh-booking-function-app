@@ -501,6 +501,7 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
                 previousBookingId = existingBooking.Hold.Id,
                 newBookingId = newBooking.Hold.Id,
                 transactionRef = existingBooking.Transaction.TransactionRef,
+                performedBy = DownstreamPerformedByResolver.Resolve(cmd.ActorContext, cmd.RequestedBy),
                 bookingReference = newBooking.BookingReference ?? newBooking.Hold.Reference ?? existingBooking.Transaction.TransactionRef,
                 previousSlotId = existingBooking.Slot.Id,
                 newSlotId = newBooking.Slot.Id,

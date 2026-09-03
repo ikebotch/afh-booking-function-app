@@ -325,6 +325,7 @@ public sealed class CancellationOrchestrator : ICancellationOrchestrator
             {
                 bookingId = context.Hold.Id,
                 transactionRef = context.Transaction.TransactionRef,
+                performedBy = DownstreamPerformedByResolver.Resolve(cmd.ActorContext, cmd.RequestedBy),
                 bookingReference = context.Transaction.BookingReference ?? context.Hold.Reference ?? context.Transaction.TransactionRef,
                 slotId = context.Slot.Id,
                 adviserId = context.Slot.AdviserId,

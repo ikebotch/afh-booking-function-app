@@ -452,6 +452,9 @@ public sealed class ConfirmBookingService : IConfirmBookingService
             {
                 bookingId = context.Hold.Id,
                 transactionRef = context.Transaction.TransactionRef,
+                performedBy = DownstreamPerformedByResolver.Resolve(
+                    context.CommandActorContext,
+                    BookingActorContext.ActorClient),
                 bookingReference = context.Transaction.BookingReference ?? context.Hold.Reference ?? context.Transaction.TransactionRef,
                 slotId = context.Slot.Id,
                 adviserId = context.Slot.AdviserId,

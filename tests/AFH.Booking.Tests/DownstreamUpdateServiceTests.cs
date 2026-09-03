@@ -131,6 +131,7 @@ public sealed class DownstreamUpdateServiceTests
                 {
                   "newStartUtc": "2026-08-27T14:00:00Z",
                   "transactionRef": "000123456",
+                  "performedBy": "Partner:LeadTech",
                   "meetingType": "Telephone",
                   "meetingMode": "online",
                   "newAdviserId": "987654321",
@@ -153,6 +154,7 @@ public sealed class DownstreamUpdateServiceTests
         var root = body.RootElement;
         Assert.Equal("000123456", root.GetProperty("transactionId").GetString());
         Assert.Equal("000123456", root.GetProperty("transactionRef").GetString());
+        Assert.Equal("Partner:LeadTech", root.GetProperty("performedBy").GetString());
         Assert.Equal("Rescheduled", root.GetProperty("status").GetString());
         Assert.Equal("2026-08-27T14:00:00Z", root.GetProperty("dateTime").GetString());
         Assert.Equal("Telephone", root.GetProperty("meetingType").GetString());

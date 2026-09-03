@@ -90,6 +90,36 @@ public class ConfirmBookingServiceTests
     }
 
     [Fact]
+    public async Task HandleAsync_ReturnsSlotNoLongerAvailable_WhenMeetingStartHasPassed()
+    {
+        var now = new DateTime(2026, 9, 3, 12, 0, 0, DateTimeKind.Utc);
+        var hold = ActiveHold(now, providerEventId: null);
+        var slot = BookingSlot.Rehydrate(
+            "slot-1", "tx-1", "adv-1", "Adviser One",
+            now.AddMinutes(-1), now.AddMinutes(59), 5, null, null,
+            null, null, null, null, null, now.AddHours(-1));
+        var sut = new ConfirmBookingService(
+            new StubHoldRepository(hold),
+            new StubSlotRepository(slot),
+            new StubTransactionRepository(InPersonTransaction(now)),
+            new StubUnitOfWork(),
+            new StubClock(now),
+            new StubCalendarGateway(),
+            new StubProfiles("adv-1", "adviser.one@tenant.com"),
+            new StubMeetingLinkFactory(),
+            new StubConflictService(new BookingConflictCheckResult(false, null, null, [])),
+            new StubRouteTimeGuard(),
+            new BookingLifecycleRecorder(new StubLifecycleAuditService()),
+            new StubBookingWorkflowNotificationAdapter(), new StubHoldWindowFactory(),
+            new StubBookingTokenService(), TestNotificationOptions());
+
+        var result = await sut.HandleAsync(new ConfirmBookingCommand { HoldId = hold.Id }, CancellationToken.None);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(Errors.SlotNoLongerAvailable, result.ErrorCode);
+    }
+
+    [Fact]
     public async Task HandleAsync_BlocksCalendarMutation_WhenConflictDetected()
     {
         var now = DateTime.UtcNow.AddHours(1);

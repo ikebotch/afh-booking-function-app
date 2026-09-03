@@ -63,8 +63,11 @@ public sealed class AvailabilityService : IAvailabilityService
         if (closedResult is not null)
             return closedResult;
 
-        var (slotStartsUtc, nextCursor) = _slotStartBuilder.BuildPage(q);
-        if (slotStartsUtc.Count == 0)
+        var (generatedSlotStartsUtc, nextCursor) = _slotStartBuilder.BuildPage(q);
+        var slotStartsUtc = generatedSlotStartsUtc
+            .Where(startUtc => startUtc > utcNow)
+            .ToArray();
+        if (slotStartsUtc.Length == 0)
             return _responseBuilder.Empty(nextCursor);
 
         var txResult = await CreateTransactionAsync(q, prospectResult.Value, slotStartsUtc[0], utcNow, ct);

@@ -162,7 +162,12 @@ public class AvailabilityServiceTests
             .ReturnsAsync((Result<GetAvailabilityResponse>?)null);
 
         var slotStarts = new List<DateTime> { new DateTime(2026, 04, 02, 9, 0, 0, DateTimeKind.Utc) } as IReadOnlyList<DateTime>;
-        _slotStartBuilder.Setup(s => s.BuildPage(q)).Returns((slotStarts, "next-cursor"));
+        var generatedSlotStarts = new List<DateTime>
+        {
+            new DateTime(2026, 04, 02, 7, 30, 0, DateTimeKind.Utc),
+            slotStarts[0]
+        };
+        _slotStartBuilder.Setup(s => s.BuildPage(q)).Returns((generatedSlotStarts, "next-cursor"));
 
         var adviser = new AdviserProjectionItem { AdviserId = "adv-1", Name = "Adviser One" };
         var travelMap = new Dictionary<string, LocationCandidate>() as IReadOnlyDictionary<string, LocationCandidate>;

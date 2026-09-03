@@ -154,6 +154,14 @@ public sealed class RearrangementOrchestrator : IRearrangementOrchestrator
                 Errors.SlotNoLongerAvailable);
         }
 
+        if (selectedSlot.StartUtc <= _clock.UtcNow)
+        {
+            return Result<SelectedRearrangementOption>.Fail(
+                HttpStatusCode.Conflict,
+                $"Selected rearrangement slot '{cmd.NewSlotId}' is no longer available because its start time has passed.",
+                Errors.SlotNoLongerAvailable);
+        }
+
         var optionTransaction = await _transactions.GetAsync(selectedSlot.TransactionId, ct);
         if (optionTransaction is null)
         {

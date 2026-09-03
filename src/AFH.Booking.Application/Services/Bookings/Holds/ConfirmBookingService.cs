@@ -148,6 +148,14 @@ public sealed class ConfirmBookingService : IConfirmBookingService
                 Errors.HoldSlotMissing);
         }
 
+        if (slot.StartUtc <= utcNow)
+        {
+            return Result<ConfirmationContext>.Fail(
+                HttpStatusCode.Conflict,
+                "The booking cannot be confirmed because the meeting start time has passed.",
+                Errors.SlotNoLongerAvailable);
+        }
+
         var tx = await _tx.GetForUpdateAsync(slot.TransactionId, ct);
         if (tx is null)
         {

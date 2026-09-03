@@ -59,6 +59,14 @@ public sealed class BookingContextLoader : IBookingContextLoader
                 Errors.Conflict);
         }
 
+        if (slot.StartUtc <= _clock.UtcNow)
+        {
+            return Result<BookingContext>.Fail(
+                System.Net.HttpStatusCode.Conflict,
+                "The selected slot is no longer available because its start time has passed.",
+                Errors.SlotNoLongerAvailable);
+        }
+
         var ruleValidation = await ValidateSelectedSlotRulesAsync(slot, transaction, ct);
         if (!ruleValidation.IsSuccess)
             return Result<BookingContext>.Fail(
